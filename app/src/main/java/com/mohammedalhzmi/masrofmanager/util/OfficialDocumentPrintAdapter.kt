@@ -18,7 +18,13 @@ data class DocumentHeader(
     val backgroundColors: Map<DocumentType, Int> = emptyMap(),
     val backgroundImages: Map<DocumentType, Bitmap?> = emptyMap(),
     val backgroundOpacity: Map<DocumentType, Float> = emptyMap(),
-    val backgroundScale: Map<DocumentType, Float> = emptyMap()
+    val backgroundScale: Map<DocumentType, Float> = emptyMap(),
+    val backgroundOffset: Map<DocumentType, Pair<Float, Float>> = emptyMap(),
+    val textColors: Map<DocumentType, Int> = emptyMap(),
+    val fontFamilies: Map<DocumentType, String> = emptyMap(),
+    val textBold: Map<DocumentType, Boolean> = emptyMap(),
+    val textItalic: Map<DocumentType, Boolean> = emptyMap(),
+    val textUnderline: Map<DocumentType, Boolean> = emptyMap()
 )
 
 class OfficialDocumentPrintAdapter(private val documents: List<Document>, private val header: DocumentHeader = DocumentHeader("وزارة الإدارة والتنمية المحلية والريفية", "صندوق النظافة والتحسين", "فرع المديرية")) : PrintDocumentAdapter() {
@@ -59,10 +65,16 @@ object OfficialDocumentRenderer {
         header.backgroundImages[document.type]?.let { bitmap ->
             val scale = header.backgroundScale[document.type] ?: 1f
             val bw = w * scale; val bh = h * scale
-            val target = RectF((w - bw) / 2f, (h - bh) / 2f, (w + bw) / 2f, (h + bh) / 2f)
+            val offset = header.backgroundOffset[document.type] ?: (0f to 0f)
+            val target = RectF((w - bw) / 2f + offset.first, (h - bh) / 2f + offset.second, (w + bw) / 2f + offset.first, (h + bh) / 2f + offset.second)
             val imagePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { alpha = ((header.backgroundOpacity[document.type] ?: 0.18f) * 255).toInt() }
             canvas.drawBitmap(bitmap, null, target, imagePaint)
         }
+        val textColor = header.textColors[document.type] ?: Color.BLACK
+        val family = when (header.fontFamilies[document.type]) { "SERIF" -> Typeface.SERIF; "MONOSPACE" -> Typeface.MONOSPACE; else -> Typeface.SANS_SERIF }
+        val style = if (header.textBold[document.type] == true && header.textItalic[document.type] == true) Typeface.BOLD_ITALIC else if (header.textBold[document.type] == true) Typeface.BOLD else if (header.textItalic[document.type] == true) Typeface.ITALIC else Typeface.NORMAL
+        bodyPaint.color = textColor; bodyPaint.typeface = Typeface.create(family, style); bodyPaint.isUnderlineText = header.textUnderline[document.type] == true
+        boldPaint.color = textColor; boldPaint.typeface = Typeface.create(family, Typeface.BOLD)
         canvas.drawRect(18f, 18f, w - 18f, h - 18f, linePaint)
         canvas.drawRect(25f, 25f, w - 25f, h - 25f, linePaint)
         drawHeader(canvas, header, document.type)

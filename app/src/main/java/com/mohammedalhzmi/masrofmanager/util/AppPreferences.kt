@@ -29,6 +29,19 @@ object AppPreferences {
     fun setBackgroundOpacity(context: Context, type: DocumentType, value: Float) = put(context, "background_opacity_${type.name}", value.coerceIn(0f, 1f).toString())
     fun backgroundScale(context: Context, type: DocumentType) = get(context, "background_scale_${type.name}", "1.0").toFloatOrNull()?.coerceIn(0.2f, 3f) ?: 1f
     fun setBackgroundScale(context: Context, type: DocumentType, value: Float) = put(context, "background_scale_${type.name}", value.coerceIn(0.2f, 3f).toString())
+    fun backgroundOffsetX(context: Context, type: DocumentType) = get(context, "background_x_${type.name}", "0").toFloatOrNull() ?: 0f
+    fun backgroundOffsetY(context: Context, type: DocumentType) = get(context, "background_y_${type.name}", "0").toFloatOrNull() ?: 0f
+    fun setBackgroundOffset(context: Context, type: DocumentType, x: Float, y: Float) { put(context, "background_x_${type.name}", x.toString()); put(context, "background_y_${type.name}", y.toString()) }
+    fun textColor(context: Context, type: DocumentType) = get(context, "text_color_${type.name}", "#000000")
+    fun setTextColor(context: Context, type: DocumentType, value: String) = put(context, "text_color_${type.name}", value)
+    fun fontFamily(context: Context, type: DocumentType) = get(context, "font_family_${type.name}", "SANS")
+    fun setFontFamily(context: Context, type: DocumentType, value: String) = put(context, "font_family_${type.name}", value)
+    fun textBold(context: Context, type: DocumentType) = get(context, "text_bold_${type.name}", "false") == "true"
+    fun setTextBold(context: Context, type: DocumentType, value: Boolean) = put(context, "text_bold_${type.name}", value.toString())
+    fun textItalic(context: Context, type: DocumentType) = get(context, "text_italic_${type.name}", "false") == "true"
+    fun setTextItalic(context: Context, type: DocumentType, value: Boolean) = put(context, "text_italic_${type.name}", value.toString())
+    fun textUnderline(context: Context, type: DocumentType) = get(context, "text_underline_${type.name}", "false") == "true"
+    fun setTextUnderline(context: Context, type: DocumentType, value: Boolean) = put(context, "text_underline_${type.name}", value.toString())
 }
 
 object DocumentNumbering {

@@ -74,6 +74,18 @@ fun PrintPreviewScreen(viewModel: MasrofViewModel, documentIds: String, onNaviga
                         DocumentType.ORDER to AppPreferences.backgroundScale(context, DocumentType.ORDER),
                         DocumentType.REQUEST to AppPreferences.backgroundScale(context, DocumentType.REQUEST),
                         DocumentType.RECEIPT to AppPreferences.backgroundScale(context, DocumentType.RECEIPT)
+                    ), mapOf(
+                        DocumentType.ORDER to (AppPreferences.backgroundOffsetX(context, DocumentType.ORDER) to AppPreferences.backgroundOffsetY(context, DocumentType.ORDER)), DocumentType.REQUEST to (AppPreferences.backgroundOffsetX(context, DocumentType.REQUEST) to AppPreferences.backgroundOffsetY(context, DocumentType.REQUEST)), DocumentType.RECEIPT to (AppPreferences.backgroundOffsetX(context, DocumentType.RECEIPT) to AppPreferences.backgroundOffsetY(context, DocumentType.RECEIPT))
+                    ), mapOf(
+                        DocumentType.ORDER to runCatching { Color.parseColor(AppPreferences.textColor(context, DocumentType.ORDER)) }.getOrDefault(Color.BLACK), DocumentType.REQUEST to runCatching { Color.parseColor(AppPreferences.textColor(context, DocumentType.REQUEST)) }.getOrDefault(Color.BLACK), DocumentType.RECEIPT to runCatching { Color.parseColor(AppPreferences.textColor(context, DocumentType.RECEIPT)) }.getOrDefault(Color.BLACK)
+                    ), mapOf(
+                        DocumentType.ORDER to AppPreferences.fontFamily(context, DocumentType.ORDER), DocumentType.REQUEST to AppPreferences.fontFamily(context, DocumentType.REQUEST), DocumentType.RECEIPT to AppPreferences.fontFamily(context, DocumentType.RECEIPT)
+                    ), mapOf(
+                        DocumentType.ORDER to AppPreferences.textBold(context, DocumentType.ORDER), DocumentType.REQUEST to AppPreferences.textBold(context, DocumentType.REQUEST), DocumentType.RECEIPT to AppPreferences.textBold(context, DocumentType.RECEIPT)
+                    ), mapOf(
+                        DocumentType.ORDER to AppPreferences.textItalic(context, DocumentType.ORDER), DocumentType.REQUEST to AppPreferences.textItalic(context, DocumentType.REQUEST), DocumentType.RECEIPT to AppPreferences.textItalic(context, DocumentType.RECEIPT)
+                    ), mapOf(
+                        DocumentType.ORDER to AppPreferences.textUnderline(context, DocumentType.ORDER), DocumentType.REQUEST to AppPreferences.textUnderline(context, DocumentType.REQUEST), DocumentType.RECEIPT to AppPreferences.textUnderline(context, DocumentType.RECEIPT)
                     )
                 )
                 printManager.print("مستندات مالية رسمية", OfficialDocumentPrintAdapter(selectedDocs, header), PrintAttributes.Builder().setMediaSize(PrintAttributes.MediaSize.ISO_A4).setMinMargins(PrintAttributes.Margins.NO_MARGINS).build())
@@ -98,6 +110,13 @@ private fun DocumentPageEditor(documents: List<Document>, context: Context, onCl
     var color by remember(selectedType) { mutableStateOf(AppPreferences.backgroundColor(context, selectedType)) }
     var opacity by remember(selectedType) { mutableStateOf(AppPreferences.backgroundOpacity(context, selectedType)) }
     var scale by remember(selectedType) { mutableStateOf(AppPreferences.backgroundScale(context, selectedType)) }
+    var offsetX by remember(selectedType) { mutableStateOf(AppPreferences.backgroundOffsetX(context, selectedType)) }
+    var offsetY by remember(selectedType) { mutableStateOf(AppPreferences.backgroundOffsetY(context, selectedType)) }
+    var fontFamily by remember(selectedType) { mutableStateOf(AppPreferences.fontFamily(context, selectedType)) }
+    var textColor by remember(selectedType) { mutableStateOf(AppPreferences.textColor(context, selectedType)) }
+    var bold by remember(selectedType) { mutableStateOf(AppPreferences.textBold(context, selectedType)) }
+    var italic by remember(selectedType) { mutableStateOf(AppPreferences.textItalic(context, selectedType)) }
+    var underline by remember(selectedType) { mutableStateOf(AppPreferences.textUnderline(context, selectedType)) }
     val backgroundPicker = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.GetContent()) { uri -> uri?.let { AppPreferences.saveBackgroundImage(context, selectedType, it) } }
     AlertDialog(onDismissRequest = onClose, title = { Text("محرر الصفحة") }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -112,8 +131,19 @@ private fun DocumentPageEditor(documents: List<Document>, context: Context, onCl
             Slider(value = opacity, onValueChange = { opacity = it }, valueRange = 0f..1f)
             Text("حجم الصورة: ${(scale * 100).toInt()}%")
             Slider(value = scale, onValueChange = { scale = it }, valueRange = 0.2f..3f)
+            Text("تحريك الصورة أفقيًا: ${offsetX.toInt()}")
+            Slider(value = offsetX, onValueChange = { offsetX = it }, valueRange = -300f..300f)
+            Text("تحريك الصورة رأسيًا: ${offsetY.toInt()}")
+            Slider(value = offsetY, onValueChange = { offsetY = it }, valueRange = -300f..300f)
+            OutlinedTextField(textColor, { textColor = it }, label = { Text("لون النص مثل #000000") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (fontFamily == "SANS") Button(onClick = { fontFamily = "SANS" }) { Text("عربي Sans") } else OutlinedButton(onClick = { fontFamily = "SANS" }) { Text("عربي Sans") }
+                if (fontFamily == "SERIF") Button(onClick = { fontFamily = "SERIF" }) { Text("عربي Serif") } else OutlinedButton(onClick = { fontFamily = "SERIF" }) { Text("عربي Serif") }
+                if (fontFamily == "MONOSPACE") Button(onClick = { fontFamily = "MONOSPACE" }) { Text("Monospace") } else OutlinedButton(onClick = { fontFamily = "MONOSPACE" }) { Text("Monospace") }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { OutlinedButton(onClick = { bold = !bold }) { Text(if (bold) "عريض ✓" else "عريض") }; OutlinedButton(onClick = { italic = !italic }) { Text(if (italic) "مائل ✓" else "مائل") }; OutlinedButton(onClick = { underline = !underline }) { Text(if (underline) "تحته خط ✓" else "تحته خط") } }
         }
-    }, confirmButton = { Button(onClick = { if (runCatching { Color.parseColor(color) }.isSuccess) AppPreferences.setBackgroundColor(context, selectedType, color); AppPreferences.setBackgroundOpacity(context, selectedType, opacity); AppPreferences.setBackgroundScale(context, selectedType, scale); onClose() }) { Text("حفظ التعديلات") } }, dismissButton = { TextButton(onClick = onClose) { Text("إلغاء") } })
+    }, confirmButton = { Button(onClick = { if (runCatching { Color.parseColor(color) }.isSuccess) AppPreferences.setBackgroundColor(context, selectedType, color); if (runCatching { Color.parseColor(textColor) }.isSuccess) AppPreferences.setTextColor(context, selectedType, textColor); AppPreferences.setBackgroundOpacity(context, selectedType, opacity); AppPreferences.setBackgroundScale(context, selectedType, scale); AppPreferences.setBackgroundOffset(context, selectedType, offsetX, offsetY); AppPreferences.setFontFamily(context, selectedType, fontFamily); AppPreferences.setTextBold(context, selectedType, bold); AppPreferences.setTextItalic(context, selectedType, italic); AppPreferences.setTextUnderline(context, selectedType, underline); onClose() }) { Text("حفظ التعديلات") } }, dismissButton = { TextButton(onClick = onClose) { Text("إلغاء") } })
 }
 
 private fun typeLabel(type: DocumentType) = when (type) { DocumentType.ORDER -> "أمر صرف"; DocumentType.REQUEST -> "تقديم"; DocumentType.RECEIPT -> "استلام" }
