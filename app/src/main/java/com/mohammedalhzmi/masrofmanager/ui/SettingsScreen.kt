@@ -14,6 +14,8 @@ import com.mohammedalhzmi.masrofmanager.data.DocumentType
 import com.mohammedalhzmi.masrofmanager.util.AppPreferences
 import com.mohammedalhzmi.masrofmanager.util.AppLockPreferences
 import com.mohammedalhzmi.masrofmanager.util.LockType
+import com.mohammedalhzmi.masrofmanager.util.AppRole
+import com.mohammedalhzmi.masrofmanager.util.RolePreferences
 
 @Composable
 fun SettingsScreen(onBack: () -> Unit) {
@@ -31,12 +33,23 @@ fun SettingsScreen(onBack: () -> Unit) {
     var lockType by remember { mutableStateOf(AppLockPreferences.type(context)) }
     var newSecret by remember { mutableStateOf("") }
     var timeout by remember { mutableStateOf(AppLockPreferences.timeoutMinutes(context).toString()) }
+    var userName by remember { mutableStateOf(RolePreferences.userName(context)) }
+    var selectedRole by remember { mutableStateOf(RolePreferences.currentRole(context)) }
     val orderPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> uri?.let { orderLogo = it.toString(); AppPreferences.saveLogo(context, DocumentType.ORDER, it) } }
     val requestPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> uri?.let { requestLogo = it.toString(); AppPreferences.saveLogo(context, DocumentType.REQUEST, it) } }
     val receiptPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> uri?.let { receiptLogo = it.toString(); AppPreferences.saveLogo(context, DocumentType.RECEIPT, it) } }
     Column(modifier = Modifier.padding(16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("إعدادات النماذج الرسمية", style = MaterialTheme.typography.headlineMedium)
         Text("يتم حفظ البيانات والشعارات محليًا وتطبيقها على النوع المحدد فقط.", style = MaterialTheme.typography.bodySmall)
+        Text("المستخدم والصلاحيات", style = MaterialTheme.typography.titleLarge)
+        SettingField("اسم المستخدم الحالي", userName) { userName = it }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+            AppRole.values().forEach { role ->
+                if (role == selectedRole) Button(onClick = { selectedRole = role }, modifier = Modifier.weight(1f)) { Text(role.title, maxLines = 1) }
+                else OutlinedButton(onClick = { selectedRole = role }, modifier = Modifier.weight(1f)) { Text(role.title, maxLines = 1) }
+            }
+        }
+        Text("الدور يحدد إنشاء المستندات والتعديل والحذف والطباعة والنسخ الاحتياطي والإعدادات.", style = MaterialTheme.typography.bodySmall)
         SettingField("الوزارة", ministry) { ministry = it }
         SettingField("الإدارة / الصندوق", administration) { administration = it }
         SettingField("الفرع / المديرية", branch) { branch = it }
@@ -65,6 +78,7 @@ fun SettingsScreen(onBack: () -> Unit) {
         Text("اقتراحات أمان: استخدم بصمة الهاتف، ورمزًا لا يقل عن 4 أرقام، ولا تشارك كلمة المرور.", style = MaterialTheme.typography.bodySmall)
         Button(enabled = !lockEnabled || AppLockPreferences.hasSecret(context) || newSecret.isNotBlank(), onClick = {
             AppPreferences.put(context, "ministry", ministry); AppPreferences.put(context, "administration", administration); AppPreferences.put(context, "branch", branch); AppPreferences.put(context, "manager", manager); AppPreferences.put(context, "finance_manager", finance)
+            RolePreferences.setUserName(context, userName); RolePreferences.setRole(context, selectedRole)
             AppLockPreferences.setEnabled(context, lockEnabled); AppLockPreferences.setBiometricEnabled(context, biometricEnabled); AppLockPreferences.setType(context, lockType); AppLockPreferences.setTimeoutMinutes(context, timeout.toIntOrNull() ?: 5); if (newSecret.isNotBlank()) AppLockPreferences.setSecret(context, newSecret)
             onBack()
         }, modifier = Modifier.fillMaxWidth()) { Text("حفظ الإعدادات") }
