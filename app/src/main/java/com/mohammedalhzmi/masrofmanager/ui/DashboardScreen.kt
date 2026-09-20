@@ -27,10 +27,10 @@ fun DashboardScreen(viewModel: MasrofViewModel, onAddDocument: () -> Unit, onPri
     val canBackup = RolePreferences.can(context, AppPermission.BACKUP)
     val canEdit = RolePreferences.can(context, AppPermission.EDIT)
     val canDelete = RolePreferences.can(context, AppPermission.DELETE)
-    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/x-sqlite3")) { uri -> uri?.let { viewModel.exportDatabase(context, it) } }
-    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let { viewModel.importDatabase(context, it) } }
-    val zipExportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri -> uri?.let { viewModel.exportFullBackup(context, it) } }
-    val zipImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let { viewModel.importFullBackup(context, it) } }
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/x-sqlite3")) { uri -> uri?.let { viewModel.exportDatabase(context, it); viewModel.recordAudit("EXPORT_DATABASE", "نسخة DB") } }
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let { viewModel.importDatabase(context, it); viewModel.recordAudit("IMPORT_DATABASE", "استعادة DB") } }
+    val zipExportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri -> uri?.let { viewModel.exportFullBackup(context, it); viewModel.recordAudit("EXPORT_BACKUP", "نسخة ZIP كاملة") } }
+    val zipImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let { viewModel.importFullBackup(context, it); viewModel.recordAudit("IMPORT_BACKUP", "استعادة ZIP كاملة") } }
     var showDeveloperNotice by remember { mutableStateOf(true) }
     LaunchedEffect(Unit) { delay(4500); showDeveloperNotice = false }
 
@@ -53,7 +53,7 @@ fun DashboardScreen(viewModel: MasrofViewModel, onAddDocument: () -> Unit, onPri
                 OutlinedButton(onClick = { zipExportLauncher.launch("masrof-full-backup.zip") }, modifier = Modifier.weight(1f)) { Text("حفظ ZIP كامل") }
                 OutlinedButton(onClick = { zipImportLauncher.launch(arrayOf("application/zip", "application/octet-stream")) }, modifier = Modifier.weight(1f)) { Text("استيراد ZIP") }
             }
-            OutlinedButton(onClick = { AppBackupManager.shareBackup(context) }, modifier = Modifier.fillMaxWidth()) { Text("مشاركة النسخة الاحتياطية إلى السحابة") }
+            OutlinedButton(onClick = { AppBackupManager.shareBackup(context); viewModel.recordAudit("SHARE_BACKUP", "مشاركة النسخة الاحتياطية") }, modifier = Modifier.fillMaxWidth()) { Text("مشاركة النسخة الاحتياطية إلى السحابة") }
         }
         Spacer(modifier = Modifier.height(12.dp))
         LazyColumn(modifier = Modifier.weight(1f)) {
@@ -68,7 +68,7 @@ fun DashboardScreen(viewModel: MasrofViewModel, onAddDocument: () -> Unit, onPri
             }
         }
         if (selectedIds.isNotEmpty()) {
-            Button(onClick = { onPrint(selectedIds.joinToString(",")) }, modifier = Modifier.fillMaxWidth()) { Text("تصدير / طباعة المحدد (${selectedIds.size})") }
+            Button(onClick = { viewModel.recordAudit("PRINT_EXPORT", "عدد المستندات: ${selectedIds.size}"); onPrint(selectedIds.joinToString(",")) }, modifier = Modifier.fillMaxWidth()) { Text("تصدير / طباعة المحدد (${selectedIds.size})") }
             if (selectedIds.size == 1 && canDelete) TextButton(onClick = { documents.find { it.id in selectedIds }?.let { viewModel.deleteDocument(it); selectedIds = emptySet() } }, modifier = Modifier.fillMaxWidth()) { Text("حذف المستند المحدد") }
         }
     }

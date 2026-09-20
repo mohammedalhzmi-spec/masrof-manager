@@ -12,6 +12,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.room.Room
 import androidx.compose.runtime.*
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import com.example.ui.theme.MyApplicationTheme
 import com.mohammedalhzmi.masrofmanager.data.MasrofDatabase
@@ -20,25 +21,38 @@ import com.mohammedalhzmi.masrofmanager.ui.AppLockScreen
 import com.mohammedalhzmi.masrofmanager.ui.AppNavigation
 import com.mohammedalhzmi.masrofmanager.ui.MasrofViewModel
 import com.mohammedalhzmi.masrofmanager.ui.WelcomeScreen
+import com.mohammedalhzmi.masrofmanager.ui.LoginScreen
 import com.mohammedalhzmi.masrofmanager.util.AppLockPreferences
+import com.mohammedalhzmi.masrofmanager.util.UserSession
 
 class MainActivity : FragmentActivity() {
     private var locked by mutableStateOf(false)
     private var showWelcome by mutableStateOf(true)
+    private var loggedIn by mutableStateOf(false)
+    private var loginError by mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         locked = AppLockPreferences.enabled(this) && AppLockPreferences.shouldRelock(this)
-        val db = Room.databaseBuilder(applicationContext, MasrofDatabase::class.java, "masrof-db").build()
-        val repository = MasrofRepository(db.documentDao(), db.settingsDao(), db.contactDao())
+        val db = Room.databaseBuilder(applicationContext, MasrofDatabase::class.java, "masrof-db").addMigrations(MasrofDatabase.MIGRATION_3_4).build()
+        val repository = MasrofRepository(db.documentDao(), db.settingsDao(), db.contactDao(), db.userDao(), db.auditDao())
         val viewModel = ViewModelProvider(this, object : ViewModelProvider.Factory {
             override fun <T : ViewModel> create(modelClass: Class<T>): T = MasrofViewModel(repository, db) as T
         })[MasrofViewModel::class.java]
+        viewModel.ensureDefaultAdmin()
         setContent {
             MyApplicationTheme {
+                val scope = rememberCoroutineScope()
                 if (showWelcome) {
                     WelcomeScreen { showWelcome = false }
+                } else if (!loggedIn) {
+                    LoginScreen(onLogin = { username, password ->
+                        scope.launch {
+                            val user = viewModel.authenticate(username, password)
+                            if (user == null) loginError = "اسم المستخدم أو كلمة المرور غير صحيحة" else { loggedIn = true; locked = false; loginError = null; AppLockPreferences.markUnlocked(this@MainActivity) }
+                        }
+                    }, error = loginError)
                 } else if (locked && AppLockPreferences.enabled(this)) {
                     AppLockScreen(
                         type = AppLockPreferences.type(this),
