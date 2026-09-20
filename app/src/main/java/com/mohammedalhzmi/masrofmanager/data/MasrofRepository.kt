@@ -39,6 +39,7 @@ class MasrofRepository(
     suspend fun getDesign(type: DocumentType) = designDao.getDesign(type.name)
     fun observeDesignElements(designId: Long) = designDao.observeElements(designId)
     suspend fun designElements(designId: Long) = designDao.getElements(designId)
+    suspend fun replaceDesignElements(designId: Long, elements: List<DesignElementEntity>) { designDao.deleteElements(designId); elements.forEach { designDao.insertElement(it.copy(id = 0, designId = designId)) } }
     suspend fun saveDesign(design: DocumentDesignEntity) = designDao.upsertDesign(design)
     suspend fun addDesignElement(element: DesignElementEntity) = designDao.insertElement(element)
     suspend fun updateDesignElement(element: DesignElementEntity) = designDao.updateElement(element)

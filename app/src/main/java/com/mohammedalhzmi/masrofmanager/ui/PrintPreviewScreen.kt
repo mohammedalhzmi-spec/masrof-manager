@@ -89,7 +89,7 @@ fun PrintPreviewScreen(viewModel: MasrofViewModel, documentIds: String, onOpenCa
                         DocumentType.ORDER to AppPreferences.textUnderline(context, DocumentType.ORDER), DocumentType.REQUEST to AppPreferences.textUnderline(context, DocumentType.REQUEST), DocumentType.RECEIPT to AppPreferences.textUnderline(context, DocumentType.RECEIPT)
                     )
                 )
-                printManager.print("مستندات مالية رسمية", OfficialDocumentPrintAdapter(selectedDocs, header), PrintAttributes.Builder().setMediaSize(PrintAttributes.MediaSize.ISO_A4).setMinMargins(PrintAttributes.Margins.NO_MARGINS).build())
+                printManager.print("مستندات مالية رسمية", OfficialDocumentPrintAdapter(selectedDocs, header, context), PrintAttributes.Builder().setMediaSize(PrintAttributes.MediaSize.ISO_A4).setMinMargins(PrintAttributes.Margins.NO_MARGINS).build())
             }, enabled = selectedDocs.isNotEmpty(), modifier = Modifier.fillMaxWidth()
         ) { Text("طباعة مباشرة") }
     }

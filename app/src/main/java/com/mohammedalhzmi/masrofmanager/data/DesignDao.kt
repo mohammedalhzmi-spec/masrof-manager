@@ -17,6 +17,8 @@ interface DesignDao {
     fun observeElements(designId: Long): Flow<List<DesignElementEntity>>
     @Query("SELECT * FROM design_elements WHERE designId = :designId ORDER BY zIndex ASC, id ASC")
     suspend fun getElements(designId: Long): List<DesignElementEntity>
+    @Query("DELETE FROM design_elements WHERE designId = :designId")
+    suspend fun deleteElements(designId: Long)
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertElement(element: DesignElementEntity): Long
     @Update

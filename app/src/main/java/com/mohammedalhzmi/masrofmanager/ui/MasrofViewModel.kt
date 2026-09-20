@@ -40,6 +40,12 @@ class MasrofViewModel(
     val auditLogs = repository.auditLogs.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val designElements = MutableStateFlow<List<DesignElementEntity>>(emptyList())
     private var activeDesignId: Long = 0
+    private val undoStack = ArrayDeque<List<DesignElementEntity>>()
+    private val redoStack = ArrayDeque<List<DesignElementEntity>>()
+    var clipboard: DesignElementEntity? = null
+
+    private fun snapshot() = designElements.value.map { it.copy() }
+    private fun rememberChange() { undoStack.addLast(snapshot()); redoStack.clear() }
 
     fun loadDesign(type: DocumentType) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -51,10 +57,14 @@ class MasrofViewModel(
             designElements.value = repository.designElements(design.id)
         }
     }
-    fun addDesignElement(element: DesignElementEntity) { viewModelScope.launch(Dispatchers.IO) { val id = repository.addDesignElement(element.copy(designId = activeDesignId)); designElements.value = repository.designElements(activeDesignId) } }
-    fun updateDesignElement(element: DesignElementEntity) { viewModelScope.launch(Dispatchers.IO) { repository.updateDesignElement(element); designElements.value = repository.designElements(activeDesignId) } }
-    fun deleteDesignElement(element: DesignElementEntity) { viewModelScope.launch(Dispatchers.IO) { repository.deleteDesignElement(element); designElements.value = repository.designElements(activeDesignId) } }
+    fun addDesignElement(element: DesignElementEntity) { rememberChange(); viewModelScope.launch(Dispatchers.IO) { repository.addDesignElement(element.copy(designId = activeDesignId)); designElements.value = repository.designElements(activeDesignId) } }
+    fun updateDesignElement(element: DesignElementEntity) { rememberChange(); viewModelScope.launch(Dispatchers.IO) { repository.updateDesignElement(element); designElements.value = repository.designElements(activeDesignId) } }
+    fun deleteDesignElement(element: DesignElementEntity) { rememberChange(); viewModelScope.launch(Dispatchers.IO) { repository.deleteDesignElement(element); designElements.value = repository.designElements(activeDesignId) } }
     fun moveLayer(element: DesignElementEntity, delta: Int) { viewModelScope.launch(Dispatchers.IO) { repository.setDesignLayer(element.id, (element.zIndex + delta).coerceAtLeast(0)); designElements.value = repository.designElements(activeDesignId) } }
+    fun copyElement(element: DesignElementEntity) { clipboard = element.copy(id = 0) }
+    fun pasteElement() { clipboard?.let { addDesignElement(it.copy(x = it.x + 16f, y = it.y + 16f, zIndex = (designElements.value.maxOfOrNull { item -> item.zIndex } ?: 0) + 1)) } }
+    fun undo() { if (undoStack.isNotEmpty()) { val current = snapshot(); val previous = undoStack.removeLast(); redoStack.addLast(current); viewModelScope.launch(Dispatchers.IO) { repository.replaceDesignElements(activeDesignId, previous); designElements.value = repository.designElements(activeDesignId) } } }
+    fun redo() { if (redoStack.isNotEmpty()) { val current = snapshot(); val next = redoStack.removeLast(); undoStack.addLast(current); viewModelScope.launch(Dispatchers.IO) { repository.replaceDesignElements(activeDesignId, next); designElements.value = repository.designElements(activeDesignId) } } }
 
     suspend fun ensureDefaultAdmin() {
         if (repository.userCount() == 0) repository.insertUser(UserEntity(username = "admin", passwordHash = AuthSecurity.hash("admin1234"), fullName = "مدير النظام", role = "ADMIN"))

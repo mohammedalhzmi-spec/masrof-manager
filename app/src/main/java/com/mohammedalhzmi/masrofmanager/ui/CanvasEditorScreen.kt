@@ -58,6 +58,10 @@ fun CanvasEditorScreen(viewModel: MasrofViewModel, type: DocumentType, onBack: (
             item { Button(onClick = { showTextDialog = true }) { Text("إضافة نص") } }
             item { Button(onClick = { imagePicker.launch(arrayOf("image/*")) }) { Text("صورة") } }
             item { Button(onClick = { viewModel.addDesignElement(DesignElementEntity(0, 0, "RECT", "", 80f, 250f, 180f, 70f, zIndex = (elements.maxOfOrNull { it.zIndex } ?: 0) + 1)) }) { Text("شكل") } }
+            item { OutlinedButton(onClick = { viewModel.undo() }) { Text("تراجع") } }
+            item { OutlinedButton(onClick = { viewModel.redo() }) { Text("إعادة") } }
+            item { OutlinedButton(enabled = selectedId != null, onClick = { elements.firstOrNull { it.id == selectedId }?.let(viewModel::copyElement) }) { Text("نسخ") } }
+            item { OutlinedButton(onClick = { viewModel.pasteElement() }) { Text("لصق") } }
             item { OutlinedButton(enabled = selectedId != null, onClick = { elements.firstOrNull { it.id == selectedId }?.let { viewModel.moveLayer(it, 1) } }) { Text("للأمام") } }
             item { OutlinedButton(enabled = selectedId != null, onClick = { elements.firstOrNull { it.id == selectedId }?.let { viewModel.moveLayer(it, -1) } }) { Text("للخلف") } }
             item { OutlinedButton(enabled = selectedId != null, onClick = { elements.firstOrNull { it.id == selectedId }?.let { viewModel.updateDesignElement(it.copy(width = it.width + 12f, height = it.height + 8f)) } }) { Text("تكبير") } }
@@ -72,6 +76,12 @@ fun CanvasEditorScreen(viewModel: MasrofViewModel, type: DocumentType, onBack: (
                 elements.filter { it.visible }.sortedBy { it.zIndex }.forEach { element ->
                     CanvasElement(element, selectedId == element.id, onSelect = { selectedId = element.id }, onMove = { dx, dy -> viewModel.updateDesignElement(element.copy(x = element.x + dx, y = element.y + dy)) })
                 }
+            }
+        }
+        Text("الطبقات", style = MaterialTheme.typography.titleMedium)
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(5.dp), modifier = Modifier.fillMaxWidth()) {
+            items(elements.sortedByDescending { it.zIndex }, key = { it.id }) { element ->
+                FilterChip(selected = selectedId == element.id, onClick = { selectedId = element.id }, label = { Text("${element.type} #${element.id}") })
             }
         }
         Text("اضغط على العنصر لتحديده ثم اسحبه. المقابض والأبعاد تحفظ مباشرة في قاعدة البيانات.", style = MaterialTheme.typography.bodySmall)

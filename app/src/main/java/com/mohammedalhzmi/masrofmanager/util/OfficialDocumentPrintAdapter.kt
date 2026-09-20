@@ -4,6 +4,10 @@ import android.graphics.*
 import android.os.Bundle
 import android.os.CancellationSignal
 import android.graphics.pdf.PdfDocument
+import android.content.Context
+import android.net.Uri
+import android.graphics.BitmapFactory
+import com.mohammedalhzmi.masrofmanager.data.DesignElementEntity
 import android.print.*
 import com.mohammedalhzmi.masrofmanager.data.Document
 import com.mohammedalhzmi.masrofmanager.data.DocumentType
@@ -27,7 +31,7 @@ data class DocumentHeader(
     val textUnderline: Map<DocumentType, Boolean> = emptyMap()
 )
 
-class OfficialDocumentPrintAdapter(private val documents: List<Document>, private val header: DocumentHeader = DocumentHeader("وزارة الإدارة والتنمية المحلية والريفية", "صندوق النظافة والتحسين", "فرع المديرية")) : PrintDocumentAdapter() {
+class OfficialDocumentPrintAdapter(private val documents: List<Document>, private val header: DocumentHeader = DocumentHeader("وزارة الإدارة والتنمية المحلية والريفية", "صندوق النظافة والتحسين", "فرع المديرية"), private val context: Context? = null) : PrintDocumentAdapter() {
     private var attributes: PrintAttributes? = null
     override fun onLayout(oldAttributes: PrintAttributes?, newAttributes: PrintAttributes, cancellationSignal: CancellationSignal, callback: LayoutResultCallback, extras: Bundle?) {
         attributes = newAttributes
@@ -43,7 +47,7 @@ class OfficialDocumentPrintAdapter(private val documents: List<Document>, privat
                 val width = if (half) 842 else 595
                 val height = if (half) 595 else 842
                 val page = pdf.startPage(PdfDocument.PageInfo.Builder(width, height, index + 1).create())
-                OfficialDocumentRenderer.render(page.canvas, document, header)
+                OfficialDocumentRenderer.render(page.canvas, document, header, if (context != null) DesignRenderLoader.elements(context, document.type) else emptyList(), context)
                 pdf.finishPage(page)
             }
             FileOutputStream(destination.fileDescriptor).use { pdf.writeTo(it) }
@@ -59,7 +63,7 @@ object OfficialDocumentRenderer {
     private val boldPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.BLACK; textSize = 15f; typeface = Typeface.DEFAULT_BOLD }
     private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = navy; style = Paint.Style.STROKE; strokeWidth = 2f }
 
-    fun render(canvas: Canvas, document: Document, header: DocumentHeader = DocumentHeader("وزارة الإدارة والتنمية المحلية والريفية", "صندوق النظافة والتحسين", "فرع المديرية")) {
+    fun render(canvas: Canvas, document: Document, header: DocumentHeader = DocumentHeader("وزارة الإدارة والتنمية المحلية والريفية", "صندوق النظافة والتحسين", "فرع المديرية"), elements: List<DesignElementEntity> = emptyList(), context: Context? = null) {
         val w = canvas.width.toFloat(); val h = canvas.height.toFloat(); val half = h < w
         canvas.drawColor(header.backgroundColors[document.type] ?: Color.WHITE)
         header.backgroundImages[document.type]?.let { bitmap ->
@@ -79,6 +83,7 @@ object OfficialDocumentRenderer {
         canvas.drawRect(25f, 25f, w - 25f, h - 25f, linePaint)
         drawHeader(canvas, header, document.type)
         if (half) renderOrder(canvas, document) else when (document.type) { DocumentType.REQUEST -> renderRequest(canvas, document); DocumentType.RECEIPT -> renderReceipt(canvas, document); DocumentType.ORDER -> renderOrderPortrait(canvas, document) }
+        renderElements(canvas, document, elements, context)
         drawCentered(canvas, "نظام مالية صندوق النظافة والتحسين — مستند رسمي", w / 2f, h - 28f, bodyPaint)
     }
 
@@ -144,6 +149,18 @@ object OfficialDocumentRenderer {
     }
 
     private fun title(type: DocumentType) = when (type) { DocumentType.REQUEST -> "ورقة تقديم طلب"; DocumentType.ORDER -> "أمر صرف"; DocumentType.RECEIPT -> "ورقة استلام" }
+    private fun renderElements(c: Canvas, d: Document, elements: List<DesignElementEntity>, context: Context?) {
+        elements.filter { it.visible }.sortedBy { it.zIndex }.forEach { e ->
+            val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { alpha = (e.opacity.coerceIn(0f, 1f) * 255).toInt() }
+            c.save(); c.rotate(e.rotation, e.x + e.width / 2f, e.y + e.height / 2f)
+            when (e.type) {
+                "TEXT" -> { p.color = runCatching { Color.parseColor(e.textColor) }.getOrDefault(Color.BLACK); p.textSize = e.fontSize; p.typeface = Typeface.create(when (e.fontFamily) { "SERIF" -> Typeface.SERIF; "MONOSPACE" -> Typeface.MONOSPACE; else -> Typeface.SANS_SERIF }, if (e.bold && e.italic) Typeface.BOLD_ITALIC else if (e.bold) Typeface.BOLD else if (e.italic) Typeface.ITALIC else Typeface.NORMAL); p.isUnderlineText = e.underline; c.drawText(resolve(e.content, d), e.x, e.y + e.fontSize, p) }
+                "RECT" -> { p.style = Paint.Style.FILL; p.color = runCatching { Color.parseColor(e.fillColor) }.getOrDefault(Color.TRANSPARENT); c.drawRect(e.x, e.y, e.x + e.width, e.y + e.height, p); p.style = Paint.Style.STROKE; p.strokeWidth = e.strokeWidth; p.color = runCatching { Color.parseColor(e.strokeColor) }.getOrDefault(Color.DKGRAY); c.drawRect(e.x, e.y, e.x + e.width, e.y + e.height, p) }
+                "IMAGE" -> context?.let { ctx -> runCatching { ctx.contentResolver.openInputStream(Uri.parse(e.content)).use(BitmapFactory::decodeStream) }.getOrNull()?.let { c.drawBitmap(it, null, RectF(e.x, e.y, e.x + e.width, e.y + e.height), p) } }
+            }; c.restore()
+        }
+    }
+    private fun resolve(value: String, d: Document) = value.replace("{رقم المستند}", d.documentNumber).replace("{اسم المستفيد}", d.beneficiaryName.orEmpty()).replace("{المبلغ}", d.amount?.toString().orEmpty()).replace("{الغرض}", d.purpose.orEmpty()).replace("{المبلغ كتابة}", d.amountWords.orEmpty()).replace("{التاريخ الهجري}", d.dateHijri).replace("{التاريخ الميلادي}", d.dateGregorian)
     private fun drawCentered(c: Canvas, text: String, x: Float, y: Float, p: Paint) { p.textAlign = Paint.Align.CENTER; c.drawText(text, x, y, p) }
     private fun drawRight(c: Canvas, text: String, x: Float, y: Float, p: Paint) { p.textAlign = Paint.Align.RIGHT; c.drawText(text, x, y, p); p.textAlign = Paint.Align.CENTER }
     private fun drawLeft(c: Canvas, text: String, x: Float, y: Float, p: Paint) { p.textAlign = Paint.Align.LEFT; c.drawText(text, x, y, p); p.textAlign = Paint.Align.CENTER }

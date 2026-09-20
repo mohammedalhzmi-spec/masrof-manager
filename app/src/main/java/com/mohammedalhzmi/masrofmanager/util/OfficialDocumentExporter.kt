@@ -21,7 +21,7 @@ object OfficialDocumentExporter {
         documents.forEachIndexed { index, document ->
             val half = AppPreferences.pageSize(context, document.type) == "HALF_A4" || (document.type == DocumentType.ORDER && AppPreferences.pageSize(context, document.type).isBlank())
             val page = pdf.startPage(PdfDocument.PageInfo.Builder(if (half) 842 else 595, if (half) 595 else 842, index + 1).create())
-            OfficialDocumentRenderer.render(page.canvas, document, header(context))
+            OfficialDocumentRenderer.render(page.canvas, document, header(context), DesignRenderLoader.elements(context, document.type), context)
             pdf.finishPage(page)
         }
         FileOutputStream(file).use { pdf.writeTo(it) }
@@ -35,7 +35,7 @@ object OfficialDocumentExporter {
         val bitmap = Bitmap.createBitmap(if (half) 1684 else 1190, if (half) 1190 else 1684, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         canvas.scale(2f, 2f)
-        OfficialDocumentRenderer.render(canvas, document, header(context))
+        OfficialDocumentRenderer.render(canvas, document, header(context), DesignRenderLoader.elements(context, document.type), context)
         FileOutputStream(file).use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         bitmap.recycle()
         return shareUri(context, file)
