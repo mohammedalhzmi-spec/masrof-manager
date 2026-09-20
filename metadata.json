@@ -1,6 +1,6 @@
 {
-  "name": "",
-  "description": "",
+  "name": "نظام مالية صندوق النظافة",
+  "description": "تطبيق Android احترافي لإدارة المستندات المالية والطباعة",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
