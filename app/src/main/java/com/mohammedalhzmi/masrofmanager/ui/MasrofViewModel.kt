@@ -32,6 +32,14 @@ class MasrofViewModel(
         }
     }
 
+    fun updateDocument(document: Document) {
+        viewModelScope.launch { repository.update(document) }
+    }
+
+    fun deleteDocument(document: Document) {
+        viewModelScope.launch { repository.delete(document) }
+    }
+
     fun exportDatabase(context: Context, uri: Uri) {
         viewModelScope.launch(Dispatchers.IO) {
             val dbFile = context.getDatabasePath("masrof-db")

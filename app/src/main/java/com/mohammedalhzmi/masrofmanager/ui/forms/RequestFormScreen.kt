@@ -1,51 +1,33 @@
 package com.mohammedalhzmi.masrofmanager.ui.forms
 
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import com.mohammedalhzmi.masrofmanager.data.Document
 import com.mohammedalhzmi.masrofmanager.data.DocumentStatus
 import com.mohammedalhzmi.masrofmanager.data.DocumentType
 import com.mohammedalhzmi.masrofmanager.ui.MasrofViewModel
+import com.mohammedalhzmi.masrofmanager.util.FormMemory
 
 @Composable
-fun RequestFormScreen(viewModel: MasrofViewModel, onNavigateBack: () -> Unit) {
-    var requesterName by remember { mutableStateOf("") }
-    var purpose by remember { mutableStateOf("") }
+fun RequestFormScreen(viewModel: MasrofViewModel, onNavigateBack: () -> Unit, existing: Document? = null) {
+    val context = LocalContext.current
+    var requester by remember(existing?.id) { mutableStateOf(existing?.beneficiaryName ?: FormMemory.read(context, "request", "requester")) }
+    var directedTo by remember(existing?.id) { mutableStateOf(existing?.purpose ?: FormMemory.read(context, "request", "directed", "مدير فرع صندوق النظافة والتحسين - مديرية الحزم")) }
+    var details by remember(existing?.id) { mutableStateOf(existing?.details ?: FormMemory.read(context, "request", "details")) }
+    var hijri by remember(existing?.id) { mutableStateOf(existing?.dateHijri.orEmpty()) }
+    var gregorian by remember(existing?.id) { mutableStateOf(existing?.dateGregorian.orEmpty()) }
     val lastNumber by viewModel.lastDocumentNumber.collectAsState()
-
-    Column(modifier = Modifier.padding(16.dp).verticalScroll(rememberScrollState())) {
-        Text(text = "ورقة تقديم طلب", style = MaterialTheme.typography.headlineMedium)
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                OutlinedTextField(value = requesterName, onValueChange = { requesterName = it }, label = { Text("اسم مقدم الطلب") }, modifier = Modifier.fillMaxWidth())
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(value = purpose, onValueChange = { purpose = it }, label = { Text("التفاصيل / الغرض") }, modifier = Modifier.fillMaxWidth(), minLines = 3)
-            }
-        }
-        
-        Spacer(modifier = Modifier.height(16.dp))
-        Button(onClick = {
-            val doc = Document(
-                type = DocumentType.REQUEST,
-                documentNumber = ((lastNumber ?: 0) + 1).toString().padStart(4, '0'),
-                dateHijri = "", dateGregorian = "",
-                amount = null, amountWords = null,
-                beneficiaryName = requesterName,
-                purpose = purpose,
-                details = null, notes = null,
-                status = DocumentStatus.SUBMITTED
-            )
-            viewModel.addDocument(doc)
+    OfficialFormShell(if (existing == null) "ورقة تقديم طلب جديدة" else "تعديل ورقة تقديم طلب") {
+        OfficialDates(hijri, gregorian, { hijri = it }, { gregorian = it })
+        OfficialField(directedTo, "المخاطب إليه", { directedTo = it })
+        OfficialField(requester, "اسم مقدم الطلب", { requester = it })
+        OfficialField(details, "تفاصيل الطلب", { details = it }, 6)
+        OfficialField(existing?.notes.orEmpty(), "المرفقات / رقم النموذج", { })
+        SaveOfficialButton(if (existing == null) "حفظ ورقة التقديم الرسمية" else "حفظ التعديلات") {
+            val value = Document(existing?.id ?: 0, DocumentType.REQUEST, existing?.documentNumber ?: ((lastNumber ?: 0) + 1).toString().padStart(4, '0'), hijri, gregorian, null, null, requester, directedTo, details, existing?.notes, DocumentStatus.SUBMITTED, existing?.attachmentsCount ?: 0, existing?.createdAt ?: System.currentTimeMillis())
+            if (existing == null) viewModel.addDocument(value) else viewModel.updateDocument(value)
+            FormMemory.remember(context, "request", "requester", requester); FormMemory.remember(context, "request", "directed", directedTo); FormMemory.remember(context, "request", "details", details)
             onNavigateBack()
-        }, modifier = Modifier.fillMaxWidth()) {
-            Text("حفظ الطلب")
         }
     }
 }
