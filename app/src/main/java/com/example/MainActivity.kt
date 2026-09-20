@@ -19,10 +19,12 @@ import com.mohammedalhzmi.masrofmanager.data.MasrofRepository
 import com.mohammedalhzmi.masrofmanager.ui.AppLockScreen
 import com.mohammedalhzmi.masrofmanager.ui.AppNavigation
 import com.mohammedalhzmi.masrofmanager.ui.MasrofViewModel
+import com.mohammedalhzmi.masrofmanager.ui.WelcomeScreen
 import com.mohammedalhzmi.masrofmanager.util.AppLockPreferences
 
 class MainActivity : FragmentActivity() {
     private var locked by mutableStateOf(false)
+    private var showWelcome by mutableStateOf(true)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -35,7 +37,9 @@ class MainActivity : FragmentActivity() {
         })[MasrofViewModel::class.java]
         setContent {
             MyApplicationTheme {
-                if (locked && AppLockPreferences.enabled(this)) {
+                if (showWelcome) {
+                    WelcomeScreen { showWelcome = false }
+                } else if (locked && AppLockPreferences.enabled(this)) {
                     AppLockScreen(
                         type = AppLockPreferences.type(this),
                         biometricAvailable = biometricAvailable(),

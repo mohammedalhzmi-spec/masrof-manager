@@ -11,20 +11,21 @@ import androidx.compose.ui.unit.dp
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.animation.AnimatedVisibility
+import kotlinx.coroutines.delay
+import com.mohammedalhzmi.masrofmanager.util.AppBackupManager
 
 @Composable
-fun DashboardScreen(
-    viewModel: MasrofViewModel,
-    onAddDocument: () -> Unit,
-    onPrint: (String) -> Unit,
-    onEdit: (String) -> Unit,
-    onSettings: () -> Unit
-) {
+fun DashboardScreen(viewModel: MasrofViewModel, onAddDocument: () -> Unit, onPrint: (String) -> Unit, onEdit: (String) -> Unit, onSettings: () -> Unit) {
     val documents by viewModel.allDocuments.collectAsState()
     var selectedIds by remember { mutableStateOf(setOf<Long>()) }
     val context = LocalContext.current
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/x-sqlite3")) { uri -> uri?.let { viewModel.exportDatabase(context, it) } }
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let { viewModel.importDatabase(context, it) } }
+    val zipExportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri -> uri?.let { viewModel.exportFullBackup(context, it) } }
+    val zipImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let { viewModel.importFullBackup(context, it) } }
+    var showDeveloperNotice by remember { mutableStateOf(true) }
+    LaunchedEffect(Unit) { delay(4500); showDeveloperNotice = false }
 
     Column(modifier = Modifier.padding(16.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -32,12 +33,23 @@ fun DashboardScreen(
             TextButton(onClick = onSettings) { Text("الإعدادات") }
         }
         Spacer(modifier = Modifier.height(12.dp))
+        AnimatedVisibility(visible = showDeveloperNotice) {
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer), modifier = Modifier.fillMaxWidth()) {
+                Text("هذا التطبيق من برمجة وتطوير المطور محمد الحزمي\nجميع الحقوق محفوظة للمطور 2026", modifier = Modifier.padding(12.dp))
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
         Button(onClick = onAddDocument, modifier = Modifier.fillMaxWidth()) { Text("إضافة مستند جديد") }
         Spacer(modifier = Modifier.height(8.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { exportLauncher.launch("masrof-backup.db") }, modifier = Modifier.weight(1f)) { Text("نسخة احتياطية") }
-            OutlinedButton(onClick = { importLauncher.launch(arrayOf("application/x-sqlite3")) }, modifier = Modifier.weight(1f)) { Text("استعادة") }
+            OutlinedButton(onClick = { exportLauncher.launch("masrof-backup.db") }, modifier = Modifier.weight(1f)) { Text("نسخة DB") }
+            OutlinedButton(onClick = { importLauncher.launch(arrayOf("application/x-sqlite3")) }, modifier = Modifier.weight(1f)) { Text("استعادة DB") }
         }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { zipExportLauncher.launch("masrof-full-backup.zip") }, modifier = Modifier.weight(1f)) { Text("حفظ ZIP كامل") }
+            OutlinedButton(onClick = { zipImportLauncher.launch(arrayOf("application/zip", "application/octet-stream")) }, modifier = Modifier.weight(1f)) { Text("استيراد ZIP") }
+        }
+        OutlinedButton(onClick = { AppBackupManager.shareBackup(context) }, modifier = Modifier.fillMaxWidth()) { Text("مشاركة النسخة الاحتياطية إلى السحابة") }
         Spacer(modifier = Modifier.height(12.dp))
         LazyColumn(modifier = Modifier.weight(1f)) {
             items(documents, key = { it.id }) { doc ->
@@ -56,9 +68,7 @@ fun DashboardScreen(
         }
         if (selectedIds.isNotEmpty()) {
             Button(onClick = { onPrint(selectedIds.joinToString(",")) }, modifier = Modifier.fillMaxWidth()) { Text("تصدير / طباعة المحدد (${selectedIds.size})") }
-            if (selectedIds.size == 1) {
-                TextButton(onClick = { documents.find { it.id in selectedIds }?.let { viewModel.deleteDocument(it); selectedIds = emptySet() } }, modifier = Modifier.fillMaxWidth()) { Text("حذف المستند المحدد") }
-            }
+            if (selectedIds.size == 1) TextButton(onClick = { documents.find { it.id in selectedIds }?.let { viewModel.deleteDocument(it); selectedIds = emptySet() } }, modifier = Modifier.fillMaxWidth()) { Text("حذف المستند المحدد") }
         }
     }
 }

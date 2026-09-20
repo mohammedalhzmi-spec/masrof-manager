@@ -15,6 +15,7 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import android.content.Context
 import android.net.Uri
+import com.mohammedalhzmi.masrofmanager.util.AppBackupManager
 
 class MasrofViewModel(
     private val repository: MasrofRepository,
@@ -61,6 +62,17 @@ class MasrofViewModel(
                 }
             }
             // Room will re-open automatically
+        }
+    }
+
+    fun exportFullBackup(context: Context, uri: Uri) {
+        viewModelScope.launch(Dispatchers.IO) { AppBackupManager.exportToUri(context, uri) }
+    }
+
+    fun importFullBackup(context: Context, uri: Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            database.close()
+            AppBackupManager.restoreFromUri(context, uri)
         }
     }
 }
