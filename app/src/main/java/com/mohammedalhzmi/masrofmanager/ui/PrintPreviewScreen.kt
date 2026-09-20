@@ -117,7 +117,7 @@ private fun DocumentPageEditor(documents: List<Document>, context: Context, onCl
     var bold by remember(selectedType) { mutableStateOf(AppPreferences.textBold(context, selectedType)) }
     var italic by remember(selectedType) { mutableStateOf(AppPreferences.textItalic(context, selectedType)) }
     var underline by remember(selectedType) { mutableStateOf(AppPreferences.textUnderline(context, selectedType)) }
-    val backgroundPicker = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.GetContent()) { uri -> uri?.let { AppPreferences.saveBackgroundImage(context, selectedType, it) } }
+    val backgroundPicker = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri -> uri?.let { selectedUri -> runCatching { context.contentResolver.takePersistableUriPermission(selectedUri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) }; AppPreferences.saveBackgroundImage(context, selectedType, selectedUri) } }
     AlertDialog(onDismissRequest = onClose, title = { Text("محرر الصفحة") }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("اختر النوع ثم غيّر المقاس والخلفية. الشعارات تدار من الإعدادات لكل مستند.")
@@ -126,7 +126,7 @@ private fun DocumentPageEditor(documents: List<Document>, context: Context, onCl
             val size = AppPreferences.pageSize(context, selectedType)
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { if (size == "A4") Button(onClick = { AppPreferences.setPageSize(context, selectedType, "A4") }) { Text("A4") } else OutlinedButton(onClick = { AppPreferences.setPageSize(context, selectedType, "A4") }) { Text("A4") }; if (size == "HALF_A4") Button(onClick = { AppPreferences.setPageSize(context, selectedType, "HALF_A4") }) { Text("نصف A4") } else OutlinedButton(onClick = { AppPreferences.setPageSize(context, selectedType, "HALF_A4") }) { Text("نصف A4") } }
             OutlinedTextField(color, { color = it }, label = { Text("لون الخلفية مثل #FFFFFF") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            OutlinedButton(onClick = { backgroundPicker.launch("image/*") }, modifier = Modifier.fillMaxWidth()) { Text(if (AppPreferences.backgroundImageUri(context, selectedType) == null) "إضافة صورة خلفية" else "تغيير صورة الخلفية") }
+            OutlinedButton(onClick = { backgroundPicker.launch(arrayOf("image/*")) }, modifier = Modifier.fillMaxWidth()) { Text(if (AppPreferences.backgroundImageUri(context, selectedType) == null) "إضافة صورة خلفية" else "تغيير صورة الخلفية") }
             Text("شفافية الصورة: ${(opacity * 100).toInt()}%")
             Slider(value = opacity, onValueChange = { opacity = it }, valueRange = 0f..1f)
             Text("حجم الصورة: ${(scale * 100).toInt()}%")
