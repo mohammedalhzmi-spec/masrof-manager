@@ -59,6 +59,13 @@ class MasrofViewModel(
         return null
     }
 
+    suspend fun registerUser(username: String, password: String, fullName: String, role: String): Boolean {
+        if (repository.findActiveUser(username.trim()) != null) return false
+        repository.insertUser(UserEntity(username = username.trim(), passwordHash = AuthSecurity.hash(password), fullName = fullName.trim(), role = role, active = true))
+        repository.addAudit(AuditLogEntity(userId = null, username = username.trim(), action = "REGISTER_USER", details = "تسجيل حساب جديد بالدور $role"))
+        return true
+    }
+
     fun createUser(username: String, password: String, fullName: String, role: String) {
         viewModelScope.launch(Dispatchers.IO) { repository.insertUser(UserEntity(username = username.trim(), passwordHash = AuthSecurity.hash(password), fullName = fullName, role = role)); audit("CREATE_USER", username) }
     }

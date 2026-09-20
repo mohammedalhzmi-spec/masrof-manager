@@ -22,6 +22,7 @@ import com.mohammedalhzmi.masrofmanager.ui.AppNavigation
 import com.mohammedalhzmi.masrofmanager.ui.MasrofViewModel
 import com.mohammedalhzmi.masrofmanager.ui.WelcomeScreen
 import com.mohammedalhzmi.masrofmanager.ui.LoginScreen
+import com.mohammedalhzmi.masrofmanager.ui.RegisterScreen
 import com.mohammedalhzmi.masrofmanager.util.AppLockPreferences
 import com.mohammedalhzmi.masrofmanager.util.UserSession
 
@@ -30,6 +31,8 @@ class MainActivity : FragmentActivity() {
     private var showWelcome by mutableStateOf(true)
     private var loggedIn by mutableStateOf(false)
     private var loginError by mutableStateOf<String?>(null)
+    private var registrationError by mutableStateOf<String?>(null)
+    private var showRegister by mutableStateOf(false)
     private var initializing by mutableStateOf(true)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -53,13 +56,23 @@ class MainActivity : FragmentActivity() {
                     WelcomeScreen { }
                 } else if (showWelcome) {
                     WelcomeScreen { showWelcome = false }
+                } else if (!loggedIn && showRegister) {
+                    RegisterScreen(onRegister = { username, password, fullName, role, _, _ ->
+                        scope.launch {
+                            val created = viewModel.registerUser(username, password, fullName, role.name)
+                            if (!created) registrationError = "اسم المستخدم موجود مسبقًا" else {
+                                val user = viewModel.authenticate(this@MainActivity, username, password, true)
+                                if (user != null) { loggedIn = true; locked = false; showRegister = false; registrationError = null }
+                            }
+                        }
+                    }, onBack = { showRegister = false; registrationError = null }, error = registrationError)
                 } else if (!loggedIn) {
                     LoginScreen(onLogin = { username, password, remember ->
                         scope.launch {
                             val user = viewModel.authenticate(this@MainActivity, username, password, remember)
                             if (user == null) loginError = "اسم المستخدم أو كلمة المرور غير صحيحة" else { loggedIn = true; locked = false; loginError = null; AppLockPreferences.markUnlocked(this@MainActivity) }
                         }
-                    }, error = loginError)
+                    }, onRegister = { showRegister = true; loginError = null }, error = loginError)
                 } else if (locked && AppLockPreferences.enabled(this)) {
                     AppLockScreen(
                         type = AppLockPreferences.type(this),
