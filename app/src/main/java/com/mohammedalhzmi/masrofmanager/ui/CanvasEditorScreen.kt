@@ -35,6 +35,8 @@ import androidx.compose.ui.unit.sp
 import com.mohammedalhzmi.masrofmanager.data.*
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
+import com.mohammedalhzmi.masrofmanager.util.AiLayoutAssistant
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
@@ -47,8 +49,10 @@ fun CanvasEditorScreen(viewModel: MasrofViewModel, type: DocumentType, onBack: (
     var showTextDialog by remember { mutableStateOf(false) }
     var showEditDialog by remember { mutableStateOf(false) }
     var showPageDialog by remember { mutableStateOf(false) }
+    var showAiDialog by remember { mutableStateOf(false) }
     var grid by remember { mutableStateOf(true) }
     val design by viewModel.activeDesign.collectAsState()
+    val scope = rememberCoroutineScope()
     LaunchedEffect(type) { viewModel.loadDesign(type) }
     val selected = elements.firstOrNull { it.id == selectedId }
     val nextZ = (elements.maxOfOrNull { it.zIndex } ?: 0) + 1
@@ -74,6 +78,7 @@ fun CanvasEditorScreen(viewModel: MasrofViewModel, type: DocumentType, onBack: (
             item { Button(onClick = { add("STICKER", "★", x = 140f, y = 420f, w = 58f, h = 58f) }) { Text("ملصق") } }
             item { Button(onClick = { add("QR", "{رقم المستند}", x = 230f, y = 420f, w = 80f, h = 80f) }) { Text("QR") } }
             item { OutlinedButton(onClick = { showPageDialog = true }) { Text("إعدادات الصفحة") } }
+            item { Button(onClick = { showAiDialog = true }) { Text("المساعد الذكي") } }
             item { OutlinedButton(onClick = { grid = !grid }) { Text(if (grid) "شبكة: تشغيل" else "شبكة: إيقاف") } }
             item { OutlinedButton(onClick = { viewModel.undo() }) { Text("تراجع") } }
             item { OutlinedButton(onClick = { viewModel.redo() }) { Text("إعادة") } }
@@ -114,6 +119,14 @@ fun CanvasEditorScreen(viewModel: MasrofViewModel, type: DocumentType, onBack: (
         viewModel.updateDesignElement(selected.copy(content = text, bold = bold, italic = italic, underline = underline, fontFamily = family, textColor = color, fontSize = size, textAlign = align, lineSpacing = spacing)); showEditDialog = false
     }
     if (showPageDialog && design != null) PageSettingsDialog(design!!, onDismiss = { showPageDialog = false }) { updated -> viewModel.updateDesign(updated); showPageDialog = false }
+    if (showAiDialog) AiLayoutDialog(onDismiss = { showAiDialog = false }) { key, endpoint, instruction, status ->
+        scope.launch {
+            status("جارٍ تحليل الطلب…")
+            runCatching { AiLayoutAssistant.plan(key, endpoint, instruction, elements, design) }
+                .onSuccess { commands -> viewModel.applyAiCommands(commands); status("تم تطبيق ${commands.size} أمرًا على التصميم") }
+                .onFailure { status("تعذر التنفيذ: ${it.message ?: "خطأ غير معروف"}") }
+        }
+    }
 }
 
 @Composable
@@ -176,6 +189,21 @@ private fun PageSettingsDialog(initial: DocumentDesignEntity, onDismiss: () -> U
         Row(verticalAlignment = Alignment.CenterVertically) { Text("الهامش ${margin.roundToInt()}"); TextButton(onClick = { margin = (margin - 5).coerceAtLeast(0f) }) { Text("-") }; TextButton(onClick = { margin += 5 }) { Text("+") } }
         OutlinedTextField(background, { background = it }, label = { Text("لون الخلفية #RRGGBB") })
     } }, confirmButton = { Button(onClick = { onSave(initial.copy(pageWidth = width, pageHeight = height, orientation = orientation, marginLeft = margin, marginTop = margin, marginRight = margin, marginBottom = margin, backgroundColor = background)) }) { Text("حفظ") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } })
+}
+
+@Composable
+private fun AiLayoutDialog(onDismiss: () -> Unit, onRun: (String, String, String, (String) -> Unit) -> Unit) {
+    var key by remember { mutableStateOf("") }
+    var endpoint by remember { mutableStateOf("https://api.openai.com/v1/chat/completions") }
+    var instruction by remember { mutableStateOf("نسق الصفحة بشكل رسمي، وحاذِ العنوان في الوسط وضع QR في الزاوية اليمنى السفلية") }
+    var status by remember { mutableStateOf("المفتاح لا يُحفظ ولا يُضمن داخل التطبيق") }
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("مساعد تنسيق المستند بالذكاء الاصطناعي") }, text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("اكتب ما تريد تعديله، وسيحوّله المساعد إلى أوامر آمنة قابلة للتطبيق على العناصر وإعدادات الصفحة.", style = MaterialTheme.typography.bodySmall)
+        OutlinedTextField(key, { key = it }, label = { Text("مفتاح API الخاص بك") }, singleLine = true)
+        OutlinedTextField(endpoint, { endpoint = it }, label = { Text("رابط OpenAI-compatible") }, singleLine = true)
+        OutlinedTextField(instruction, { instruction = it }, label = { Text("طلبك للمساعد") }, minLines = 3)
+        Text(status, style = MaterialTheme.typography.bodySmall)
+    } }, confirmButton = { Button(enabled = key.isNotBlank() && instruction.isNotBlank(), onClick = { onRun(key, endpoint, instruction) { status = it } }) { Text("تحليل وتطبيق") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("إغلاق") } })
 }
 
 private fun typeName(type: DocumentType) = when (type) { DocumentType.ORDER -> "أمر الصرف"; DocumentType.REQUEST -> "ورقة التقديم"; DocumentType.RECEIPT -> "ورقة الاستلام" }

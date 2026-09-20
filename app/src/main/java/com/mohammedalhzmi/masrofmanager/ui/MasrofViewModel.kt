@@ -25,6 +25,7 @@ import com.mohammedalhzmi.masrofmanager.util.AuthSecurity
 import com.mohammedalhzmi.masrofmanager.util.AuthenticatedUser
 import com.mohammedalhzmi.masrofmanager.util.UserSession
 import com.mohammedalhzmi.masrofmanager.util.RememberedLogin
+import com.mohammedalhzmi.masrofmanager.util.AiLayoutAssistant
 import kotlinx.coroutines.flow.MutableStateFlow
 
 class MasrofViewModel(
@@ -62,6 +63,19 @@ class MasrofViewModel(
     fun updateDesign(design: DocumentDesignEntity) {
         activeDesign.value = design
         viewModelScope.launch(Dispatchers.IO) { repository.saveDesign(design.copy(updatedAt = System.currentTimeMillis())); activeDesign.value = repository.getDesign(DocumentType.valueOf(design.documentType)) }
+    }
+    fun applyAiCommands(commands: List<AiLayoutAssistant.Command>) {
+        viewModelScope.launch(Dispatchers.IO) {
+            commands.forEach { command ->
+                when (command.action) {
+                    "MOVE", "RESIZE", "ROTATE", "UPDATE_TEXT", "STYLE_TEXT" -> designElements.value.firstOrNull { it.id == command.targetId }?.let { e -> repository.updateDesignElement(e.copy(x = command.x ?: e.x, y = command.y ?: e.y, width = command.width ?: e.width, height = command.height ?: e.height, rotation = command.rotation ?: e.rotation, content = command.content ?: e.content, fontSize = command.fontSize ?: e.fontSize, textColor = command.textColor ?: e.textColor, textAlign = command.textAlign ?: e.textAlign)) }
+                    "DELETE" -> designElements.value.firstOrNull { it.id == command.targetId }?.let { repository.deleteDesignElement(it) }
+                    "ADD_TEXT", "ADD_SHAPE", "ADD_QR" -> repository.addDesignElement(DesignElementEntity(designId = activeDesignId, type = command.type ?: if (command.action == "ADD_QR") "QR" else "TEXT", content = command.content ?: "", x = command.x ?: 40f, y = command.y ?: 40f, width = command.width ?: 180f, height = command.height ?: 60f, zIndex = (designElements.value.maxOfOrNull { it.zIndex } ?: 0) + 1, fontSize = command.fontSize ?: 18f, textColor = command.textColor ?: "#000000", textAlign = command.textAlign ?: "START"))
+                    "PAGE" -> activeDesign.value?.let { d -> repository.saveDesign(d.copy(pageWidth = command.pageWidth ?: d.pageWidth, pageHeight = command.pageHeight ?: d.pageHeight, orientation = command.orientation ?: d.orientation, marginLeft = command.margin ?: d.marginLeft, marginTop = command.margin ?: d.marginTop, marginRight = command.margin ?: d.marginRight, marginBottom = command.margin ?: d.marginBottom, backgroundColor = command.backgroundColor ?: d.backgroundColor)); activeDesign.value = repository.getDesign(DocumentType.valueOf(d.documentType)) }
+                }
+            }
+            designElements.value = repository.designElements(activeDesignId)
+        }
     }
     fun addDesignElement(element: DesignElementEntity) { rememberChange(); viewModelScope.launch(Dispatchers.IO) { repository.addDesignElement(element.copy(designId = activeDesignId)); designElements.value = repository.designElements(activeDesignId) } }
     fun updateDesignElement(element: DesignElementEntity) { rememberChange(); viewModelScope.launch(Dispatchers.IO) { repository.updateDesignElement(element); designElements.value = repository.designElements(activeDesignId) } }
