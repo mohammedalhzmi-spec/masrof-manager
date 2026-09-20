@@ -39,5 +39,8 @@ data class DesignElementEntity(
     val strokeColor: String = "#123B5D",
     val strokeWidth: Float = 2f,
     val locked: Boolean = false,
-    val visible: Boolean = true
+    val visible: Boolean = true,
+    val textAlign: String = "START",
+    val lineSpacing: Float = 1f,
+    val cornerRadius: Float = 0f
 )

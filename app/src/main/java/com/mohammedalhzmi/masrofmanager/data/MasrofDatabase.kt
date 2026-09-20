@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
 
-@Database(entities = [Document::class, OrganizationProfile::class, ContactEntity::class, UserEntity::class, AuditLogEntity::class, DocumentDesignEntity::class, DesignElementEntity::class], version = 5, exportSchema = false)
+@Database(entities = [Document::class, OrganizationProfile::class, ContactEntity::class, UserEntity::class, AuditLogEntity::class, DocumentDesignEntity::class, DesignElementEntity::class], version = 6, exportSchema = false)
 @TypeConverters(Converters::class)
 abstract class MasrofDatabase : RoomDatabase() {
     abstract fun documentDao(): DocumentDao
@@ -32,6 +32,13 @@ abstract class MasrofDatabase : RoomDatabase() {
                 db.execSQL("CREATE TABLE IF NOT EXISTS design_elements (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, designId INTEGER NOT NULL, type TEXT NOT NULL, content TEXT NOT NULL, x REAL NOT NULL, y REAL NOT NULL, width REAL NOT NULL, height REAL NOT NULL, rotation REAL NOT NULL, opacity REAL NOT NULL, zIndex INTEGER NOT NULL, fontFamily TEXT NOT NULL, fontSize REAL NOT NULL, textColor TEXT NOT NULL, bold INTEGER NOT NULL, italic INTEGER NOT NULL, underline INTEGER NOT NULL, fillColor TEXT NOT NULL, strokeColor TEXT NOT NULL, strokeWidth REAL NOT NULL, locked INTEGER NOT NULL, visible INTEGER NOT NULL)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_design_elements_designId ON design_elements(designId)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_design_elements_designId_zIndex ON design_elements(designId, zIndex)")
+            }
+        }
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE design_elements ADD COLUMN textAlign TEXT NOT NULL DEFAULT 'START'")
+                db.execSQL("ALTER TABLE design_elements ADD COLUMN lineSpacing REAL NOT NULL DEFAULT 1.0")
+                db.execSQL("ALTER TABLE design_elements ADD COLUMN cornerRadius REAL NOT NULL DEFAULT 0.0")
             }
         }
     }
