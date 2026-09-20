@@ -12,6 +12,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.mohammedalhzmi.masrofmanager.data.DocumentType
 import com.mohammedalhzmi.masrofmanager.util.AppPreferences
+import com.mohammedalhzmi.masrofmanager.util.AppLockPreferences
+import com.mohammedalhzmi.masrofmanager.util.LockType
 
 @Composable
 fun SettingsScreen(onBack: () -> Unit) {
@@ -24,6 +26,11 @@ fun SettingsScreen(onBack: () -> Unit) {
     var orderLogo by remember { mutableStateOf(AppPreferences.logoUri(context, DocumentType.ORDER)) }
     var requestLogo by remember { mutableStateOf(AppPreferences.logoUri(context, DocumentType.REQUEST)) }
     var receiptLogo by remember { mutableStateOf(AppPreferences.logoUri(context, DocumentType.RECEIPT)) }
+    var lockEnabled by remember { mutableStateOf(AppLockPreferences.enabled(context)) }
+    var biometricEnabled by remember { mutableStateOf(AppLockPreferences.biometricEnabled(context)) }
+    var lockType by remember { mutableStateOf(AppLockPreferences.type(context)) }
+    var newSecret by remember { mutableStateOf("") }
+    var timeout by remember { mutableStateOf(AppLockPreferences.timeoutMinutes(context).toString()) }
     val orderPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> uri?.let { orderLogo = it.toString(); AppPreferences.saveLogo(context, DocumentType.ORDER, it) } }
     val requestPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> uri?.let { requestLogo = it.toString(); AppPreferences.saveLogo(context, DocumentType.REQUEST, it) } }
     val receiptPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> uri?.let { receiptLogo = it.toString(); AppPreferences.saveLogo(context, DocumentType.RECEIPT, it) } }
@@ -38,8 +45,28 @@ fun SettingsScreen(onBack: () -> Unit) {
         LogoSetting("شعار أمر الصرف", orderLogo != null, { orderPicker.launch("image/*") })
         LogoSetting("شعار ورقة التقديم", requestLogo != null, { requestPicker.launch("image/*") })
         LogoSetting("شعار ورقة الاستلام", receiptLogo != null, { receiptPicker.launch("image/*") })
-        Button(onClick = {
-            AppPreferences.put(context, "ministry", ministry); AppPreferences.put(context, "administration", administration); AppPreferences.put(context, "branch", branch); AppPreferences.put(context, "manager", manager); AppPreferences.put(context, "finance_manager", finance); onBack()
+        HorizontalDivider()
+        Text("أمان التطبيق", style = MaterialTheme.typography.titleLarge)
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("قفل التطبيق عند الخروج أو انتهاء المهلة")
+            Switch(checked = lockEnabled, onCheckedChange = { lockEnabled = it })
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            LockTypeButton("أرقام", LockType.PIN, lockType) { lockType = it }
+            LockTypeButton("كلمة", LockType.PASSWORD, lockType) { lockType = it }
+            LockTypeButton("نقش", LockType.PATTERN, lockType) { lockType = it }
+        }
+        SettingField(if (lockType == LockType.PIN) "رمز جديد" else if (lockType == LockType.PASSWORD) "كلمة مرور جديدة" else "نقش جديد (أرقام النقاط مثل 1478)", newSecret) { newSecret = it }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("السماح بالبصمة / أمان الهاتف")
+            Switch(checked = biometricEnabled, onCheckedChange = { biometricEnabled = it })
+        }
+        SettingField("مهلة إعادة القفل بالدقائق (0 = فورًا)", timeout) { timeout = it.filter(Char::isDigit) }
+        Text("اقتراحات أمان: استخدم بصمة الهاتف، ورمزًا لا يقل عن 4 أرقام، ولا تشارك كلمة المرور.", style = MaterialTheme.typography.bodySmall)
+        Button(enabled = !lockEnabled || AppLockPreferences.hasSecret(context) || newSecret.isNotBlank(), onClick = {
+            AppPreferences.put(context, "ministry", ministry); AppPreferences.put(context, "administration", administration); AppPreferences.put(context, "branch", branch); AppPreferences.put(context, "manager", manager); AppPreferences.put(context, "finance_manager", finance)
+            AppLockPreferences.setEnabled(context, lockEnabled); AppLockPreferences.setBiometricEnabled(context, biometricEnabled); AppLockPreferences.setType(context, lockType); AppLockPreferences.setTimeoutMinutes(context, timeout.toIntOrNull() ?: 5); if (newSecret.isNotBlank()) AppLockPreferences.setSecret(context, newSecret)
+            onBack()
         }, modifier = Modifier.fillMaxWidth()) { Text("حفظ الإعدادات") }
         OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("رجوع") }
     }
@@ -51,4 +78,9 @@ private fun SettingField(label: String, value: String, onChange: (String) -> Uni
 @Composable
 private fun LogoSetting(label: String, selected: Boolean, onPick: () -> Unit) {
     OutlinedButton(onClick = onPick, modifier = Modifier.fillMaxWidth()) { Text(if (selected) "$label — تم اختيار شعار" else "$label — اختيار صورة") }
+}
+
+@Composable
+private fun LockTypeButton(label: String, type: LockType, selected: LockType, onSelect: (LockType) -> Unit) {
+    if (type == selected) Button(onClick = { onSelect(type) }) { Text(label) } else OutlinedButton(onClick = { onSelect(type) }) { Text(label) }
 }
