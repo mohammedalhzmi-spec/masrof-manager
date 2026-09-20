@@ -36,8 +36,9 @@ fun AppNavigation(viewModel: MasrofViewModel) {
                 else -> ReceiptFormScreen(viewModel, { navController.popBackStack() }, existing = document)
             }
         }
-        composable("settings") { SettingsScreen({ navController.popBackStack() }, { navController.navigate("users") }) }
+        composable("settings") { SettingsScreen({ navController.popBackStack() }, { navController.navigate("users") }, { navController.navigate("updates") }) }
         composable("users") { if (RolePreferences.can(context, AppPermission.SETTINGS)) UserManagementScreen(viewModel) { navController.popBackStack() } else navController.popBackStack() }
+        composable("updates") { UpdateCenterScreen { navController.popBackStack() } }
         composable("print_preview/{documentIds}") { entry ->
             PrintPreviewScreen(viewModel, entry.arguments?.getString("documentIds") ?: "") { navController.popBackStack() }
         }

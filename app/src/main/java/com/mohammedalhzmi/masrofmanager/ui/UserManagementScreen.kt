@@ -7,9 +7,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
 import com.mohammedalhzmi.masrofmanager.data.UserEntity
 import com.mohammedalhzmi.masrofmanager.util.AppRole
 import com.mohammedalhzmi.masrofmanager.util.UserSession
+import com.mohammedalhzmi.masrofmanager.util.AuditExporter
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -17,6 +21,10 @@ import java.util.*
 fun UserManagementScreen(viewModel: MasrofViewModel, onBack: () -> Unit) {
     val users by viewModel.allUsers.collectAsState()
     val logs by viewModel.auditLogs.collectAsState()
+    val context = LocalContext.current
+    val csvLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { it?.let { uri -> AuditExporter.exportCsv(context, uri, logs); viewModel.recordAudit("EXPORT_AUDIT", "CSV/Excel") } }
+    val wordLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/msword")) { it?.let { uri -> AuditExporter.exportWord(context, uri, logs); viewModel.recordAudit("EXPORT_AUDIT", "Word") } }
+    val pdfLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { it?.let { uri -> AuditExporter.exportPdf(context, uri, logs); viewModel.recordAudit("EXPORT_AUDIT", "PDF") } }
     var editing by remember { mutableStateOf<UserEntity?>(null) }
     var username by remember { mutableStateOf("") }
     var fullName by remember { mutableStateOf("") }
@@ -48,6 +56,11 @@ fun UserManagementScreen(viewModel: MasrofViewModel, onBack: () -> Unit) {
             }
         }
         Text("سجل العمليات", style = MaterialTheme.typography.titleLarge)
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            OutlinedButton(onClick = { csvLauncher.launch("audit-log.csv") }, modifier = Modifier.weight(1f)) { Text("Excel") }
+            OutlinedButton(onClick = { wordLauncher.launch("audit-log.doc") }, modifier = Modifier.weight(1f)) { Text("Word") }
+            OutlinedButton(onClick = { pdfLauncher.launch("audit-log.pdf") }, modifier = Modifier.weight(1f)) { Text("PDF") }
+        }
         LazyColumn(modifier = Modifier.heightIn(max = 180.dp)) { items(logs.take(20), key = { it.id }) { log -> Text("${date(log.timestamp)} — ${log.username}: ${log.action} — ${log.details}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(vertical = 2.dp)) } }
     }
 }
