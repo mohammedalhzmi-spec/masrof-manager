@@ -8,6 +8,7 @@ import com.mohammedalhzmi.masrofmanager.data.DocumentType
 import com.mohammedalhzmi.masrofmanager.ui.MasrofViewModel
 import com.mohammedalhzmi.masrofmanager.util.FormMemory
 import com.mohammedalhzmi.masrofmanager.util.NumberToWordsConverter
+import com.mohammedalhzmi.masrofmanager.util.DocumentNumbering
 
 @Composable
 fun ReceiptFormScreen(viewModel: MasrofViewModel, onNavigateBack: () -> Unit, existing: Document? = null) {
@@ -18,18 +19,20 @@ fun ReceiptFormScreen(viewModel: MasrofViewModel, onNavigateBack: () -> Unit, ex
     var reason by remember(existing?.id) { mutableStateOf(existing?.purpose ?: FormMemory.read(context, "receipt", "reason")) }
     var hijri by remember(existing?.id) { mutableStateOf(existing?.dateHijri.orEmpty()) }
     var gregorian by remember(existing?.id) { mutableStateOf(existing?.dateGregorian.orEmpty()) }
-    val lastNumber by viewModel.lastDocumentNumber.collectAsState()
+    val automaticNumber = DocumentNumbering.next(context, DocumentType.RECEIPT).toString().padStart(4, '0')
     val amount = amountText.toDoubleOrNull()
     OfficialFormShell(if (existing == null) "ورقة استلام جديدة" else "تعديل ورقة استلام") {
         OfficialDates(hijri, gregorian, { hijri = it }, { gregorian = it })
+        OfficialField(if (existing == null) automaticNumber else existing.documentNumber, "رقم ورقة الاستلام (تلقائي)", { })
         OfficialField(recipient, "اسم المستلم", { recipient = it })
         OfficialField(amountText, "المبلغ بالأرقام (ريال يمني)", { amountText = it })
         OfficialField(amount?.let { NumberToWordsConverter.convert(it) } ?: "سيظهر المبلغ كتابةً هنا", "المبلغ كتابةً", { })
         OfficialField(source, "مصدر المبلغ", { source = it })
         OfficialField(reason, "وذلك مقابل", { reason = it }, 3)
         SaveOfficialButton(if (existing == null) "حفظ ورقة الاستلام الرسمية" else "حفظ التعديلات") {
-            val value = Document(existing?.id ?: 0, DocumentType.RECEIPT, existing?.documentNumber ?: ((lastNumber ?: 0) + 1).toString().padStart(4, '0'), hijri, gregorian, amount, amount?.let { NumberToWordsConverter.convert(it) }, recipient, reason, source, "أقر باستلام المبلغ كاملًا دون نقص", DocumentStatus.RECEIVED, existing?.attachmentsCount ?: 0, existing?.createdAt ?: System.currentTimeMillis())
+            val value = Document(existing?.id ?: 0, DocumentType.RECEIPT, existing?.documentNumber ?: automaticNumber, hijri, gregorian, amount, amount?.let { NumberToWordsConverter.convert(it) }, recipient, reason, source, "أقر باستلام المبلغ كاملًا دون نقص", DocumentStatus.RECEIVED, existing?.attachmentsCount ?: 0, existing?.createdAt ?: System.currentTimeMillis())
             if (existing == null) viewModel.addDocument(value) else viewModel.updateDocument(value)
+            if (existing == null) DocumentNumbering.consume(context, DocumentType.RECEIPT)
             FormMemory.remember(context, "receipt", "recipient", recipient); FormMemory.remember(context, "receipt", "amount", amountText); FormMemory.remember(context, "receipt", "source", source); FormMemory.remember(context, "receipt", "reason", reason)
             onNavigateBack()
         }

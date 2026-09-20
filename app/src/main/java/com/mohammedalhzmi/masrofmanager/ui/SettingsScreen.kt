@@ -15,6 +15,7 @@ import com.mohammedalhzmi.masrofmanager.util.AppPreferences
 import com.mohammedalhzmi.masrofmanager.util.AppLockPreferences
 import com.mohammedalhzmi.masrofmanager.util.LockType
 import com.mohammedalhzmi.masrofmanager.util.RolePreferences
+import com.mohammedalhzmi.masrofmanager.util.DocumentNumbering
 
 @Composable
 fun SettingsScreen(onBack: () -> Unit, onManageUsers: () -> Unit, onUpdates: () -> Unit) {
@@ -27,6 +28,12 @@ fun SettingsScreen(onBack: () -> Unit, onManageUsers: () -> Unit, onUpdates: () 
     var orderLogo by remember { mutableStateOf(AppPreferences.logoUri(context, DocumentType.ORDER)) }
     var requestLogo by remember { mutableStateOf(AppPreferences.logoUri(context, DocumentType.REQUEST)) }
     var receiptLogo by remember { mutableStateOf(AppPreferences.logoUri(context, DocumentType.RECEIPT)) }
+    var orderStart by remember { mutableStateOf(DocumentNumbering.next(context, DocumentType.ORDER).toString()) }
+    var requestStart by remember { mutableStateOf(DocumentNumbering.next(context, DocumentType.REQUEST).toString()) }
+    var receiptStart by remember { mutableStateOf(DocumentNumbering.next(context, DocumentType.RECEIPT).toString()) }
+    var orderPage by remember { mutableStateOf(AppPreferences.pageSize(context, DocumentType.ORDER)) }
+    var requestPage by remember { mutableStateOf(AppPreferences.pageSize(context, DocumentType.REQUEST)) }
+    var receiptPage by remember { mutableStateOf(AppPreferences.pageSize(context, DocumentType.RECEIPT)) }
     var lockEnabled by remember { mutableStateOf(AppLockPreferences.enabled(context)) }
     var biometricEnabled by remember { mutableStateOf(AppLockPreferences.biometricEnabled(context)) }
     var lockType by remember { mutableStateOf(AppLockPreferences.type(context)) }
@@ -52,6 +59,13 @@ fun SettingsScreen(onBack: () -> Unit, onManageUsers: () -> Unit, onUpdates: () 
         LogoSetting("شعار أمر الصرف", orderLogo != null, { orderPicker.launch("image/*") })
         LogoSetting("شعار ورقة التقديم", requestLogo != null, { requestPicker.launch("image/*") })
         LogoSetting("شعار ورقة الاستلام", receiptLogo != null, { receiptPicker.launch("image/*") })
+        Text("الترقيم ومقاسات الصفحات", style = MaterialTheme.typography.titleLarge)
+        SettingField("بداية ترقيم أمر الصرف", orderStart) { orderStart = it.filter(Char::isDigit) }
+        PageSizeSetting("مقاس أمر الصرف", orderPage) { orderPage = it }
+        SettingField("بداية ترقيم ورقة التقديم", requestStart) { requestStart = it.filter(Char::isDigit) }
+        PageSizeSetting("مقاس ورقة التقديم", requestPage) { requestPage = it }
+        SettingField("بداية ترقيم ورقة الاستلام", receiptStart) { receiptStart = it.filter(Char::isDigit) }
+        PageSizeSetting("مقاس ورقة الاستلام", receiptPage) { receiptPage = it }
         HorizontalDivider()
         Text("أمان التطبيق", style = MaterialTheme.typography.titleLarge)
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -72,6 +86,8 @@ fun SettingsScreen(onBack: () -> Unit, onManageUsers: () -> Unit, onUpdates: () 
         Text("اقتراحات أمان: استخدم بصمة الهاتف، ورمزًا لا يقل عن 4 أرقام، ولا تشارك كلمة المرور.", style = MaterialTheme.typography.bodySmall)
         Button(enabled = !lockEnabled || AppLockPreferences.hasSecret(context) || newSecret.isNotBlank(), onClick = {
             AppPreferences.put(context, "ministry", ministry); AppPreferences.put(context, "administration", administration); AppPreferences.put(context, "branch", branch); AppPreferences.put(context, "manager", manager); AppPreferences.put(context, "finance_manager", finance)
+            DocumentNumbering.setStart(context, DocumentType.ORDER, orderStart.toIntOrNull() ?: 1); DocumentNumbering.setStart(context, DocumentType.REQUEST, requestStart.toIntOrNull() ?: 1); DocumentNumbering.setStart(context, DocumentType.RECEIPT, receiptStart.toIntOrNull() ?: 1)
+            AppPreferences.setPageSize(context, DocumentType.ORDER, orderPage); AppPreferences.setPageSize(context, DocumentType.REQUEST, requestPage); AppPreferences.setPageSize(context, DocumentType.RECEIPT, receiptPage)
             RolePreferences.setUserName(context, userName)
             AppLockPreferences.setEnabled(context, lockEnabled); AppLockPreferences.setBiometricEnabled(context, biometricEnabled); AppLockPreferences.setType(context, lockType); AppLockPreferences.setTimeoutMinutes(context, timeout.toIntOrNull() ?: 5); if (newSecret.isNotBlank()) AppLockPreferences.setSecret(context, newSecret)
             onBack()
@@ -86,6 +102,15 @@ private fun SettingField(label: String, value: String, onChange: (String) -> Uni
 @Composable
 private fun LogoSetting(label: String, selected: Boolean, onPick: () -> Unit) {
     OutlinedButton(onClick = onPick, modifier = Modifier.fillMaxWidth()) { Text(if (selected) "$label — تم اختيار شعار" else "$label — اختيار صورة") }
+}
+
+@Composable
+private fun PageSizeSetting(label: String, value: String, onChange: (String) -> Unit) {
+    Text(label, style = MaterialTheme.typography.bodyMedium)
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (value == "A4") Button(onClick = { onChange("A4") }) { Text("A4") } else OutlinedButton(onClick = { onChange("A4") }) { Text("A4") }
+        if (value == "HALF_A4") Button(onClick = { onChange("HALF_A4") }) { Text("نصف A4") } else OutlinedButton(onClick = { onChange("HALF_A4") }) { Text("نصف A4") }
+    }
 }
 
 @Composable

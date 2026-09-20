@@ -18,6 +18,7 @@ import com.mohammedalhzmi.masrofmanager.util.OfficialDocumentExporter
 import com.mohammedalhzmi.masrofmanager.util.OfficialDocumentPrintAdapter
 import com.mohammedalhzmi.masrofmanager.util.AppPreferences
 import com.mohammedalhzmi.masrofmanager.util.DocumentHeader
+import android.graphics.Color
 
 @Composable
 fun PrintPreviewScreen(viewModel: MasrofViewModel, documentIds: String, onNavigateBack: () -> Unit) {
@@ -25,9 +26,15 @@ fun PrintPreviewScreen(viewModel: MasrofViewModel, documentIds: String, onNaviga
     val ids = remember(documentIds) { documentIds.split(",").mapNotNull { it.toLongOrNull() }.toSet() }
     val selectedDocs = documents.filter { it.id in ids }
     val context = LocalContext.current
+    var showEditor by remember { mutableStateOf(false) }
     Column(modifier = Modifier.padding(16.dp)) {
         Text("معاينة النماذج الرسمية", style = MaterialTheme.typography.headlineMedium)
         Text("عدد الصفحات: ${selectedDocs.size} — كل مستند محفوظ محليًا ويمكن تصديره منفردًا أو كمجموعة", style = MaterialTheme.typography.bodySmall)
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            OutlinedButton(onClick = { showEditor = true }, modifier = Modifier.weight(1f)) { Text("تحرير الصفحة") }
+            OutlinedButton(enabled = selectedDocs.isNotEmpty(), onClick = { sharePdf(context, selectedDocs) }, modifier = Modifier.weight(1f)) { Text("حفظ / مشاركة") }
+        }
+        if (showEditor) DocumentPageEditor(selectedDocs, context) { showEditor = false }
         LazyColumn(modifier = Modifier.weight(1f)) {
             items(selectedDocs) { doc -> OfficialDocumentCard(doc) }
             item { PrintFooter() }
@@ -45,6 +52,14 @@ fun PrintPreviewScreen(viewModel: MasrofViewModel, documentIds: String, onNaviga
                         DocumentType.ORDER to AppPreferences.loadLogo(context, DocumentType.ORDER),
                         DocumentType.REQUEST to AppPreferences.loadLogo(context, DocumentType.REQUEST),
                         DocumentType.RECEIPT to AppPreferences.loadLogo(context, DocumentType.RECEIPT)
+                    ), mapOf(
+                        DocumentType.ORDER to AppPreferences.pageSize(context, DocumentType.ORDER),
+                        DocumentType.REQUEST to AppPreferences.pageSize(context, DocumentType.REQUEST),
+                        DocumentType.RECEIPT to AppPreferences.pageSize(context, DocumentType.RECEIPT)
+                    ), mapOf(
+                        DocumentType.ORDER to runCatching { Color.parseColor(AppPreferences.backgroundColor(context, DocumentType.ORDER)) }.getOrDefault(Color.WHITE),
+                        DocumentType.REQUEST to runCatching { Color.parseColor(AppPreferences.backgroundColor(context, DocumentType.REQUEST)) }.getOrDefault(Color.WHITE),
+                        DocumentType.RECEIPT to runCatching { Color.parseColor(AppPreferences.backgroundColor(context, DocumentType.RECEIPT)) }.getOrDefault(Color.WHITE)
                     )
                 )
                 printManager.print("مستندات مالية رسمية", OfficialDocumentPrintAdapter(selectedDocs, header), PrintAttributes.Builder().setMediaSize(PrintAttributes.MediaSize.ISO_A4).setMinMargins(PrintAttributes.Margins.NO_MARGINS).build())
@@ -62,6 +77,24 @@ private fun shareImage(context: Context, doc: Document) {
     val uri = OfficialDocumentExporter.exportPng(context, doc)
     OfficialDocumentExporter.share(context, uri, "مشاركة المستند كصورة")
 }
+
+@Composable
+private fun DocumentPageEditor(documents: List<Document>, context: Context, onClose: () -> Unit) {
+    var selectedType by remember { mutableStateOf(documents.firstOrNull()?.type ?: DocumentType.ORDER) }
+    var color by remember(selectedType) { mutableStateOf(AppPreferences.backgroundColor(context, selectedType)) }
+    AlertDialog(onDismissRequest = onClose, title = { Text("محرر الصفحة") }, text = {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("اختر النوع ثم غيّر المقاس والخلفية. الشعارات تدار من الإعدادات لكل مستند.")
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { DocumentType.values().forEach { type -> if (type == selectedType) Button(onClick = { selectedType = type }) { Text(typeLabel(type)) } else OutlinedButton(onClick = { selectedType = type }) { Text(typeLabel(type)) } } }
+            Text("مقاس الصفحة")
+            val size = AppPreferences.pageSize(context, selectedType)
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { if (size == "A4") Button(onClick = { AppPreferences.setPageSize(context, selectedType, "A4") }) { Text("A4") } else OutlinedButton(onClick = { AppPreferences.setPageSize(context, selectedType, "A4") }) { Text("A4") }; if (size == "HALF_A4") Button(onClick = { AppPreferences.setPageSize(context, selectedType, "HALF_A4") }) { Text("نصف A4") } else OutlinedButton(onClick = { AppPreferences.setPageSize(context, selectedType, "HALF_A4") }) { Text("نصف A4") } }
+            OutlinedTextField(color, { color = it }, label = { Text("لون الخلفية مثل #FFFFFF") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        }
+    }, confirmButton = { Button(onClick = { if (runCatching { Color.parseColor(color) }.isSuccess) AppPreferences.setBackgroundColor(context, selectedType, color); onClose() }) { Text("حفظ التعديلات") } }, dismissButton = { TextButton(onClick = onClose) { Text("إلغاء") } })
+}
+
+private fun typeLabel(type: DocumentType) = when (type) { DocumentType.ORDER -> "أمر صرف"; DocumentType.REQUEST -> "تقديم"; DocumentType.RECEIPT -> "استلام" }
 
 @Composable
 private fun OfficialDocumentCard(doc: Document) {

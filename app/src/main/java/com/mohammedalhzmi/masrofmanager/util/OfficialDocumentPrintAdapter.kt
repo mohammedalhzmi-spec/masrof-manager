@@ -1,58 +1,45 @@
 package com.mohammedalhzmi.masrofmanager.util
 
-import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.Bitmap
-import android.graphics.Paint
-import android.graphics.Typeface
-import android.graphics.pdf.PdfDocument
+import android.graphics.*
 import android.os.Bundle
-import android.print.PageRange
-import android.print.PrintAttributes
-import android.print.PrintDocumentAdapter
-import android.print.PrintDocumentInfo
 import android.os.CancellationSignal
-import android.os.ParcelFileDescriptor
+import android.graphics.pdf.PdfDocument
+import android.print.*
 import com.mohammedalhzmi.masrofmanager.data.Document
 import com.mohammedalhzmi.masrofmanager.data.DocumentType
 import java.io.FileOutputStream
 
-data class DocumentHeader(val ministry: String, val administration: String, val branch: String, val logos: Map<DocumentType, Bitmap?> = emptyMap())
+data class DocumentHeader(
+    val ministry: String,
+    val administration: String,
+    val branch: String,
+    val logos: Map<DocumentType, Bitmap?> = emptyMap(),
+    val pageSizes: Map<DocumentType, String> = emptyMap(),
+    val backgroundColors: Map<DocumentType, Int> = emptyMap()
+)
 
 class OfficialDocumentPrintAdapter(private val documents: List<Document>, private val header: DocumentHeader = DocumentHeader("وزارة الإدارة والتنمية المحلية والريفية", "صندوق النظافة والتحسين", "فرع المديرية")) : PrintDocumentAdapter() {
     private var attributes: PrintAttributes? = null
-
-    override fun onLayout(
-        oldAttributes: PrintAttributes?, newAttributes: PrintAttributes,
-        cancellationSignal: CancellationSignal, callback: LayoutResultCallback, extras: Bundle?
-    ) {
+    override fun onLayout(oldAttributes: PrintAttributes?, newAttributes: PrintAttributes, cancellationSignal: CancellationSignal, callback: LayoutResultCallback, extras: Bundle?) {
         attributes = newAttributes
         if (cancellationSignal.isCanceled) return
-        callback.onLayoutFinished(
-            PrintDocumentInfo.Builder("masrof-official-documents.pdf")
-                .setContentType(PrintDocumentInfo.CONTENT_TYPE_DOCUMENT)
-                .setPageCount(documents.size.coerceAtLeast(1)).build(),
-            oldAttributes == null || oldAttributes != newAttributes
-        )
+        callback.onLayoutFinished(PrintDocumentInfo.Builder("masrof-official-documents.pdf").setContentType(PrintDocumentInfo.CONTENT_TYPE_DOCUMENT).setPageCount(documents.size.coerceAtLeast(1)).build(), oldAttributes == null || oldAttributes != newAttributes)
     }
-
-    override fun onWrite(
-        pages: Array<PageRange>, destination: ParcelFileDescriptor,
-        cancellationSignal: CancellationSignal, callback: WriteResultCallback
-    ) {
+    override fun onWrite(pages: Array<PageRange>, destination: android.os.ParcelFileDescriptor, cancellationSignal: CancellationSignal, callback: WriteResultCallback) {
         val pdf = PdfDocument()
         try {
             documents.forEachIndexed { index, document ->
                 if (cancellationSignal.isCanceled) return
-                val page = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, index + 1).create())
+                val half = header.pageSizes[document.type] == "HALF_A4" || (document.type == DocumentType.ORDER && !header.pageSizes.containsKey(document.type))
+                val width = if (half) 842 else 595
+                val height = if (half) 595 else 842
+                val page = pdf.startPage(PdfDocument.PageInfo.Builder(width, height, index + 1).create())
                 OfficialDocumentRenderer.render(page.canvas, document, header)
                 pdf.finishPage(page)
             }
             FileOutputStream(destination.fileDescriptor).use { pdf.writeTo(it) }
             callback.onWriteFinished(arrayOf(PageRange.ALL_PAGES))
-        } catch (e: Exception) {
-            callback.onWriteFailed(e.message)
-        } finally { pdf.close() }
+        } catch (e: Exception) { callback.onWriteFailed(e.message) } finally { pdf.close() }
     }
 }
 
@@ -64,77 +51,80 @@ object OfficialDocumentRenderer {
     private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = navy; style = Paint.Style.STROKE; strokeWidth = 2f }
 
     fun render(canvas: Canvas, document: Document, header: DocumentHeader = DocumentHeader("وزارة الإدارة والتنمية المحلية والريفية", "صندوق النظافة والتحسين", "فرع المديرية")) {
-        canvas.drawColor(Color.WHITE)
-        canvas.drawRect(24f, 24f, 571f, 818f, linePaint)
-        canvas.drawRect(32f, 32f, 563f, 810f, linePaint)
+        val w = canvas.width.toFloat(); val h = canvas.height.toFloat(); val half = h < w
+        canvas.drawColor(header.backgroundColors[document.type] ?: Color.WHITE)
+        canvas.drawRect(18f, 18f, w - 18f, h - 18f, linePaint)
+        canvas.drawRect(25f, 25f, w - 25f, h - 25f, linePaint)
         drawHeader(canvas, header, document.type)
-        canvas.drawLine(32f, 150f, 563f, 150f, linePaint)
-        canvas.drawText(title(document.type), 297f, 192f, titlePaint)
-        canvas.drawRect(190f, 160f, 405f, 205f, linePaint)
-        drawField(canvas, "الرقم: ${document.documentNumber}", 545f, 62f, true)
-        drawField(canvas, "التاريخ الهجري: ${document.dateHijri.ifBlank { "........ / ........ / ........" }}", 545f, 88f, true)
-        drawField(canvas, "الموافق: ${document.dateGregorian.ifBlank { "........ / ........ / ........" }}", 545f, 114f, true)
-        when (document.type) {
-            DocumentType.REQUEST -> renderRequest(canvas, document)
-            DocumentType.ORDER -> renderOrder(canvas, document)
-            DocumentType.RECEIPT -> renderReceipt(canvas, document)
-        }
-        drawFooter(canvas)
+        if (half) renderOrder(canvas, document) else when (document.type) { DocumentType.REQUEST -> renderRequest(canvas, document); DocumentType.RECEIPT -> renderReceipt(canvas, document); DocumentType.ORDER -> renderOrderPortrait(canvas, document) }
+        drawCentered(canvas, "نظام مالية صندوق النظافة والتحسين — مستند رسمي", w / 2f, h - 28f, bodyPaint)
     }
 
-    private fun drawHeader(canvas: Canvas, header: DocumentHeader, type: DocumentType) {
-        drawCentered(canvas, "الجمهورية اليمنية", 55f, boldPaint)
-        drawCentered(canvas, header.ministry, 78f, boldPaint)
-        drawCentered(canvas, header.administration, 101f, boldPaint)
-        drawCentered(canvas, header.branch, 124f, bodyPaint)
-        header.logos[type]?.let { bitmap ->
-            val target = android.graphics.RectF(260f, 35f, 335f, 120f)
-            canvas.drawBitmap(bitmap, null, target, null)
-        } ?: drawCentered(canvas, "شعار الجهة", 135f, bodyPaint)
+    private fun drawHeader(c: Canvas, header: DocumentHeader, type: DocumentType) {
+        val w = c.width.toFloat(); val center = w / 2f
+        drawLeft(c, "الرقم: ${"................"}", 55f, 52f, bodyPaint)
+        drawLeft(c, "التاريخ:    /    / 144 هـ", 55f, 76f, bodyPaint)
+        drawLeft(c, "الموافق:    /    / 202 م", 55f, 100f, bodyPaint)
+        drawCentered(c, "الجمهورية اليمنية", center, 48f, boldPaint)
+        drawCentered(c, header.ministry, center, 70f, boldPaint)
+        drawCentered(c, header.administration, center, 92f, boldPaint)
+        drawCentered(c, header.branch, center, 114f, bodyPaint)
+        header.logos[type]?.let { c.drawBitmap(it, null, RectF(center - 38f, 32f, center + 38f, 112f), null) }
+        c.drawLine(30f, 132f, w - 30f, 132f, linePaint)
+        drawCentered(c, title(type), center, 166f, titlePaint)
+        c.drawRect(center - 112f, 140f, center + 112f, 178f, linePaint)
     }
 
-    private fun renderRequest(canvas: Canvas, d: Document) {
-        drawRight(canvas, "الأخ / مدير فرع صندوق النظافة والتحسين - مديرية الحزم", 240f, boldPaint)
-        drawRight(canvas, "المحترم", 267f, bodyPaint)
-        drawParagraph(canvas, "نرجو التكرم بالتوجيه بصرف / اعتماد الطلب الموضح أدناه:", 515f, 300f, 500f)
-        drawParagraph(canvas, d.details ?: "................................................................................................", 515f, 345f, 500f)
-        drawRight(canvas, "وتكرموا مشكورين بالتوجيه", 415f, boldPaint)
-        drawRight(canvas, "اسم مقدم الطلب: ${d.beneficiaryName.orEmpty()}", 500f, bodyPaint)
-        drawRight(canvas, "التوقيع: ................................................", 525f, bodyPaint)
+    private fun renderOrder(c: Canvas, d: Document) {
+        val w = c.width.toFloat(); val right = w - 55f; val bottom = c.height.toFloat()
+        drawRight(c, "الأخ / أمين الصندوق", right, 220f, boldPaint); drawRight(c, "المحترم", right, 246f, bodyPaint)
+        drawRight(c, "يتم صرف مبلغ وقدره:", right, 292f, bodyPaint)
+        drawBoxed(c, d.amount?.toString() ?: "................", 70f, 263f, 290f, 304f)
+        drawRight(c, "فقط: ${d.amountWords ?: "................................................"}", right, 338f, bodyPaint)
+        drawRight(c, "وذلك مقابل / ${d.purpose.orEmpty()}", right, 382f, bodyPaint)
+        drawCentered(c, "ولكم خالص الشكر والتقدير", w / 2f, 422f, boldPaint)
+        drawLeft(c, "المدير المالي للفرع", 70f, bottom - 76f, boldPaint)
+        drawLeft(c, "التوقيع: .........................", 70f, bottom - 48f, bodyPaint)
+        drawRight(c, "مدير الفرع", right, bottom - 76f, boldPaint)
+        drawRight(c, "التوقيع: .........................", right, bottom - 48f, bodyPaint)
+        drawLeft(c, "المرفقات: ${d.attachmentsCount}", 55f, bottom - 20f, bodyPaint)
+        drawRight(c, "الاسم: ${d.beneficiaryName.orEmpty()}    رقم: ${d.documentNumber}", right, 205f, bodyPaint)
     }
 
-    private fun renderOrder(canvas: Canvas, d: Document) {
-        drawRight(canvas, "الأخ / أمين الصندوق", 240f, boldPaint)
-        drawRight(canvas, "المحترم", 267f, bodyPaint)
-        drawParagraph(canvas, "يتم صرف مبلغ وقدره:", 515f, 305f, 500f)
-        drawBoxed(canvas, d.amount?.toString() ?: "................", 70f, 278f, 230f, 318f)
-        drawParagraph(canvas, d.amountWords ?: "................................................................................................", 515f, 360f, 500f)
-        drawParagraph(canvas, "وذلك مقابل / ${d.purpose.orEmpty()}", 515f, 410f, 500f)
-        drawCentered(canvas, "ولكم خالص الشكر والتقدير", 470f, boldPaint)
-        drawRight(canvas, "مدير الفرع", 480f, bodyPaint)
-        drawRight(canvas, "المدير المالي", 520f, bodyPaint)
-        drawRight(canvas, "التوقيع: .........................", 480f, bodyPaint)
-        drawRight(canvas, "التوقيع: .........................", 520f, bodyPaint)
+    private fun renderOrderPortrait(c: Canvas, d: Document) = renderOrder(c, d)
+
+    private fun renderRequest(c: Canvas, d: Document) {
+        val right = c.width - 55f; val bottom = c.height.toFloat()
+        drawRight(c, "إلى الأخ / مدير فرع صندوق النظافة والتحسين", right, 220f, boldPaint); drawRight(c, "المحترم", right, 246f, bodyPaint)
+        drawRight(c, "نتكرم بالتوجيه بصرف / اعتماد الطلب الموضح أدناه:", right, 292f, bodyPaint)
+        drawParagraph(c, d.details ?: "................................................................................................", right, 336f, bodyPaint)
+        drawRight(c, "وتكرموا مشكورين بالتوجيه", right, 510f, boldPaint)
+        drawRight(c, "اسم مقدم الطلب: ${d.beneficiaryName.orEmpty()}", right, bottom - 135f, bodyPaint)
+        drawRight(c, "التوقيع: ................................................", right, bottom - 105f, bodyPaint)
+        drawLeft(c, "المرفقات: ${d.attachmentsCount}", 55f, bottom - 42f, bodyPaint)
+        drawRight(c, "رقم الطلب: ${d.documentNumber}", right, 195f, bodyPaint)
     }
 
-    private fun renderReceipt(canvas: Canvas, d: Document) {
-        drawRight(canvas, "أنا الموقع أدناه: ${d.beneficiaryName.orEmpty()}", 245f, boldPaint)
-        drawRight(canvas, "وأعمل بوظيفة: ................................................", 275f, bodyPaint)
-        drawRight(canvas, "استلمت مبلغ وقدره:", 305f, bodyPaint)
-        drawBoxed(canvas, d.amount?.toString() ?: "................", 70f, 278f, 230f, 318f)
-        drawParagraph(canvas, "من فرع صندوق النظافة والتحسين - مديرية الحزم", 515f, 355f, 500f)
-        drawParagraph(canvas, "وذلك مقابل: ${d.purpose.orEmpty()}", 515f, 405f, 500f)
-        drawParagraph(canvas, "وأقر بأنني استلمت المبلغ كاملًا دون نقص وأصبح ذمتي خالية من ذلك.", 515f, 460f, 500f)
-        drawRight(canvas, "أمين الصندوق: ........................", 510f, bodyPaint)
-        drawRight(canvas, "المدير المالي للفرع: ........................", 550f, bodyPaint)
-        drawRight(canvas, "المستلم: ........................", 590f, bodyPaint)
+    private fun renderReceipt(c: Canvas, d: Document) {
+        val right = c.width - 55f; val bottom = c.height.toFloat()
+        drawRight(c, "أنا الموقع أدناه: ${d.beneficiaryName.orEmpty()}", right, 220f, boldPaint)
+        drawRight(c, "وأعمل بوظيفة: ................................................", right, 258f, bodyPaint)
+        drawRight(c, "استلمت مبلغًا وقدره: ${d.amount ?: "................"}", right, 300f, bodyPaint)
+        drawRight(c, "فقط: ${d.amountWords ?: "................................................"}", right, 340f, bodyPaint)
+        drawRight(c, "من فرع صندوق النظافة والتحسين", right, 392f, bodyPaint)
+        drawRight(c, "وذلك مقابل: ${d.purpose.orEmpty()}", right, 435f, bodyPaint)
+        drawParagraph(c, "وأقر بأنني استلمت المبلغ كاملًا دون نقص وأصبحت ذمتي خالية من ذلك.", right, 485f, bodyPaint)
+        drawLeft(c, "أمين الصندوق", 55f, bottom - 104f, boldPaint); drawLeft(c, "التوقيع: ................", 55f, bottom - 76f, bodyPaint)
+        drawCentered(c, "المستلم", c.width / 2f, bottom - 104f, boldPaint); drawCentered(c, "التوقيع: ................", c.width / 2f, bottom - 76f, bodyPaint)
+        drawRight(c, "المدير المالي للفرع", right, bottom - 104f, boldPaint); drawRight(c, "التوقيع: ................", right, bottom - 76f, bodyPaint)
+        drawLeft(c, "المرفقات: ${d.attachmentsCount}", 55f, bottom - 42f, bodyPaint)
+        drawRight(c, "رقم الاستلام: ${d.documentNumber}", right, 195f, bodyPaint)
     }
 
-    private fun drawFooter(canvas: Canvas) { drawCentered(canvas, "نظام مالية صندوق النظافة والتحسين — مستند رسمي", 790f, bodyPaint) }
     private fun title(type: DocumentType) = when (type) { DocumentType.REQUEST -> "ورقة تقديم طلب"; DocumentType.ORDER -> "أمر صرف"; DocumentType.RECEIPT -> "ورقة استلام" }
-    private fun drawCentered(c: Canvas, text: String, y: Float, p: Paint) = c.drawText(text, 297f, y, p)
-    private fun drawRight(c: Canvas, text: String, y: Float, p: Paint) { p.textAlign = Paint.Align.RIGHT; c.drawText(text, 540f, y, p); p.textAlign = Paint.Align.CENTER }
-    private fun drawField(c: Canvas, text: String, x: Float, y: Float, right: Boolean) = drawRight(c, text, y, bodyPaint)
-    private fun drawBoxed(c: Canvas, text: String, l: Float, t: Float, r: Float, b: Float) { c.drawRoundRect(l, t, r, b, 8f, 8f, linePaint); c.drawText(text, (l + r) / 2, (t + b) / 2 + 5f, bodyPaint) }
-    private fun drawParagraph(c: Canvas, text: String, x: Float, y: Float, width: Float) { drawRight(c, text, y, bodyPaint) }
+    private fun drawCentered(c: Canvas, text: String, x: Float, y: Float, p: Paint) { p.textAlign = Paint.Align.CENTER; c.drawText(text, x, y, p) }
+    private fun drawRight(c: Canvas, text: String, x: Float, y: Float, p: Paint) { p.textAlign = Paint.Align.RIGHT; c.drawText(text, x, y, p); p.textAlign = Paint.Align.CENTER }
+    private fun drawLeft(c: Canvas, text: String, x: Float, y: Float, p: Paint) { p.textAlign = Paint.Align.LEFT; c.drawText(text, x, y, p); p.textAlign = Paint.Align.CENTER }
+    private fun drawBoxed(c: Canvas, text: String, l: Float, t: Float, r: Float, b: Float) { c.drawRoundRect(l, t, r, b, 8f, 8f, linePaint); drawCentered(c, text, (l + r) / 2f, (t + b) / 2f + 5f, bodyPaint) }
+    private fun drawParagraph(c: Canvas, text: String, x: Float, y: Float, p: Paint) { drawRight(c, text, x, y, p) }
 }

@@ -8,15 +8,18 @@ import android.graphics.pdf.PdfDocument
 import android.net.Uri
 import androidx.core.content.FileProvider
 import com.mohammedalhzmi.masrofmanager.data.Document
+import com.mohammedalhzmi.masrofmanager.data.DocumentType
 import java.io.File
 import java.io.FileOutputStream
+import android.graphics.Color
 
 object OfficialDocumentExporter {
     fun exportPdf(context: Context, documents: List<Document>): Uri {
         val file = File(context.filesDir, "masrof-official-${System.currentTimeMillis()}.pdf")
         val pdf = PdfDocument()
         documents.forEachIndexed { index, document ->
-            val page = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, index + 1).create())
+            val half = AppPreferences.pageSize(context, document.type) == "HALF_A4" || (document.type == DocumentType.ORDER && AppPreferences.pageSize(context, document.type).isBlank())
+            val page = pdf.startPage(PdfDocument.PageInfo.Builder(if (half) 842 else 595, if (half) 595 else 842, index + 1).create())
             OfficialDocumentRenderer.render(page.canvas, document, header(context))
             pdf.finishPage(page)
         }
@@ -27,7 +30,8 @@ object OfficialDocumentExporter {
 
     fun exportPng(context: Context, document: Document): Uri {
         val file = File(context.filesDir, "masrof-${document.documentNumber}.png")
-        val bitmap = Bitmap.createBitmap(1190, 1684, Bitmap.Config.ARGB_8888)
+        val half = AppPreferences.pageSize(context, document.type) == "HALF_A4"
+        val bitmap = Bitmap.createBitmap(if (half) 1684 else 1190, if (half) 1190 else 1684, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         canvas.scale(2f, 2f)
         OfficialDocumentRenderer.render(canvas, document, header(context))
@@ -54,6 +58,14 @@ object OfficialDocumentExporter {
             com.mohammedalhzmi.masrofmanager.data.DocumentType.ORDER to AppPreferences.loadLogo(context, com.mohammedalhzmi.masrofmanager.data.DocumentType.ORDER),
             com.mohammedalhzmi.masrofmanager.data.DocumentType.REQUEST to AppPreferences.loadLogo(context, com.mohammedalhzmi.masrofmanager.data.DocumentType.REQUEST),
             com.mohammedalhzmi.masrofmanager.data.DocumentType.RECEIPT to AppPreferences.loadLogo(context, com.mohammedalhzmi.masrofmanager.data.DocumentType.RECEIPT)
+        ), mapOf(
+            com.mohammedalhzmi.masrofmanager.data.DocumentType.ORDER to AppPreferences.pageSize(context, com.mohammedalhzmi.masrofmanager.data.DocumentType.ORDER),
+            com.mohammedalhzmi.masrofmanager.data.DocumentType.REQUEST to AppPreferences.pageSize(context, com.mohammedalhzmi.masrofmanager.data.DocumentType.REQUEST),
+            com.mohammedalhzmi.masrofmanager.data.DocumentType.RECEIPT to AppPreferences.pageSize(context, com.mohammedalhzmi.masrofmanager.data.DocumentType.RECEIPT)
+        ), mapOf(
+            com.mohammedalhzmi.masrofmanager.data.DocumentType.ORDER to runCatching { Color.parseColor(AppPreferences.backgroundColor(context, com.mohammedalhzmi.masrofmanager.data.DocumentType.ORDER)) }.getOrDefault(Color.WHITE),
+            com.mohammedalhzmi.masrofmanager.data.DocumentType.REQUEST to runCatching { Color.parseColor(AppPreferences.backgroundColor(context, com.mohammedalhzmi.masrofmanager.data.DocumentType.REQUEST)) }.getOrDefault(Color.WHITE),
+            com.mohammedalhzmi.masrofmanager.data.DocumentType.RECEIPT to runCatching { Color.parseColor(AppPreferences.backgroundColor(context, com.mohammedalhzmi.masrofmanager.data.DocumentType.RECEIPT)) }.getOrDefault(Color.WHITE)
         )
     )
 }
