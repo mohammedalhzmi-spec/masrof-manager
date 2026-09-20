@@ -16,6 +16,8 @@ import kotlinx.coroutines.delay
 import com.mohammedalhzmi.masrofmanager.util.AppBackupManager
 import com.mohammedalhzmi.masrofmanager.util.RolePreferences
 import com.mohammedalhzmi.masrofmanager.util.AppPermission
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
 
 @Composable
 fun DashboardScreen(viewModel: MasrofViewModel, onAddDocument: () -> Unit, onPrint: (String) -> Unit, onEdit: (String) -> Unit, onSettings: () -> Unit) {
@@ -37,7 +39,7 @@ fun DashboardScreen(viewModel: MasrofViewModel, onAddDocument: () -> Unit, onPri
     Column(modifier = Modifier.padding(16.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Column { Text("نظام مالية صندوق النظافة", style = MaterialTheme.typography.headlineMedium); Text("الدور الحالي: ${role.title}", style = MaterialTheme.typography.bodySmall) }
-            if (canSettings) TextButton(onClick = onSettings) { Text("الإعدادات") }
+            if (canSettings) IconButton(onClick = onSettings) { Icon(Icons.Default.Settings, contentDescription = "الإعدادات") }
         }
         Spacer(modifier = Modifier.height(12.dp))
         AnimatedVisibility(visible = showDeveloperNotice) { Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer), modifier = Modifier.fillMaxWidth()) { Text("هذا التطبيق من برمجة وتطوير المطور محمد الحزمي\nجميع الحقوق محفوظة للمطور 2026", modifier = Modifier.padding(12.dp)) } }

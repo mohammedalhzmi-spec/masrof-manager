@@ -12,6 +12,7 @@ import com.mohammedalhzmi.masrofmanager.data.DocumentType
 import java.io.File
 import java.io.FileOutputStream
 import android.graphics.Color
+import android.graphics.BitmapFactory
 
 object OfficialDocumentExporter {
     fun exportPdf(context: Context, documents: List<Document>): Uri {
@@ -66,6 +67,20 @@ object OfficialDocumentExporter {
             com.mohammedalhzmi.masrofmanager.data.DocumentType.ORDER to runCatching { Color.parseColor(AppPreferences.backgroundColor(context, com.mohammedalhzmi.masrofmanager.data.DocumentType.ORDER)) }.getOrDefault(Color.WHITE),
             com.mohammedalhzmi.masrofmanager.data.DocumentType.REQUEST to runCatching { Color.parseColor(AppPreferences.backgroundColor(context, com.mohammedalhzmi.masrofmanager.data.DocumentType.REQUEST)) }.getOrDefault(Color.WHITE),
             com.mohammedalhzmi.masrofmanager.data.DocumentType.RECEIPT to runCatching { Color.parseColor(AppPreferences.backgroundColor(context, com.mohammedalhzmi.masrofmanager.data.DocumentType.RECEIPT)) }.getOrDefault(Color.WHITE)
+        ), mapOf(
+            DocumentType.ORDER to loadBackground(context, DocumentType.ORDER),
+            DocumentType.REQUEST to loadBackground(context, DocumentType.REQUEST),
+            DocumentType.RECEIPT to loadBackground(context, DocumentType.RECEIPT)
+        ), mapOf(
+            DocumentType.ORDER to AppPreferences.backgroundOpacity(context, DocumentType.ORDER),
+            DocumentType.REQUEST to AppPreferences.backgroundOpacity(context, DocumentType.REQUEST),
+            DocumentType.RECEIPT to AppPreferences.backgroundOpacity(context, DocumentType.RECEIPT)
+        ), mapOf(
+            DocumentType.ORDER to AppPreferences.backgroundScale(context, DocumentType.ORDER),
+            DocumentType.REQUEST to AppPreferences.backgroundScale(context, DocumentType.REQUEST),
+            DocumentType.RECEIPT to AppPreferences.backgroundScale(context, DocumentType.RECEIPT)
         )
     )
+
+    private fun loadBackground(context: Context, type: DocumentType) = AppPreferences.backgroundImageUri(context, type)?.let { runCatching { context.contentResolver.openInputStream(Uri.parse(it)).use(BitmapFactory::decodeStream) }.getOrNull() }
 }

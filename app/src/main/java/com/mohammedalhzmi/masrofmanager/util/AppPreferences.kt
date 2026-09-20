@@ -23,6 +23,12 @@ object AppPreferences {
     fun setPageSize(context: Context, type: DocumentType, value: String) = put(context, "page_size_${type.name}", value)
     fun backgroundColor(context: Context, type: DocumentType) = get(context, "background_${type.name}", "#FFFFFF")
     fun setBackgroundColor(context: Context, type: DocumentType, value: String) = put(context, "background_${type.name}", value)
+    fun backgroundImageUri(context: Context, type: DocumentType): String? = get(context, "background_image_${type.name}").ifBlank { null }
+    fun saveBackgroundImage(context: Context, type: DocumentType, uri: Uri) = put(context, "background_image_${type.name}", uri.toString())
+    fun backgroundOpacity(context: Context, type: DocumentType) = get(context, "background_opacity_${type.name}", "0.18").toFloatOrNull()?.coerceIn(0f, 1f) ?: 0.18f
+    fun setBackgroundOpacity(context: Context, type: DocumentType, value: Float) = put(context, "background_opacity_${type.name}", value.coerceIn(0f, 1f).toString())
+    fun backgroundScale(context: Context, type: DocumentType) = get(context, "background_scale_${type.name}", "1.0").toFloatOrNull()?.coerceIn(0.2f, 3f) ?: 1f
+    fun setBackgroundScale(context: Context, type: DocumentType, value: Float) = put(context, "background_scale_${type.name}", value.coerceIn(0.2f, 3f).toString())
 }
 
 object DocumentNumbering {

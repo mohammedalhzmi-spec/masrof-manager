@@ -19,6 +19,8 @@ import com.mohammedalhzmi.masrofmanager.util.OfficialDocumentPrintAdapter
 import com.mohammedalhzmi.masrofmanager.util.AppPreferences
 import com.mohammedalhzmi.masrofmanager.util.DocumentHeader
 import android.graphics.Color
+import android.graphics.BitmapFactory
+import android.net.Uri
 
 @Composable
 fun PrintPreviewScreen(viewModel: MasrofViewModel, documentIds: String, onNavigateBack: () -> Unit) {
@@ -60,6 +62,18 @@ fun PrintPreviewScreen(viewModel: MasrofViewModel, documentIds: String, onNaviga
                         DocumentType.ORDER to runCatching { Color.parseColor(AppPreferences.backgroundColor(context, DocumentType.ORDER)) }.getOrDefault(Color.WHITE),
                         DocumentType.REQUEST to runCatching { Color.parseColor(AppPreferences.backgroundColor(context, DocumentType.REQUEST)) }.getOrDefault(Color.WHITE),
                         DocumentType.RECEIPT to runCatching { Color.parseColor(AppPreferences.backgroundColor(context, DocumentType.RECEIPT)) }.getOrDefault(Color.WHITE)
+                    ), mapOf(
+                        DocumentType.ORDER to AppPreferences.backgroundImageUri(context, DocumentType.ORDER)?.let { runCatching { context.contentResolver.openInputStream(Uri.parse(it)).use(BitmapFactory::decodeStream) }.getOrNull() },
+                        DocumentType.REQUEST to AppPreferences.backgroundImageUri(context, DocumentType.REQUEST)?.let { runCatching { context.contentResolver.openInputStream(Uri.parse(it)).use(BitmapFactory::decodeStream) }.getOrNull() },
+                        DocumentType.RECEIPT to AppPreferences.backgroundImageUri(context, DocumentType.RECEIPT)?.let { runCatching { context.contentResolver.openInputStream(Uri.parse(it)).use(BitmapFactory::decodeStream) }.getOrNull() }
+                    ), mapOf(
+                        DocumentType.ORDER to AppPreferences.backgroundOpacity(context, DocumentType.ORDER),
+                        DocumentType.REQUEST to AppPreferences.backgroundOpacity(context, DocumentType.REQUEST),
+                        DocumentType.RECEIPT to AppPreferences.backgroundOpacity(context, DocumentType.RECEIPT)
+                    ), mapOf(
+                        DocumentType.ORDER to AppPreferences.backgroundScale(context, DocumentType.ORDER),
+                        DocumentType.REQUEST to AppPreferences.backgroundScale(context, DocumentType.REQUEST),
+                        DocumentType.RECEIPT to AppPreferences.backgroundScale(context, DocumentType.RECEIPT)
                     )
                 )
                 printManager.print("مستندات مالية رسمية", OfficialDocumentPrintAdapter(selectedDocs, header), PrintAttributes.Builder().setMediaSize(PrintAttributes.MediaSize.ISO_A4).setMinMargins(PrintAttributes.Margins.NO_MARGINS).build())
@@ -82,6 +96,9 @@ private fun shareImage(context: Context, doc: Document) {
 private fun DocumentPageEditor(documents: List<Document>, context: Context, onClose: () -> Unit) {
     var selectedType by remember { mutableStateOf(documents.firstOrNull()?.type ?: DocumentType.ORDER) }
     var color by remember(selectedType) { mutableStateOf(AppPreferences.backgroundColor(context, selectedType)) }
+    var opacity by remember(selectedType) { mutableStateOf(AppPreferences.backgroundOpacity(context, selectedType)) }
+    var scale by remember(selectedType) { mutableStateOf(AppPreferences.backgroundScale(context, selectedType)) }
+    val backgroundPicker = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.GetContent()) { uri -> uri?.let { AppPreferences.saveBackgroundImage(context, selectedType, it) } }
     AlertDialog(onDismissRequest = onClose, title = { Text("محرر الصفحة") }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("اختر النوع ثم غيّر المقاس والخلفية. الشعارات تدار من الإعدادات لكل مستند.")
@@ -90,8 +107,13 @@ private fun DocumentPageEditor(documents: List<Document>, context: Context, onCl
             val size = AppPreferences.pageSize(context, selectedType)
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { if (size == "A4") Button(onClick = { AppPreferences.setPageSize(context, selectedType, "A4") }) { Text("A4") } else OutlinedButton(onClick = { AppPreferences.setPageSize(context, selectedType, "A4") }) { Text("A4") }; if (size == "HALF_A4") Button(onClick = { AppPreferences.setPageSize(context, selectedType, "HALF_A4") }) { Text("نصف A4") } else OutlinedButton(onClick = { AppPreferences.setPageSize(context, selectedType, "HALF_A4") }) { Text("نصف A4") } }
             OutlinedTextField(color, { color = it }, label = { Text("لون الخلفية مثل #FFFFFF") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            OutlinedButton(onClick = { backgroundPicker.launch("image/*") }, modifier = Modifier.fillMaxWidth()) { Text(if (AppPreferences.backgroundImageUri(context, selectedType) == null) "إضافة صورة خلفية" else "تغيير صورة الخلفية") }
+            Text("شفافية الصورة: ${(opacity * 100).toInt()}%")
+            Slider(value = opacity, onValueChange = { opacity = it }, valueRange = 0f..1f)
+            Text("حجم الصورة: ${(scale * 100).toInt()}%")
+            Slider(value = scale, onValueChange = { scale = it }, valueRange = 0.2f..3f)
         }
-    }, confirmButton = { Button(onClick = { if (runCatching { Color.parseColor(color) }.isSuccess) AppPreferences.setBackgroundColor(context, selectedType, color); onClose() }) { Text("حفظ التعديلات") } }, dismissButton = { TextButton(onClick = onClose) { Text("إلغاء") } })
+    }, confirmButton = { Button(onClick = { if (runCatching { Color.parseColor(color) }.isSuccess) AppPreferences.setBackgroundColor(context, selectedType, color); AppPreferences.setBackgroundOpacity(context, selectedType, opacity); AppPreferences.setBackgroundScale(context, selectedType, scale); onClose() }) { Text("حفظ التعديلات") } }, dismissButton = { TextButton(onClick = onClose) { Text("إلغاء") } })
 }
 
 private fun typeLabel(type: DocumentType) = when (type) { DocumentType.ORDER -> "أمر صرف"; DocumentType.REQUEST -> "تقديم"; DocumentType.RECEIPT -> "استلام" }

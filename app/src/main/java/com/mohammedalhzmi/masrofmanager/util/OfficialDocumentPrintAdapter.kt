@@ -15,7 +15,10 @@ data class DocumentHeader(
     val branch: String,
     val logos: Map<DocumentType, Bitmap?> = emptyMap(),
     val pageSizes: Map<DocumentType, String> = emptyMap(),
-    val backgroundColors: Map<DocumentType, Int> = emptyMap()
+    val backgroundColors: Map<DocumentType, Int> = emptyMap(),
+    val backgroundImages: Map<DocumentType, Bitmap?> = emptyMap(),
+    val backgroundOpacity: Map<DocumentType, Float> = emptyMap(),
+    val backgroundScale: Map<DocumentType, Float> = emptyMap()
 )
 
 class OfficialDocumentPrintAdapter(private val documents: List<Document>, private val header: DocumentHeader = DocumentHeader("وزارة الإدارة والتنمية المحلية والريفية", "صندوق النظافة والتحسين", "فرع المديرية")) : PrintDocumentAdapter() {
@@ -53,6 +56,13 @@ object OfficialDocumentRenderer {
     fun render(canvas: Canvas, document: Document, header: DocumentHeader = DocumentHeader("وزارة الإدارة والتنمية المحلية والريفية", "صندوق النظافة والتحسين", "فرع المديرية")) {
         val w = canvas.width.toFloat(); val h = canvas.height.toFloat(); val half = h < w
         canvas.drawColor(header.backgroundColors[document.type] ?: Color.WHITE)
+        header.backgroundImages[document.type]?.let { bitmap ->
+            val scale = header.backgroundScale[document.type] ?: 1f
+            val bw = w * scale; val bh = h * scale
+            val target = RectF((w - bw) / 2f, (h - bh) / 2f, (w + bw) / 2f, (h + bh) / 2f)
+            val imagePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { alpha = ((header.backgroundOpacity[document.type] ?: 0.18f) * 255).toInt() }
+            canvas.drawBitmap(bitmap, null, target, imagePaint)
+        }
         canvas.drawRect(18f, 18f, w - 18f, h - 18f, linePaint)
         canvas.drawRect(25f, 25f, w - 25f, h - 25f, linePaint)
         drawHeader(canvas, header, document.type)
