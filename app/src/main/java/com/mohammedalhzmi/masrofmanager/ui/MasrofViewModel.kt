@@ -39,6 +39,7 @@ class MasrofViewModel(
     val allUsers = repository.allUsers.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val auditLogs = repository.auditLogs.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val designElements = MutableStateFlow<List<DesignElementEntity>>(emptyList())
+    val activeDesign = MutableStateFlow<DocumentDesignEntity?>(null)
     private var activeDesignId: Long = 0
     private val undoStack = ArrayDeque<List<DesignElementEntity>>()
     private val redoStack = ArrayDeque<List<DesignElementEntity>>()
@@ -54,8 +55,13 @@ class MasrofViewModel(
                 repository.getDesign(type) ?: DocumentDesignEntity(id = id, documentType = type.name, name = type.name)
             }
             activeDesignId = design.id
+            activeDesign.value = design
             designElements.value = repository.designElements(design.id)
         }
+    }
+    fun updateDesign(design: DocumentDesignEntity) {
+        activeDesign.value = design
+        viewModelScope.launch(Dispatchers.IO) { repository.saveDesign(design.copy(updatedAt = System.currentTimeMillis())); activeDesign.value = repository.getDesign(DocumentType.valueOf(design.documentType)) }
     }
     fun addDesignElement(element: DesignElementEntity) { rememberChange(); viewModelScope.launch(Dispatchers.IO) { repository.addDesignElement(element.copy(designId = activeDesignId)); designElements.value = repository.designElements(activeDesignId) } }
     fun updateDesignElement(element: DesignElementEntity) { rememberChange(); viewModelScope.launch(Dispatchers.IO) { repository.updateDesignElement(element); designElements.value = repository.designElements(activeDesignId) } }

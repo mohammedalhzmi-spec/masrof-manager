@@ -13,7 +13,12 @@ data class DocumentDesignEntity(
     val pageHeight: Float = 842f,
     val backgroundColor: String = "#FFFFFF",
     val backgroundImageUri: String? = null,
-    val updatedAt: Long = System.currentTimeMillis()
+    val updatedAt: Long = System.currentTimeMillis(),
+    val orientation: String = "PORTRAIT",
+    val marginLeft: Float = 25f,
+    val marginTop: Float = 25f,
+    val marginRight: Float = 25f,
+    val marginBottom: Float = 25f
 )
 
 @Entity(tableName = "design_elements", indices = [Index(value = ["designId"]), Index(value = ["designId", "zIndex"])])

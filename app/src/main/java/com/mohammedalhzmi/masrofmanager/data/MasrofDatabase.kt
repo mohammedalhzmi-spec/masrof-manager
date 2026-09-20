@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
 
-@Database(entities = [Document::class, OrganizationProfile::class, ContactEntity::class, UserEntity::class, AuditLogEntity::class, DocumentDesignEntity::class, DesignElementEntity::class], version = 6, exportSchema = false)
+@Database(entities = [Document::class, OrganizationProfile::class, ContactEntity::class, UserEntity::class, AuditLogEntity::class, DocumentDesignEntity::class, DesignElementEntity::class], version = 7, exportSchema = false)
 @TypeConverters(Converters::class)
 abstract class MasrofDatabase : RoomDatabase() {
     abstract fun documentDao(): DocumentDao
@@ -39,6 +39,15 @@ abstract class MasrofDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE design_elements ADD COLUMN textAlign TEXT NOT NULL DEFAULT 'START'")
                 db.execSQL("ALTER TABLE design_elements ADD COLUMN lineSpacing REAL NOT NULL DEFAULT 1.0")
                 db.execSQL("ALTER TABLE design_elements ADD COLUMN cornerRadius REAL NOT NULL DEFAULT 0.0")
+            }
+        }
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE document_designs ADD COLUMN orientation TEXT NOT NULL DEFAULT 'PORTRAIT'")
+                db.execSQL("ALTER TABLE document_designs ADD COLUMN marginLeft REAL NOT NULL DEFAULT 25.0")
+                db.execSQL("ALTER TABLE document_designs ADD COLUMN marginTop REAL NOT NULL DEFAULT 25.0")
+                db.execSQL("ALTER TABLE document_designs ADD COLUMN marginRight REAL NOT NULL DEFAULT 25.0")
+                db.execSQL("ALTER TABLE document_designs ADD COLUMN marginBottom REAL NOT NULL DEFAULT 25.0")
             }
         }
     }

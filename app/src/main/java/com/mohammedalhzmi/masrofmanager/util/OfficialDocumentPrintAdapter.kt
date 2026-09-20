@@ -11,6 +11,9 @@ import com.mohammedalhzmi.masrofmanager.data.DesignElementEntity
 import android.print.*
 import com.mohammedalhzmi.masrofmanager.data.Document
 import com.mohammedalhzmi.masrofmanager.data.DocumentType
+import com.mohammedalhzmi.masrofmanager.data.DocumentDesignEntity
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.MultiFormatWriter
 import java.io.FileOutputStream
 
 data class DocumentHeader(
@@ -44,10 +47,11 @@ class OfficialDocumentPrintAdapter(private val documents: List<Document>, privat
             documents.forEachIndexed { index, document ->
                 if (cancellationSignal.isCanceled) return
                 val half = header.pageSizes[document.type] == "HALF_A4" || (document.type == DocumentType.ORDER && !header.pageSizes.containsKey(document.type))
-                val width = if (half) 842 else 595
-                val height = if (half) 595 else 842
+                val design = if (context != null) DesignRenderLoader.design(context, document.type) else null
+                val width = design?.pageWidth?.toInt() ?: if (half) 842 else 595
+                val height = design?.pageHeight?.toInt() ?: if (half) 595 else 842
                 val page = pdf.startPage(PdfDocument.PageInfo.Builder(width, height, index + 1).create())
-                OfficialDocumentRenderer.render(page.canvas, document, header, if (context != null) DesignRenderLoader.elements(context, document.type) else emptyList(), context)
+                OfficialDocumentRenderer.render(page.canvas, document, header, if (context != null) DesignRenderLoader.elements(context, document.type) else emptyList(), context, design)
                 pdf.finishPage(page)
             }
             FileOutputStream(destination.fileDescriptor).use { pdf.writeTo(it) }
@@ -63,9 +67,9 @@ object OfficialDocumentRenderer {
     private val boldPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.BLACK; textSize = 15f; typeface = Typeface.DEFAULT_BOLD }
     private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = navy; style = Paint.Style.STROKE; strokeWidth = 2f }
 
-    fun render(canvas: Canvas, document: Document, header: DocumentHeader = DocumentHeader("وزارة الإدارة والتنمية المحلية والريفية", "صندوق النظافة والتحسين", "فرع المديرية"), elements: List<DesignElementEntity> = emptyList(), context: Context? = null) {
+    fun render(canvas: Canvas, document: Document, header: DocumentHeader = DocumentHeader("وزارة الإدارة والتنمية المحلية والريفية", "صندوق النظافة والتحسين", "فرع المديرية"), elements: List<DesignElementEntity> = emptyList(), context: Context? = null, design: DocumentDesignEntity? = null) {
         val w = canvas.width.toFloat(); val h = canvas.height.toFloat(); val half = h < w
-        canvas.drawColor(header.backgroundColors[document.type] ?: Color.WHITE)
+        canvas.drawColor(design?.let { runCatching { Color.parseColor(it.backgroundColor) }.getOrDefault(Color.WHITE) } ?: (header.backgroundColors[document.type] ?: Color.WHITE))
         header.backgroundImages[document.type]?.let { bitmap ->
             val scale = header.backgroundScale[document.type] ?: 1f
             val bw = w * scale; val bh = h * scale
@@ -84,6 +88,7 @@ object OfficialDocumentRenderer {
         drawHeader(canvas, header, document.type)
         if (half) renderOrder(canvas, document) else when (document.type) { DocumentType.REQUEST -> renderRequest(canvas, document); DocumentType.RECEIPT -> renderReceipt(canvas, document); DocumentType.ORDER -> renderOrderPortrait(canvas, document) }
         renderElements(canvas, document, elements, context)
+        design?.let { canvas.drawRect(it.marginLeft, it.marginTop, w - it.marginRight, h - it.marginBottom, Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = 0x55333333.toInt(); this.style = Paint.Style.STROKE; this.strokeWidth = 1f }) }
         drawCentered(canvas, "نظام مالية صندوق النظافة والتحسين — مستند رسمي", w / 2f, h - 28f, bodyPaint)
     }
 
@@ -160,7 +165,7 @@ object OfficialDocumentRenderer {
                 "LINE" -> { p.style = Paint.Style.STROKE; p.strokeWidth = e.strokeWidth; p.color = runCatching { Color.parseColor(e.strokeColor) }.getOrDefault(Color.DKGRAY); c.drawLine(e.x, e.y + e.height / 2f, e.x + e.width, e.y + e.height / 2f, p) }
                 "ARROW" -> { p.style = Paint.Style.STROKE; p.strokeWidth = e.strokeWidth; p.color = runCatching { Color.parseColor(e.strokeColor) }.getOrDefault(Color.DKGRAY); val y = e.y + e.height / 2f; c.drawLine(e.x, y, e.x + e.width - 14f, y, p); c.drawLine(e.x + e.width - 28f, y - 12f, e.x + e.width, y, p); c.drawLine(e.x + e.width - 28f, y + 12f, e.x + e.width, y, p) }
                 "STICKER" -> { p.color = runCatching { Color.parseColor(e.textColor) }.getOrDefault(Color.BLACK); p.textSize = e.height * .75f; p.textAlign = Paint.Align.CENTER; c.drawText(resolve(e.content, d), e.x + e.width / 2f, e.y + e.height * .75f, p); p.textAlign = Paint.Align.LEFT }
-                "QR" -> { p.style = Paint.Style.STROKE; p.color = Color.BLACK; p.strokeWidth = 2f; c.drawRect(e.x, e.y, e.x + e.width, e.y + e.height, p); p.style = Paint.Style.FILL; p.textSize = 8f; p.textAlign = Paint.Align.CENTER; c.drawText("QR", e.x + e.width / 2f, e.y + e.height / 2f, p); p.textAlign = Paint.Align.LEFT }
+                "QR" -> drawQr(c, resolve(e.content, d), e)
                 "IMAGE" -> context?.let { ctx -> runCatching { ctx.contentResolver.openInputStream(Uri.parse(e.content)).use(BitmapFactory::decodeStream) }.getOrNull()?.let { c.drawBitmap(it, null, RectF(e.x, e.y, e.x + e.width, e.y + e.height), p) } }
             }; c.restore()
         }
@@ -169,6 +174,15 @@ object OfficialDocumentRenderer {
         p.color = runCatching { Color.parseColor(e.textColor) }.getOrDefault(Color.BLACK); p.textSize = e.fontSize; p.typeface = Typeface.create(when (e.fontFamily) { "SERIF" -> Typeface.SERIF; "MONOSPACE" -> Typeface.MONOSPACE; else -> Typeface.SANS_SERIF }, if (e.bold && e.italic) Typeface.BOLD_ITALIC else if (e.bold) Typeface.BOLD else if (e.italic) Typeface.ITALIC else Typeface.NORMAL); p.isUnderlineText = e.underline
         val lines = value.split("\n"); val lineHeight = e.fontSize * e.lineSpacing; val x = when (e.textAlign) { "CENTER" -> e.x + e.width / 2f; "END" -> e.x + e.width; else -> e.x }; p.textAlign = when (e.textAlign) { "CENTER" -> Paint.Align.CENTER; "END" -> Paint.Align.RIGHT; else -> Paint.Align.LEFT }
         lines.forEachIndexed { index, line -> c.drawText(line, x, e.y + e.fontSize + index * lineHeight, p) }; p.textAlign = Paint.Align.LEFT
+    }
+    private fun drawQr(c: Canvas, value: String, e: DesignElementEntity) {
+        runCatching {
+            val matrix = MultiFormatWriter().encode(value, BarcodeFormat.QR_CODE, e.width.toInt().coerceAtLeast(64), e.height.toInt().coerceAtLeast(64))
+            val bitmap = Bitmap.createBitmap(matrix.width, matrix.height, Bitmap.Config.ARGB_8888)
+            for (x in 0 until matrix.width) for (y in 0 until matrix.height) bitmap.setPixel(x, y, if (matrix[x, y]) Color.BLACK else Color.WHITE)
+            c.drawBitmap(bitmap, null, RectF(e.x, e.y, e.x + e.width, e.y + e.height), null)
+            bitmap.recycle()
+        }
     }
     private fun resolve(value: String, d: Document) = value.replace("{رقم المستند}", d.documentNumber).replace("{اسم المستفيد}", d.beneficiaryName.orEmpty()).replace("{المبلغ}", d.amount?.toString().orEmpty()).replace("{الغرض}", d.purpose.orEmpty()).replace("{المبلغ كتابة}", d.amountWords.orEmpty()).replace("{التاريخ الهجري}", d.dateHijri).replace("{التاريخ الميلادي}", d.dateGregorian)
     private fun drawCentered(c: Canvas, text: String, x: Float, y: Float, p: Paint) { p.textAlign = Paint.Align.CENTER; c.drawText(text, x, y, p) }
