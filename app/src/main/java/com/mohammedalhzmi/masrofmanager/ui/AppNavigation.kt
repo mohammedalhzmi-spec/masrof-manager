@@ -40,7 +40,8 @@ fun AppNavigation(viewModel: MasrofViewModel) {
         composable("users") { if (RolePreferences.can(context, AppPermission.SETTINGS)) UserManagementScreen(viewModel) { navController.popBackStack() } else navController.popBackStack() }
         composable("updates") { UpdateCenterScreen { navController.popBackStack() } }
         composable("print_preview/{documentIds}") { entry ->
-            PrintPreviewScreen(viewModel, entry.arguments?.getString("documentIds") ?: "") { navController.popBackStack() }
+            PrintPreviewScreen(viewModel, entry.arguments?.getString("documentIds") ?: "", onOpenCanvas = { type -> navController.navigate("canvas/${type.name}") }) { navController.popBackStack() }
         }
+        composable("canvas/{type}") { entry -> CanvasEditorScreen(viewModel, runCatching { DocumentType.valueOf(entry.arguments?.getString("type") ?: "ORDER") }.getOrDefault(DocumentType.ORDER)) { navController.popBackStack() } }
     }
 }

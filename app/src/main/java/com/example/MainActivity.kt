@@ -39,8 +39,8 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         locked = AppLockPreferences.enabled(this) && AppLockPreferences.shouldRelock(this)
-        val db = Room.databaseBuilder(applicationContext, MasrofDatabase::class.java, "masrof-db").addMigrations(MasrofDatabase.MIGRATION_3_4).build()
-        val repository = MasrofRepository(db.documentDao(), db.settingsDao(), db.contactDao(), db.userDao(), db.auditDao())
+        val db = Room.databaseBuilder(applicationContext, MasrofDatabase::class.java, "masrof-db").addMigrations(MasrofDatabase.MIGRATION_3_4, MasrofDatabase.MIGRATION_4_5).build()
+        val repository = MasrofRepository(db.documentDao(), db.settingsDao(), db.contactDao(), db.userDao(), db.auditDao(), db.designDao())
         val viewModel = ViewModelProvider(this, object : ViewModelProvider.Factory {
             override fun <T : ViewModel> create(modelClass: Class<T>): T = MasrofViewModel(repository, db) as T
         })[MasrofViewModel::class.java]

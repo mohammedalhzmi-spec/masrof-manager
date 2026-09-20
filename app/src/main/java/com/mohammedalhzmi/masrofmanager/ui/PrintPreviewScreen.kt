@@ -23,7 +23,7 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 
 @Composable
-fun PrintPreviewScreen(viewModel: MasrofViewModel, documentIds: String, onNavigateBack: () -> Unit) {
+fun PrintPreviewScreen(viewModel: MasrofViewModel, documentIds: String, onOpenCanvas: (DocumentType) -> Unit, onNavigateBack: () -> Unit) {
     val documents by viewModel.allDocuments.collectAsState()
     val ids = remember(documentIds) { documentIds.split(",").mapNotNull { it.toLongOrNull() }.toSet() }
     val selectedDocs = documents.filter { it.id in ids }
@@ -34,6 +34,7 @@ fun PrintPreviewScreen(viewModel: MasrofViewModel, documentIds: String, onNaviga
         Text("عدد الصفحات: ${selectedDocs.size} — كل مستند محفوظ محليًا ويمكن تصديره منفردًا أو كمجموعة", style = MaterialTheme.typography.bodySmall)
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             OutlinedButton(onClick = { showEditor = true }, modifier = Modifier.weight(1f)) { Text("تحرير الصفحة") }
+            OutlinedButton(enabled = selectedDocs.isNotEmpty(), onClick = { onOpenCanvas(selectedDocs.first().type) }, modifier = Modifier.weight(1f)) { Text("محرر حر") }
             OutlinedButton(enabled = selectedDocs.isNotEmpty(), onClick = { sharePdf(context, selectedDocs) }, modifier = Modifier.weight(1f)) { Text("حفظ / مشاركة") }
         }
         if (showEditor) DocumentPageEditor(selectedDocs, context) { showEditor = false }

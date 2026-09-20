@@ -18,10 +18,14 @@ import android.net.Uri
 import com.mohammedalhzmi.masrofmanager.util.AppBackupManager
 import com.mohammedalhzmi.masrofmanager.data.UserEntity
 import com.mohammedalhzmi.masrofmanager.data.AuditLogEntity
+import com.mohammedalhzmi.masrofmanager.data.DocumentType
+import com.mohammedalhzmi.masrofmanager.data.DocumentDesignEntity
+import com.mohammedalhzmi.masrofmanager.data.DesignElementEntity
 import com.mohammedalhzmi.masrofmanager.util.AuthSecurity
 import com.mohammedalhzmi.masrofmanager.util.AuthenticatedUser
 import com.mohammedalhzmi.masrofmanager.util.UserSession
 import com.mohammedalhzmi.masrofmanager.util.RememberedLogin
+import kotlinx.coroutines.flow.MutableStateFlow
 
 class MasrofViewModel(
     private val repository: MasrofRepository,
@@ -34,6 +38,23 @@ class MasrofViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
     val allUsers = repository.allUsers.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val auditLogs = repository.auditLogs.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val designElements = MutableStateFlow<List<DesignElementEntity>>(emptyList())
+    private var activeDesignId: Long = 0
+
+    fun loadDesign(type: DocumentType) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val design = repository.getDesign(type) ?: run {
+                val id = repository.saveDesign(DocumentDesignEntity(documentType = type.name, name = type.name))
+                repository.getDesign(type) ?: DocumentDesignEntity(id = id, documentType = type.name, name = type.name)
+            }
+            activeDesignId = design.id
+            designElements.value = repository.designElements(design.id)
+        }
+    }
+    fun addDesignElement(element: DesignElementEntity) { viewModelScope.launch(Dispatchers.IO) { val id = repository.addDesignElement(element.copy(designId = activeDesignId)); designElements.value = repository.designElements(activeDesignId) } }
+    fun updateDesignElement(element: DesignElementEntity) { viewModelScope.launch(Dispatchers.IO) { repository.updateDesignElement(element); designElements.value = repository.designElements(activeDesignId) } }
+    fun deleteDesignElement(element: DesignElementEntity) { viewModelScope.launch(Dispatchers.IO) { repository.deleteDesignElement(element); designElements.value = repository.designElements(activeDesignId) } }
+    fun moveLayer(element: DesignElementEntity, delta: Int) { viewModelScope.launch(Dispatchers.IO) { repository.setDesignLayer(element.id, (element.zIndex + delta).coerceAtLeast(0)); designElements.value = repository.designElements(activeDesignId) } }
 
     suspend fun ensureDefaultAdmin() {
         if (repository.userCount() == 0) repository.insertUser(UserEntity(username = "admin", passwordHash = AuthSecurity.hash("admin1234"), fullName = "مدير النظام", role = "ADMIN"))

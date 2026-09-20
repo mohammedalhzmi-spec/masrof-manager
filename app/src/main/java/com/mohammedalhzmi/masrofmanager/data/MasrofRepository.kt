@@ -8,6 +8,7 @@ class MasrofRepository(
     private val contactDao: ContactDao
     , private val userDao: UserDao
     , private val auditDao: AuditDao
+    , private val designDao: DesignDao
 ) {
     // Document operations
     val allDocuments: Flow<List<Document>> = documentDao.getAllDocuments()
@@ -34,4 +35,13 @@ class MasrofRepository(
     suspend fun deleteUser(user: UserEntity) = userDao.delete(user)
     suspend fun userCount() = userDao.count()
     suspend fun addAudit(log: AuditLogEntity) = auditDao.insert(log)
+
+    suspend fun getDesign(type: DocumentType) = designDao.getDesign(type.name)
+    fun observeDesignElements(designId: Long) = designDao.observeElements(designId)
+    suspend fun designElements(designId: Long) = designDao.getElements(designId)
+    suspend fun saveDesign(design: DocumentDesignEntity) = designDao.upsertDesign(design)
+    suspend fun addDesignElement(element: DesignElementEntity) = designDao.insertElement(element)
+    suspend fun updateDesignElement(element: DesignElementEntity) = designDao.updateElement(element)
+    suspend fun deleteDesignElement(element: DesignElementEntity) = designDao.deleteElement(element)
+    suspend fun setDesignLayer(elementId: Long, zIndex: Int) = designDao.setLayer(elementId, zIndex)
 }
