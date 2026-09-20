@@ -30,6 +30,7 @@ class MainActivity : FragmentActivity() {
     private var showWelcome by mutableStateOf(true)
     private var loggedIn by mutableStateOf(false)
     private var loginError by mutableStateOf<String?>(null)
+    private var initializing by mutableStateOf(true)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -40,16 +41,22 @@ class MainActivity : FragmentActivity() {
         val viewModel = ViewModelProvider(this, object : ViewModelProvider.Factory {
             override fun <T : ViewModel> create(modelClass: Class<T>): T = MasrofViewModel(repository, db) as T
         })[MasrofViewModel::class.java]
-        viewModel.ensureDefaultAdmin()
         setContent {
             MyApplicationTheme {
                 val scope = rememberCoroutineScope()
-                if (showWelcome) {
+                LaunchedEffect(Unit) {
+                    viewModel.ensureDefaultAdmin()
+                    if (viewModel.restoreRememberedUser(this@MainActivity) != null) { loggedIn = true; locked = false }
+                    initializing = false
+                }
+                if (initializing) {
+                    WelcomeScreen { }
+                } else if (showWelcome) {
                     WelcomeScreen { showWelcome = false }
                 } else if (!loggedIn) {
-                    LoginScreen(onLogin = { username, password ->
+                    LoginScreen(onLogin = { username, password, remember ->
                         scope.launch {
-                            val user = viewModel.authenticate(username, password)
+                            val user = viewModel.authenticate(this@MainActivity, username, password, remember)
                             if (user == null) loginError = "اسم المستخدم أو كلمة المرور غير صحيحة" else { loggedIn = true; locked = false; loginError = null; AppLockPreferences.markUnlocked(this@MainActivity) }
                         }
                     }, error = loginError)

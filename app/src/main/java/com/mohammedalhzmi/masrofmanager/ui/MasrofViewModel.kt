@@ -21,6 +21,7 @@ import com.mohammedalhzmi.masrofmanager.data.AuditLogEntity
 import com.mohammedalhzmi.masrofmanager.util.AuthSecurity
 import com.mohammedalhzmi.masrofmanager.util.AuthenticatedUser
 import com.mohammedalhzmi.masrofmanager.util.UserSession
+import com.mohammedalhzmi.masrofmanager.util.RememberedLogin
 
 class MasrofViewModel(
     private val repository: MasrofRepository,
@@ -34,17 +35,23 @@ class MasrofViewModel(
     val allUsers = repository.allUsers.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val auditLogs = repository.auditLogs.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    fun ensureDefaultAdmin() {
-        viewModelScope.launch(Dispatchers.IO) {
-            if (repository.userCount() == 0) repository.insertUser(UserEntity(username = "admin", passwordHash = AuthSecurity.hash("admin1234"), fullName = "مدير النظام", role = "ADMIN"))
-        }
+    suspend fun ensureDefaultAdmin() {
+        if (repository.userCount() == 0) repository.insertUser(UserEntity(username = "admin", passwordHash = AuthSecurity.hash("admin1234"), fullName = "مدير النظام", role = "ADMIN"))
     }
 
-    suspend fun authenticate(username: String, password: String): AuthenticatedUser? {
+    suspend fun restoreRememberedUser(context: Context): AuthenticatedUser? {
+        if (!RememberedLogin.enabled(context)) return null
+        val username = RememberedLogin.username(context) ?: return null
+        val user = repository.findActiveUser(username) ?: return null
+        return AuthenticatedUser(user.id, user.username, user.fullName, runCatching { com.mohammedalhzmi.masrofmanager.util.AppRole.valueOf(user.role) }.getOrDefault(com.mohammedalhzmi.masrofmanager.util.AppRole.USER)).also { UserSession.current = it }
+    }
+
+    suspend fun authenticate(context: Context, username: String, password: String, remember: Boolean): AuthenticatedUser? {
         val user = repository.findActiveUser(username.trim())
         if (user != null && AuthSecurity.verify(password, user.passwordHash)) {
             val auth = AuthenticatedUser(user.id, user.username, user.fullName, runCatching { com.mohammedalhzmi.masrofmanager.util.AppRole.valueOf(user.role) }.getOrDefault(com.mohammedalhzmi.masrofmanager.util.AppRole.USER))
             UserSession.current = auth
+            if (remember) RememberedLogin.save(context, user.username) else RememberedLogin.clear(context)
             repository.addAudit(AuditLogEntity(userId = user.id, username = user.username, action = "LOGIN_SUCCESS", details = "تسجيل دخول ناجح"))
             return auth
         }
