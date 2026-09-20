@@ -35,7 +35,7 @@ import androidx.compose.ui.unit.sp
 import com.mohammedalhzmi.masrofmanager.data.*
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
-import com.mohammedalhzmi.masrofmanager.util.AiLayoutAssistant
+import com.mohammedalhzmi.masrofmanager.util.HybridAiAssistant
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -122,8 +122,8 @@ fun CanvasEditorScreen(viewModel: MasrofViewModel, type: DocumentType, onBack: (
     if (showAiDialog) AiLayoutDialog(onDismiss = { showAiDialog = false }) { key, endpoint, instruction, status ->
         scope.launch {
             status("جارٍ تحليل الطلب…")
-            runCatching { AiLayoutAssistant.plan(key, endpoint, instruction, elements, design) }
-                .onSuccess { commands -> viewModel.applyAiCommands(commands); status("تم تطبيق ${commands.size} أمرًا على التصميم") }
+            runCatching { HybridAiAssistant.plan(context, key, endpoint, instruction, elements, design) }
+                .onSuccess { result -> viewModel.applyAiCommands(result.commands); status("${result.mode}: تم تطبيق ${result.commands.size} أمرًا على التصميم") }
                 .onFailure { status("تعذر التنفيذ: ${it.message ?: "خطأ غير معروف"}") }
         }
     }
@@ -197,13 +197,13 @@ private fun AiLayoutDialog(onDismiss: () -> Unit, onRun: (String, String, String
     var endpoint by remember { mutableStateOf("https://api.openai.com/v1/chat/completions") }
     var instruction by remember { mutableStateOf("نسق الصفحة بشكل رسمي، وحاذِ العنوان في الوسط وضع QR في الزاوية اليمنى السفلية") }
     var status by remember { mutableStateOf("المفتاح لا يُحفظ ولا يُضمن داخل التطبيق") }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("مساعد تنسيق المستند بالذكاء الاصطناعي") }, text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("اكتب ما تريد تعديله، وسيحوّله المساعد إلى أوامر آمنة قابلة للتطبيق على العناصر وإعدادات الصفحة.", style = MaterialTheme.typography.bodySmall)
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("المساعد الذكي الهجين") }, text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("يعمل محليًا دون اتصال بقواعد تنسيق آمنة، ويستخدم المساعد السحابي عند توفر الشبكة والمفتاح لطلبات اللغة الحرة.", style = MaterialTheme.typography.bodySmall)
         OutlinedTextField(key, { key = it }, label = { Text("مفتاح API الخاص بك") }, singleLine = true)
         OutlinedTextField(endpoint, { endpoint = it }, label = { Text("رابط OpenAI-compatible") }, singleLine = true)
         OutlinedTextField(instruction, { instruction = it }, label = { Text("طلبك للمساعد") }, minLines = 3)
         Text(status, style = MaterialTheme.typography.bodySmall)
-    } }, confirmButton = { Button(enabled = key.isNotBlank() && instruction.isNotBlank(), onClick = { onRun(key, endpoint, instruction) { status = it } }) { Text("تحليل وتطبيق") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("إغلاق") } })
+    } }, confirmButton = { Button(enabled = instruction.isNotBlank(), onClick = { onRun(key, endpoint, instruction) { status = it } }) { Text("تحليل وتطبيق") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("إغلاق") } })
 }
 
 private fun typeName(type: DocumentType) = when (type) { DocumentType.ORDER -> "أمر الصرف"; DocumentType.REQUEST -> "ورقة التقديم"; DocumentType.RECEIPT -> "ورقة الاستلام" }
