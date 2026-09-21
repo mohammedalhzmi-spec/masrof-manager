@@ -94,11 +94,19 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
   const isExtraBold = doc.customContentHtml === 'extra-bold';
   const boldClass = isExtraBold ? 'font-black tracking-wide' : 'font-bold';
 
+  const getFontFamilyStyle = () => {
+    if (doc.fontFamily === 'Scheherazade New') return '"Scheherazade New", serif';
+    if (doc.fontFamily === 'Cairo') return '"Cairo", sans-serif';
+    if (doc.fontFamily === 'Tajawal') return '"Tajawal", sans-serif';
+    return '"Amiri", serif';
+  };
+
   return (
     <div
       id={containerId}
-      className={`bg-white text-slate-950 font-['Amiri',serif] ${boldClass} mx-auto select-text relative transition-all ${className}`}
+      className={`bg-white text-slate-950 ${boldClass} mx-auto select-text relative transition-all ${className}`}
       style={{
+        fontFamily: getFontFamilyStyle(),
         transform: scale !== 1 ? `scale(${scale})` : undefined,
         transformOrigin: 'top center',
         direction: 'rtl',

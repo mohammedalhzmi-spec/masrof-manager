@@ -9,6 +9,8 @@ import {
   Stamp,
   Edit3,
   CheckCircle2,
+  Sliders,
+  Type,
 } from 'lucide-react';
 import { Document, OrganizationProfile } from '../types';
 import { DocumentOfficialTemplate } from './DocumentOfficialTemplate';
@@ -34,6 +36,13 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
   const [editingDoc, setEditingDoc] = useState<Document | null>(null);
   const [activeExportingId, setActiveExportingId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
+
+  // Live Scan & Margin Calibration state
+  const [showCalibration, setShowCalibration] = useState<boolean>(false);
+  const [marginTop, setMarginTop] = useState<number>(0);
+  const [marginLeft, setMarginLeft] = useState<number>(0);
+  const [printScale, setPrintScale] = useState<number>(1);
+  const [selectedFont, setSelectedFont] = useState<string>('Amiri');
 
   const handleFieldChangeInPrint = (docId: string, field: keyof Document, value: any) => {
     if (!onUpdateDocument) return;
@@ -155,6 +164,36 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
             <span>الختم المعتمد</span>
           </button>
 
+          {/* Toggle Live Scan & Margin Calibration */}
+          <button
+            onClick={() => setShowCalibration(!showCalibration)}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border text-xs font-bold transition ${
+              showCalibration
+                ? 'bg-amber-600 text-white border-amber-400 ring-2 ring-amber-500/30'
+                : 'bg-slate-800 text-slate-300 border-slate-700 hover:text-white'
+            }`}
+            title="المسح الضوئي المباشر وضبط الهوامش يدوياً للطابعات المكتبية"
+          >
+            <Sliders className="w-3.5 h-3.5" />
+            <span>المسح الضوئي والهوامش</span>
+          </button>
+
+          {/* Font Family Selector */}
+          <div className="flex items-center gap-1 bg-slate-800 px-2.5 py-1 rounded-xl border border-slate-700 text-xs text-slate-300">
+            <Type className="w-3.5 h-3.5 text-emerald-400" />
+            <select
+              value={selectedFont}
+              onChange={(e) => setSelectedFont(e.target.value)}
+              className="bg-transparent text-white font-bold focus:outline-none cursor-pointer"
+              title="اختيار خط الطباعة العربي الرسمي"
+            >
+              <option value="Amiri" className="bg-slate-900 text-white">خط الأميري (Amiri)</option>
+              <option value="Scheherazade New" className="bg-slate-900 text-white">شهرزاد (Scheherazade)</option>
+              <option value="Cairo" className="bg-slate-900 text-white">كايرو (Cairo)</option>
+              <option value="Tajawal" className="bg-slate-900 text-white">تجوال (Tajawal)</option>
+            </select>
+          </div>
+
           {/* Direct Print Button */}
           <button
             id="do-print-btn"
@@ -165,6 +204,52 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
             <span>طباعة المستندات الآن (Ctrl+P)</span>
           </button>
         </div>
+
+        {/* Live Scan & Margin Calibration Drawer */}
+        {showCalibration && (
+          <div className="mt-4 pt-4 border-t border-slate-800 grid grid-cols-1 sm:grid-cols-3 gap-4 bg-slate-950/50 p-4 rounded-xl">
+            <div>
+              <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                ضبط الهامش العلوي للطابعة ({marginTop}px):
+              </label>
+              <input
+                type="range"
+                min="-50"
+                max="100"
+                value={marginTop}
+                onChange={(e) => setMarginTop(parseInt(e.target.value, 10))}
+                className="w-full accent-emerald-500 cursor-pointer"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                ضبط الهامش الأيمن/الأيسر ({marginLeft}px):
+              </label>
+              <input
+                type="range"
+                min="-50"
+                max="100"
+                value={marginLeft}
+                onChange={(e) => setMarginLeft(parseInt(e.target.value, 10))}
+                className="w-full accent-emerald-500 cursor-pointer"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                تكبير وتصحيح القياس المطبوع ({Math.round(printScale * 100)}%):
+              </label>
+              <input
+                type="range"
+                min="0.8"
+                max="1.2"
+                step="0.02"
+                value={printScale}
+                onChange={(e) => setPrintScale(parseFloat(e.target.value))}
+                className="w-full accent-emerald-500 cursor-pointer"
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* List of Rendered Documents */}
@@ -243,18 +328,21 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
 
               {/* The Physical Sheet Container */}
               <div
-                className="bg-white shadow-2xl overflow-x-auto flex justify-center p-4 sm:p-8 rounded-b-xl print:p-0 print:shadow-none print:rounded-none"
+                className="bg-white shadow-2xl overflow-x-auto flex justify-center p-4 sm:p-8 rounded-b-xl print:p-0 print:shadow-none print:rounded-none transition-all"
                 style={{
+                  marginTop: `${marginTop}px`,
+                  marginLeft: `${marginLeft}px`,
                   pageBreakAfter: idx < documents.length - 1 ? 'always' : 'auto',
                 }}
               >
                 <DocumentOfficialTemplate
                   containerId={`official-print-doc-${doc.id}`}
-                  document={doc}
+                  document={{ ...doc, fontFamily: selectedFont }}
                   organization={organization}
                   isEditable={inlineEditEnabled}
                   onFieldChange={(field, val) => handleFieldChangeInPrint(doc.id, field, val)}
                   showStamp={showStamp}
+                  scale={printScale}
                 />
               </div>
             </div>

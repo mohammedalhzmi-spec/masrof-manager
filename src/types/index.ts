@@ -30,6 +30,7 @@ export interface Document {
   canvasElements?: CanvasElement[];
   pageMargins?: 'normal' | 'narrow' | 'wide' | 'custom';
   customMarginPx?: number;
+  fontFamily?: string;
   borderStyle?: 'classic' | 'double' | 'bold' | 'decorative' | 'gold' | 'islamic' | 'simple';
   createdAt: number;
 }
