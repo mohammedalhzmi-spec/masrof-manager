@@ -11,6 +11,8 @@ import com.mohammedalhzmi.masrofmanager.data.Document
 import com.mohammedalhzmi.masrofmanager.data.DocumentType
 import java.io.File
 import java.io.FileOutputStream
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 import android.graphics.Color
 import android.graphics.BitmapFactory
 
@@ -45,15 +47,37 @@ object OfficialDocumentExporter {
         return shareUri(context, file)
     }
 
+    /** Creates a standards-compliant editable Office Open XML document. */
+    fun exportDocx(context: Context, document: Document): Uri {
+        val file = File(context.filesDir, "masrof-${document.documentNumber}.docx")
+        ZipOutputStream(FileOutputStream(file)).use { zip ->
+            fun entry(name: String, value: String) {
+                zip.putNextEntry(ZipEntry(name)); zip.write(value.toByteArray(Charsets.UTF_8)); zip.closeEntry()
+            }
+            entry("[Content_Types].xml", """<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>""")
+            entry("_rels/.rels", """<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>""")
+            entry("word/_rels/document.xml.rels", """<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>""")
+            entry("word/document.xml", docxXml(document))
+        }
+        return shareUri(context, file)
+    }
+
     fun share(context: Context, uri: Uri, title: String) {
         context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
-            type = if (uri.toString().endsWith(".png")) "image/png" else "application/pdf"
+            type = when { uri.toString().endsWith(".png") -> "image/png"; uri.toString().endsWith(".docx") -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"; else -> "application/pdf" }
             putExtra(Intent.EXTRA_STREAM, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }, title))
     }
 
     private fun shareUri(context: Context, file: File): Uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
+
+    private fun docxXml(d: Document): String {
+        fun esc(s: String) = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&apos;")
+        fun p(label: String, value: String) = "<w:p><w:pPr><w:jc w:val=\"right\"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii=\"Amiri\" w:hAnsi=\"Amiri\"/></w:rPr><w:t>${esc(label)}${esc(value)}</w:t></w:r></w:p>"
+        val title = when (d.type) { DocumentType.ORDER -> "أمر صرف"; DocumentType.REQUEST -> "ورقة تقديم طلب"; DocumentType.RECEIPT -> "سند قبض" }
+        return """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:b/><w:rFonts w:ascii="Amiri" w:hAnsi="Amiri"/></w:rPr><w:t>${esc(title)}</w:t></w:r></w:p>${p("رقم المستند: ", d.documentNumber)}${p("التاريخ الهجري: ", d.dateHijri)}${p("التاريخ الميلادي: ", d.dateGregorian)}${p("اسم المستفيد: ", d.beneficiaryName.orEmpty())}${p("المبلغ: ", d.amount?.toString().orEmpty())}${p("المبلغ كتابة: ", d.amountWords.orEmpty())}${p("الغرض: ", d.purpose.orEmpty())}${p("التفاصيل: ", d.details.orEmpty())}${p("الملاحظات والمرفقات: ", d.notes.orEmpty())}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720"/></w:sectPr></w:body></w:document>"""
+    }
 
     private fun header(context: Context) = DocumentHeader(
         AppPreferences.ministry(context),

@@ -45,6 +45,7 @@ fun PrintPreviewScreen(viewModel: MasrofViewModel, documentIds: String, onOpenCa
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(enabled = selectedDocs.isNotEmpty(), onClick = { sharePdf(context, selectedDocs) }, modifier = Modifier.weight(1f)) { Text("PDF ومشاركة") }
             OutlinedButton(enabled = selectedDocs.size == 1, onClick = { shareImage(context, selectedDocs.first()) }, modifier = Modifier.weight(1f)) { Text("صورة PNG") }
+            OutlinedButton(enabled = selectedDocs.size == 1, onClick = { shareWord(context, selectedDocs.first()) }, modifier = Modifier.weight(1f)) { Text("Word") }
         }
         Button(
             onClick = {
@@ -103,6 +104,11 @@ private fun sharePdf(context: Context, docs: List<Document>) {
 private fun shareImage(context: Context, doc: Document) {
     val uri = OfficialDocumentExporter.exportPng(context, doc)
     OfficialDocumentExporter.share(context, uri, "مشاركة المستند كصورة")
+}
+
+private fun shareWord(context: Context, doc: Document) {
+    val uri = OfficialDocumentExporter.exportDocx(context, doc)
+    OfficialDocumentExporter.share(context, uri, "مشاركة المستند القابل للتحرير Word")
 }
 
 @Composable
