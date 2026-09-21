@@ -46,8 +46,8 @@ export const SplashLoginScreen: React.FC<SplashLoginScreenProps> = ({ onLoginSuc
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2, duration: 0.6 }}
           >
-            <h1 className="text-3xl font-black text-slate-900 tracking-tight font-serif">
-              نظام المالية
+            <h1 className="text-2xl font-black text-slate-900 tracking-tight font-serif">
+              نظام المالية لصندوق النظافة الحزم
             </h1>
           </motion.div>
 
