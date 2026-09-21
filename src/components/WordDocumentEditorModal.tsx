@@ -790,10 +790,28 @@ export const WordDocumentEditorModal: React.FC<WordDocumentEditorModalProps> = (
 
           {/* Bold Writing Indicator / Toggle */}
           <div className="flex items-center gap-1 bg-slate-900/80 px-2.5 py-1.5 rounded-xl border border-slate-700">
-            <div className="flex items-center gap-1 text-emerald-400 font-bold">
+            <button
+              type="button"
+              onClick={() =>
+                handleFieldChange(
+                  'customContentHtml',
+                  doc.customContentHtml === 'extra-bold' ? 'bold' : 'extra-bold'
+                )
+              }
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold transition ${
+                doc.customContentHtml === 'extra-bold'
+                  ? 'bg-amber-600 text-white shadow-xs'
+                  : 'bg-emerald-600 text-white shadow-xs'
+              }`}
+              title="انقر للتبديل بين نمط الخط العريض وشديد التغميق"
+            >
               <Bold className="w-3.5 h-3.5" />
-              <span>الخط العريض الرسمي: مفعّل لجميع النصوص</span>
-            </div>
+              <span>
+                {doc.customContentHtml === 'extra-bold'
+                  ? 'الخط: شديد التغميق (Extra-Bold)'
+                  : 'الخط: عريض رسمي (Bold)'}
+              </span>
+            </button>
           </div>
         </div>
       )}

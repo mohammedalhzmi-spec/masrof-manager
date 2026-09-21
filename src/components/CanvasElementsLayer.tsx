@@ -78,10 +78,22 @@ export const CanvasElementsLayer: React.FC<CanvasElementsLayerProps> = ({
 }) => {
   const filteredElements = elements.filter((el) => el.layer === layer);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [resizingInfo, setResizingInfo] = useState<{
+    id: string;
+    handle: 'se' | 'sw' | 'ne' | 'nw';
+    startX: number;
+    startY: number;
+    startW: number;
+    startH: number;
+    startElX: number;
+    startElY: number;
+  } | null>(null);
+
   const dragStartRef = useRef<{ startX: number; startY: number; elX: number; elY: number } | null>(
     null
   );
 
+  // Mouse & Touch Dragging Handlers
   const handleMouseDown = (e: React.MouseEvent, el: CanvasElement) => {
     if (!isEditable) return;
     e.stopPropagation();
@@ -95,30 +107,140 @@ export const CanvasElementsLayer: React.FC<CanvasElementsLayerProps> = ({
     };
   };
 
+  const handleTouchStart = (e: React.TouchEvent, el: CanvasElement) => {
+    if (!isEditable || e.touches.length !== 1) return;
+    e.stopPropagation();
+    const touch = e.touches[0];
+    onSelectElement(el.id);
+    setDraggingId(el.id);
+    dragStartRef.current = {
+      startX: touch.clientX,
+      startY: touch.clientY,
+      elX: el.x,
+      elY: el.y,
+    };
+  };
+
+  // Resize Corner Handle Handlers
+  const handleResizeHandleMouseDown = (
+    e: React.MouseEvent,
+    el: CanvasElement,
+    handle: 'se' | 'sw' | 'ne' | 'nw'
+  ) => {
+    if (!isEditable) return;
+    e.stopPropagation();
+    e.preventDefault();
+    setResizingInfo({
+      id: el.id,
+      handle,
+      startX: e.clientX,
+      startY: e.clientY,
+      startW: el.width,
+      startH: el.height || 60,
+      startElX: el.x,
+      startElY: el.y,
+    });
+  };
+
+  const handleResizeHandleTouchStart = (
+    e: React.TouchEvent,
+    el: CanvasElement,
+    handle: 'se' | 'sw' | 'ne' | 'nw'
+  ) => {
+    if (!isEditable || e.touches.length !== 1) return;
+    e.stopPropagation();
+    const touch = e.touches[0];
+    setResizingInfo({
+      id: el.id,
+      handle,
+      startX: touch.clientX,
+      startY: touch.clientY,
+      startW: el.width,
+      startH: el.height || 60,
+      startElX: el.x,
+      startElY: el.y,
+    });
+  };
+
+  // Movement & Resize Window Event Listeners
   useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!draggingId || !dragStartRef.current) return;
-      const dx = e.clientX - dragStartRef.current.startX;
-      const dy = e.clientY - dragStartRef.current.startY;
-      const newX = Math.max(0, dragStartRef.current.elX + dx);
-      const newY = Math.max(0, dragStartRef.current.elY + dy);
-      onUpdateElement(draggingId, { x: Math.round(newX), y: Math.round(newY) });
+    const handlePointerMove = (clientX: number, clientY: number) => {
+      // 1. Moving Element
+      if (draggingId && dragStartRef.current) {
+        const dx = clientX - dragStartRef.current.startX;
+        const dy = clientY - dragStartRef.current.startY;
+        const newX = Math.max(0, dragStartRef.current.elX + dx);
+        const newY = Math.max(0, dragStartRef.current.elY + dy);
+        onUpdateElement(draggingId, { x: Math.round(newX), y: Math.round(newY) });
+        return;
+      }
+
+      // 2. Resizing Element via Corner Handle
+      if (resizingInfo) {
+        const dx = clientX - resizingInfo.startX;
+        const dy = clientY - resizingInfo.startY;
+
+        let newW = resizingInfo.startW;
+        let newH = resizingInfo.startH;
+        let newX = resizingInfo.startElX;
+        let newY = resizingInfo.startElY;
+
+        if (resizingInfo.handle === 'se') {
+          newW = Math.max(30, resizingInfo.startW + dx);
+          newH = Math.max(20, resizingInfo.startH + dy);
+        } else if (resizingInfo.handle === 'sw') {
+          newW = Math.max(30, resizingInfo.startW - dx);
+          newH = Math.max(20, resizingInfo.startH + dy);
+          newX = Math.max(0, resizingInfo.startElX + dx);
+        } else if (resizingInfo.handle === 'ne') {
+          newW = Math.max(30, resizingInfo.startW + dx);
+          newH = Math.max(20, resizingInfo.startH - dy);
+          newY = Math.max(0, resizingInfo.startElY + dy);
+        } else if (resizingInfo.handle === 'nw') {
+          newW = Math.max(30, resizingInfo.startW - dx);
+          newH = Math.max(20, resizingInfo.startH - dy);
+          newX = Math.max(0, resizingInfo.startElX + dx);
+          newY = Math.max(0, resizingInfo.startElY + dy);
+        }
+
+        onUpdateElement(resizingInfo.id, {
+          width: Math.round(newW),
+          height: Math.round(newH),
+          x: Math.round(newX),
+          y: Math.round(newY),
+        });
+      }
     };
 
-    const handleMouseUp = () => {
+    const onMouseMove = (e: MouseEvent) => {
+      handlePointerMove(e.clientX, e.clientY);
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 1) {
+        handlePointerMove(e.touches[0].clientX, e.touches[0].clientY);
+      }
+    };
+
+    const handlePointerUp = () => {
       setDraggingId(null);
       dragStartRef.current = null;
+      setResizingInfo(null);
     };
 
-    if (draggingId) {
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp);
+    if (draggingId || resizingInfo) {
+      window.addEventListener('mousemove', onMouseMove);
+      window.addEventListener('mouseup', handlePointerUp);
+      window.addEventListener('touchmove', onTouchMove, { passive: false });
+      window.addEventListener('touchend', handlePointerUp);
     }
     return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', handlePointerUp);
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend', handlePointerUp);
     };
-  }, [draggingId, onUpdateElement]);
+  }, [draggingId, resizingInfo, onUpdateElement]);
 
   if (filteredElements.length === 0) return null;
 
@@ -136,6 +258,7 @@ export const CanvasElementsLayer: React.FC<CanvasElementsLayerProps> = ({
             key={el.id}
             id={`canvas-elem-${el.id}`}
             onMouseDown={(e) => handleMouseDown(e, el)}
+            onTouchStart={(e) => handleTouchStart(e, el)}
             style={{
               position: 'absolute',
               left: `${el.x}px`,
@@ -264,6 +387,36 @@ export const CanvasElementsLayer: React.FC<CanvasElementsLayerProps> = ({
               >
                 {getIconComponent(el.iconName || el.content, 'w-full h-full object-contain')}
               </div>
+            )}
+
+            {/* 4 Corner Resize Handles like Microsoft Word */}
+            {isSelected && (
+              <>
+                <div
+                  onMouseDown={(e) => handleResizeHandleMouseDown(e, el, 'ne')}
+                  onTouchStart={(e) => handleResizeHandleTouchStart(e, el, 'ne')}
+                  className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 bg-white border-2 border-blue-600 rounded-full cursor-nesw-resize z-50 shadow-sm hover:scale-125 transition-transform"
+                  title="سحب لتغيير الحجم"
+                />
+                <div
+                  onMouseDown={(e) => handleResizeHandleMouseDown(e, el, 'nw')}
+                  onTouchStart={(e) => handleResizeHandleTouchStart(e, el, 'nw')}
+                  className="absolute -top-1.5 -left-1.5 w-3.5 h-3.5 bg-white border-2 border-blue-600 rounded-full cursor-nwse-resize z-50 shadow-sm hover:scale-125 transition-transform"
+                  title="سحب لتغيير الحجم"
+                />
+                <div
+                  onMouseDown={(e) => handleResizeHandleMouseDown(e, el, 'se')}
+                  onTouchStart={(e) => handleResizeHandleTouchStart(e, el, 'se')}
+                  className="absolute -bottom-1.5 -right-1.5 w-3.5 h-3.5 bg-white border-2 border-blue-600 rounded-full cursor-nwse-resize z-50 shadow-sm hover:scale-125 transition-transform"
+                  title="سحب لتغيير الحجم"
+                />
+                <div
+                  onMouseDown={(e) => handleResizeHandleMouseDown(e, el, 'sw')}
+                  onTouchStart={(e) => handleResizeHandleTouchStart(e, el, 'sw')}
+                  className="absolute -bottom-1.5 -left-1.5 w-3.5 h-3.5 bg-white border-2 border-blue-600 rounded-full cursor-nesw-resize z-50 shadow-sm hover:scale-125 transition-transform"
+                  title="سحب لتغيير الحجم"
+                />
+              </>
             )}
 
             {/* Selection HUD Toolbar when element is actively selected */}

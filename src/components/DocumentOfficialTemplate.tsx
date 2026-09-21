@@ -78,21 +78,25 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
     doc.beneficiaryName
   } | التاريخ: ${doc.dateHijri || doc.dateGregorian}`;
 
+  const isExtraBold = doc.customContentHtml === 'extra-bold';
+  const boldClass = isExtraBold ? 'font-black tracking-wide' : 'font-bold';
+
   return (
     <div
       id={containerId}
-      className={`bg-white text-slate-950 font-['Amiri',serif] mx-auto select-text relative transition-all ${className}`}
+      className={`bg-white text-slate-950 font-['Amiri',serif] ${boldClass} mx-auto select-text relative transition-all ${className}`}
       style={{
         transform: scale !== 1 ? `scale(${scale})` : undefined,
         transformOrigin: 'top center',
         direction: 'rtl',
+        textRendering: 'geometricPrecision',
       }}
     >
       {/* ========================================================================= */}
       {/* TEMPLATE 1: امر صرف (ORDER) - المطابقة الحرفية الكاملة للصورة رقم 3       */}
       {/* ========================================================================= */}
       {isOrder && (
-        <div className={`w-[850px] min-h-[580px] ${getMarginClass()} bg-white ${getBorderClass()} text-black relative flex flex-col justify-between box-border font-bold`}>
+        <div className={`w-[850px] min-h-[580px] ${getMarginClass()} bg-white ${getBorderClass()} text-black relative flex flex-col justify-between box-border ${boldClass}`}>
           {/* Background Canvas Elements (Under Text / Watermarks) */}
           <CanvasElementsLayer
             elements={doc.canvasElements || []}
@@ -357,7 +361,7 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
       {/* TEMPLATE 2: ورقة تقديم طلب (REQUEST) - المطابقة الحرفية للصورة رقم 2     */}
       {/* ========================================================================= */}
       {isRequest && (
-        <div className={`w-[800px] min-h-[960px] ${getMarginClass()} bg-white ${getBorderClass()} text-black relative flex flex-col justify-between box-border font-bold`}>
+        <div className={`w-[800px] min-h-[960px] ${getMarginClass()} bg-white ${getBorderClass()} text-black relative flex flex-col justify-between box-border ${boldClass}`}>
           {/* Background Canvas Elements (Under Text / Watermarks) */}
           <CanvasElementsLayer
             elements={doc.canvasElements || []}
@@ -606,7 +610,7 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
       {/* TEMPLATE 3: ورقة إستلام (RECEIPT) - المطابقة الحرفية الكاملة للصورة رقم 1 */}
       {/* ========================================================================= */}
       {isReceipt && (
-        <div className={`w-[820px] min-h-[920px] ${getMarginClass()} bg-white ${getBorderClass()} text-black relative flex flex-col justify-between box-border font-bold`}>
+        <div className={`w-[820px] min-h-[920px] ${getMarginClass()} bg-white ${getBorderClass()} text-black relative flex flex-col justify-between box-border ${boldClass}`}>
           {/* Background Canvas Elements (Under Text / Watermarks) */}
           <CanvasElementsLayer
             elements={doc.canvasElements || []}

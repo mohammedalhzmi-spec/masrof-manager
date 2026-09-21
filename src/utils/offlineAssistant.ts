@@ -12,6 +12,23 @@ export interface AssistantResponse {
 }
 
 /**
+ * Normalizes Arabic text for uniform, error-free matching
+ * Handles: Hamza variations (أ, إ, آ -> ا), Taa Marbuta (ة -> ه), Yaa/Alef Maksura (ى, ئ -> ي),
+ * strips Tatweel (ـ) and Harakat/Tashkeel.
+ */
+export function normalizeArabic(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[أإآ]/g, 'ا')
+    .replace(/ة/g, 'ه')
+    .replace(/[ىئ]/g, 'ي')
+    .replace(/ؤ/g, 'و')
+    .replace(/[ـ\u0640]/g, '')
+    .replace(/[\u064B-\u065F\u0670]/g, '')
+    .trim();
+}
+
+/**
  * Extracts numbers from Arabic or Eastern Arabic numerals or Arabic words (ألف، مليون، مائة...)
  */
 export function extractAmountFromArabicText(text: string): number | null {
@@ -66,13 +83,28 @@ export function processOfflineAssistantCommand(
   }
 
   const updated: Document = JSON.parse(JSON.stringify(currentDoc));
+  const norm = normalizeArabic(cleanPrompt);
   const lower = cleanPrompt.toLowerCase();
 
-  // 1. Amount Command (تعديل المبلغ والتفقيط)
+  // 1. Bold Typography Command (الخط العريض والكتابة العريضة)
   if (
-    /مبلغ|المبلغ|ريال|فلوس|قيمة|صرف مبلغ|ادخل مبلغ|غير المبلغ|اجعل المبلغ|عدل المبلغ/.test(
-      lower
-    ) ||
+    /عريض|عريضه|الخط عريض|الكتابه عريض|تغميق|تغليظ|بولد|bold|تكبير الخط|خط عريض/.test(norm) ||
+    /عريض/.test(lower)
+  ) {
+    updated.customContentHtml = 'extra-bold';
+    return {
+      success: true,
+      message:
+        'تم تفعيل نمط الخط العريض الحكومي الرسمي لجميع نصوص المستند، الجداول، المبالغ والتفقيط بأعلى درجة وضوح وتباين!',
+      updatedDoc: updated,
+      actionTaken: 'SET_BOLD_TYPOGRAPHY',
+      suggestedPrompts: ['هوامش ضيقة', 'إضافة ختم رسمي', 'حفظ وطباعة'],
+    };
+  }
+
+  // 2. Amount Command (تعديل المبلغ والتفقيط)
+  if (
+    /مبلغ|المبلغ|ريال|فلوس|قيمه|صرف مبلغ|ادخل مبلغ|غير المبلغ|اجعل المبلغ|عدل المبلغ/.test(norm) ||
     /(\d{3,})/.test(cleanPrompt)
   ) {
     const amount = extractAmountFromArabicText(cleanPrompt);
@@ -95,11 +127,121 @@ export function processOfflineAssistantCommand(
     }
   }
 
-  // 2. Beneficiary Command (المستفيد / الأخ / وه)
-  if (/مستفيد|المستفيد|للأخ|للاخ|للأخت|للاخت|لصالح|اسم الشخص|ادفع ل|اصرف ل/.test(lower)) {
+  // 3. Template Switcher (تغيير نوع القالب)
+  if (/قالب|نموذج|نوع المستند|تحويل الى|حول الى/.test(norm) || /امر صرف|ورقه استلام|ورقه تقديم طلب/.test(norm)) {
+    if (/طلب|تقديم طلب|ورقه طلب/.test(norm)) {
+      updated.type = 'REQUEST';
+      return {
+        success: true,
+        message: 'تم تحويل قالب المستند إلى «ورقة تقديم طلب (طولي)» مع التنسيقات والأسطر الرسمية.',
+        updatedDoc: updated,
+        actionTaken: 'SET_TEMPLATE_REQUEST',
+      };
+    }
+    if (/استلام|سند استلام|ورقه استلام/.test(norm)) {
+      updated.type = 'RECEIPT';
+      return {
+        success: true,
+        message: 'تم تحويل قالب المستند إلى «ورقة إستلام (طولي)» مع حقول الوظيفة ومستحقات الشهر.',
+        updatedDoc: updated,
+        actionTaken: 'SET_TEMPLATE_RECEIPT',
+      };
+    }
+    if (/صرف|امر صرف/.test(norm)) {
+      updated.type = 'ORDER';
+      return {
+        success: true,
+        message: 'تم تحويل قالب المستند إلى «أمر صرف (عرضي)» وفقاً للنموذج المعتمد رسمياً.',
+        updatedDoc: updated,
+        actionTaken: 'SET_TEMPLATE_ORDER',
+      };
+    }
+  }
+
+  // 4. Margins Command (الهوامش)
+  if (/هامش|هوامش|الهوامش/.test(norm)) {
+    if (/ضيق|صغير|ضيقه/.test(norm)) {
+      updated.pageMargins = 'narrow';
+      updated.customMarginPx = 12;
+      return {
+        success: true,
+        message: 'تم ضبط هوامش الورقة إلى (ضيقة - 12px) لتوسيع مساحة الكتابة إلى أقصى حد.',
+        updatedDoc: updated,
+        actionTaken: 'SET_MARGINS_NARROW',
+      };
+    }
+    if (/عريض|كبير|واسع|عريضه/.test(norm)) {
+      updated.pageMargins = 'wide';
+      updated.customMarginPx = 36;
+      return {
+        success: true,
+        message: 'تم ضبط هوامش الورقة إلى (عريضة - 36px) لتنسيق رسمي رحب.',
+        updatedDoc: updated,
+        actionTaken: 'SET_MARGINS_WIDE',
+      };
+    }
+    updated.pageMargins = 'normal';
+    updated.customMarginPx = 24;
+    return {
+      success: true,
+      message: 'تم إعادة ضبط هوامش الورقة إلى النمط القياسي المتوازن (عادي - 24px).',
+      updatedDoc: updated,
+      actionTaken: 'SET_MARGINS_NORMAL',
+    };
+  }
+
+  // 5. Border Style Command (إطار المستند)
+  if (/اطار|برواز|حدود المستند|حاشيه/.test(norm)) {
+    if (/ذهبي/.test(norm)) {
+      updated.borderStyle = 'gold';
+      return {
+        success: true,
+        message: 'تم تطبيق الإطار الذهبي المعتمد على المستند.',
+        updatedDoc: updated,
+        actionTaken: 'SET_BORDER_GOLD',
+      };
+    }
+    if (/مزدوج|دبل/.test(norm)) {
+      updated.borderStyle = 'double';
+      return {
+        success: true,
+        message: 'تم تطبيق الإطار المزدوج على المستند.',
+        updatedDoc: updated,
+        actionTaken: 'SET_BORDER_DOUBLE',
+      };
+    }
+    if (/اسلامي|زخرفي/.test(norm)) {
+      updated.borderStyle = 'islamic';
+      return {
+        success: true,
+        message: 'تم تطبيق الإطار الإسلامي الزخرفي على المستند.',
+        updatedDoc: updated,
+        actionTaken: 'SET_BORDER_ISLAMIC',
+      };
+    }
+    if (/بسيط|ناعم/.test(norm)) {
+      updated.borderStyle = 'simple';
+      return {
+        success: true,
+        message: 'تم تطبيق الإطار البسيط على المستند.',
+        updatedDoc: updated,
+        actionTaken: 'SET_BORDER_SIMPLE',
+      };
+    }
+    updated.borderStyle = 'classic';
+    return {
+      success: true,
+      message: 'تم تطبيق الإطار الرسمي الكلاسيكي على المستند.',
+      updatedDoc: updated,
+      actionTaken: 'SET_BORDER_CLASSIC',
+    };
+  }
+
+  // 6. Beneficiary Command (المستفيد / الأخ / وه)
+  if (/مستفيد|المستفيد|للاخ|للاخت|لصالح|اسم الشخص|ادفع ل|اصرف ل|المستلم/.test(norm)) {
     let name = cleanPrompt
       .replace(
-        /^(غير|اجعل|عدل|بدل|ضع|اكتب|اسم)?\s*(المستفيد|مستفيد|للأخ|للاخ|للأخت|للاخت|لصالح|اصرف لـ?|ادفع لـ?)\s*(هو|إلى|الى|:)?\s*/i,
+        /^(غير|اجعل|عدل|بدل|ضع|اكتب|اسم)?\s*(المستفيد|مستفيد|للأخ|للاخ|للأخت|للاخت|المستلم|لصالح|اصرف لـ?|ادفع لـ?)\s*(هو|إلى|الى|:)?\s*/i,
         ''
       )
       .trim();
@@ -115,8 +257,8 @@ export function processOfflineAssistantCommand(
     }
   }
 
-  // 3. Purpose / Reason Command (الغرض / المقابل)
-  if (/غرض|الغرض|مقابل|السبب|وذالك مقابل|وذلك مقابل|بشأن|شراء|قيمة/.test(lower)) {
+  // 7. Purpose / Reason Command (الغرض / المقابل)
+  if (/غرض|الغرض|مقابل|السبب|وذالك مقابل|وذلك مقابل|بشان|شراء|قيمه/.test(norm)) {
     let purpose = cleanPrompt
       .replace(
         /^(غير|اجعل|عدل|بدل|ضع|اكتب)?\s*(الغرض|غرض|مقابل|وذالك مقابل|وذلك مقابل|السبب)\s*(هو|إلى|الى|:)?\s*/i,
@@ -135,8 +277,216 @@ export function processOfflineAssistantCommand(
     }
   }
 
-  // 4. Details Command (التفاصيل)
-  if (/تفاصيل|التفاصيل|بيان|البيان|شرح/.test(lower)) {
+  // 8. Add Watermark / Background Image Command (علامة مائية خلف النص)
+  if (/علامه مائيه|خلف النص|watermark|ختم مائي|صوره خلف النص/.test(norm)) {
+    const watermark: CanvasElement = {
+      id: `elem-${Date.now()}`,
+      type: 'shape',
+      shapeType: 'circle',
+      x: 320,
+      y: 200,
+      width: 200,
+      height: 200,
+      content: 'صندوق النظافة - معتمد',
+      layer: 'background',
+      opacity: 0.18,
+      fontSize: 16,
+      isBold: true,
+      color: '#0369a1',
+      backgroundColor: 'transparent',
+      borderColor: '#0284c7',
+      borderWidth: 3,
+      borderStyle: 'dashed',
+      borderRadius: 100,
+    };
+    const elements = updated.canvasElements || [];
+    updated.canvasElements = [...elements, watermark];
+    return {
+      success: true,
+      message: 'تمت إضافة علامة مائية رسمية خلف النص بشفافية مريحة لا تعيق قراءة المستند، مع إمكانية تحريكها وتعديل حجمها بحرية.',
+      updatedDoc: updated,
+      newElement: watermark,
+      actionTaken: 'ADD_WATERMARK',
+    };
+  }
+
+  // 9. Add Text Box Command (إدراج مربع نص)
+  if (/مربع نص|مربع|صندوق نص|textbox|اضف نص|ملاحظه اداريه|مربع ملاحظات/.test(norm)) {
+    const newBox: CanvasElement = {
+      id: `elem-${Date.now()}`,
+      type: 'textbox',
+      x: 80,
+      y: 180,
+      width: 240,
+      height: 90,
+      content: 'ملاحظة إدارية: يتم المراجعة والتنفيذ وفقاً للوائح الصرف المعتمدة.',
+      layer: 'foreground',
+      opacity: 1,
+      fontSize: 13,
+      isBold: true,
+      color: '#0f172a',
+      backgroundColor: '#f8fafc',
+      borderColor: '#0284c7',
+      borderWidth: 1.5,
+      borderStyle: 'solid',
+      borderRadius: 8,
+    };
+    const elements = updated.canvasElements || [];
+    updated.canvasElements = [...elements, newBox];
+    return {
+      success: true,
+      message: 'تم إدراج مربع نص جديد على الورقة! يمكنك سحبه، تغيير مكانه، تكبيره وتصغيره وتعديل نصه بحرية.',
+      updatedDoc: updated,
+      newElement: newBox,
+      actionTaken: 'ADD_TEXTBOX',
+    };
+  }
+
+  // 10. Add Shape Command (إدراج شكل هندسي)
+  if (/شكل|مستطيل|دائري الحواف|شريط عنوان|خط فاصل/.test(norm)) {
+    let shapeType: 'rectangle' | 'rounded' | 'banner' | 'divider' = 'rectangle';
+    let w = 220;
+    let h = 50;
+    let content = 'شريط اعتمادي';
+    if (/شريط/.test(norm)) {
+      shapeType = 'banner';
+      w = 300;
+      h = 36;
+      content = '★ وثيقة مالية رسمية معتمدة ★';
+    } else if (/فاصل|خط/.test(norm)) {
+      shapeType = 'divider';
+      w = 350;
+      h = 4;
+      content = '';
+    } else if (/دائري/.test(norm)) {
+      shapeType = 'rounded';
+      w = 180;
+      h = 60;
+      content = 'معتمد من الإدارة';
+    }
+
+    const shapeElem: CanvasElement = {
+      id: `elem-${Date.now()}`,
+      type: 'shape',
+      shapeType,
+      x: 250,
+      y: 160,
+      width: w,
+      height: h,
+      content,
+      layer: 'foreground',
+      opacity: 1,
+      fontSize: 12,
+      isBold: true,
+      color: '#1e293b',
+      backgroundColor: shapeType === 'divider' ? '#0284c7' : '#f1f5f9',
+      borderColor: '#0284c7',
+      borderWidth: 1.5,
+      borderStyle: 'solid',
+      borderRadius: shapeType === 'rounded' ? 12 : 4,
+    };
+
+    const elements = updated.canvasElements || [];
+    updated.canvasElements = [...elements, shapeElem];
+    return {
+      success: true,
+      message: `تم إدراج شكل (${shapeType === 'banner' ? 'شريط عنوان' : shapeType === 'divider' ? 'خط فاصل' : 'مستطيل'}) على الورقة بنجاح! يمكنك تحريكه وتغيير حجمه بالسحب.`,
+      updatedDoc: updated,
+      newElement: shapeElem,
+      actionTaken: 'ADD_SHAPE',
+    };
+  }
+
+  // 11. Add Icon Command (إدراج أيقونة)
+  if (/ايقونه|أيقونة|ايقونة ختم|ايقونة درع|ايقونة عملات|ايقونة اداره|ايقونة بنك|ايقونة هاتف/.test(norm)) {
+    let iconName = 'stamp';
+    if (/درع/.test(norm)) iconName = 'shield';
+    else if (/عملات|نقود/.test(norm)) iconName = 'coins';
+    else if (/اداره|بنك|مبني/.test(norm)) iconName = 'building';
+    else if (/هاتف/.test(norm)) iconName = 'phone';
+
+    const iconElem: CanvasElement = {
+      id: `elem-${Date.now()}`,
+      type: 'icon',
+      iconName,
+      x: 100,
+      y: 120,
+      width: 55,
+      height: 55,
+      content: iconName,
+      layer: 'foreground',
+      opacity: 1,
+      color: '#0284c7',
+      backgroundColor: 'transparent',
+    };
+
+    const elements = updated.canvasElements || [];
+    updated.canvasElements = [...elements, iconElem];
+    return {
+      success: true,
+      message: `تم إدراج أيقونة (${iconName}) على المستند! يمكنك سحبها، تصغيرها وتكبيرها عبر مقابض التحجيم.`,
+      updatedDoc: updated,
+      newElement: iconElem,
+      actionTaken: 'ADD_ICON',
+    };
+  }
+
+  // 12. Add Currency Symbol ﷼ or other symbols (إدراج رمز)
+  if (/رمز|ريال|رمز الريال|علامه|نجمه|ميزان|صح/.test(norm)) {
+    let symbol = '﷼';
+    let col = '#15803d';
+    if (/نجمه/.test(norm)) {
+      symbol = '★';
+      col = '#d97706';
+    } else if (/ميزان|عدل/.test(norm)) {
+      symbol = '⚖';
+      col = '#0284c7';
+    } else if (/صح/.test(norm)) {
+      symbol = '✔';
+      col = '#16a34a';
+    }
+
+    const symbolElem: CanvasElement = {
+      id: `elem-${Date.now()}`,
+      type: 'symbol',
+      x: 550,
+      y: 195,
+      width: 50,
+      height: 40,
+      content: symbol,
+      layer: 'foreground',
+      opacity: 1,
+      fontSize: 26,
+      isBold: true,
+      color: col,
+      backgroundColor: 'transparent',
+      borderWidth: 0,
+      borderStyle: 'none',
+    };
+    const elements = updated.canvasElements || [];
+    updated.canvasElements = [...elements, symbolElem];
+    return {
+      success: true,
+      message: `تم إدراج الرمز (${symbol}) على الورقة بنجاح.`,
+      updatedDoc: updated,
+      newElement: symbolElem,
+      actionTaken: 'ADD_SYMBOL',
+    };
+  }
+
+  // 13. Remove / Clear Canvas Elements (حذف العناصر أو العلامة المائية)
+  if (/احذف العناصر|مسح العناصر|احذف العلامه المائيه|حذف الصور|تفريغ العناصر/.test(norm)) {
+    updated.canvasElements = [];
+    return {
+      success: true,
+      message: 'تم حذف وتفريغ جميع العناصر الإضافية والصور والعلامات المائية من الورقة بنجاح.',
+      updatedDoc: updated,
+      actionTaken: 'CLEAR_CANVAS_ELEMENTS',
+    };
+  }
+
+  // 14. Details Command (التفاصيل والبنود)
+  if (/تفاصيل|التفاصيل|بيان|البيان|شرح/.test(norm)) {
     let details = cleanPrompt
       .replace(/^(غير|اجعل|عدل|أضف|اضف|اكتب)?\s*(التفاصيل|تفاصيل|البيان|شرح)\s*(هو|إلى|الى|:)?\s*/i, '')
       .trim();
@@ -151,9 +501,9 @@ export function processOfflineAssistantCommand(
     }
   }
 
-  // 5. Notes Command (الملاحظات)
-  if (/ملاحظة|ملاحظات|الملاحظات|تنبيه|ملحوظة/.test(lower)) {
-    if (/امسح|احذف|تفريغ|ازالة/.test(lower)) {
+  // 15. Notes Command (الملاحظات)
+  if (/ملاحظه|ملاحظات|الملاحظات|تنبيه|ملحوظه/.test(norm)) {
+    if (/امسح|احذف|تفريغ|ازاله/.test(norm)) {
       updated.notes = '';
       return {
         success: true,
@@ -179,55 +529,46 @@ export function processOfflineAssistantCommand(
     }
   }
 
-  // 6. Bold Typography Command (الخط العريض والكتابة العريضة)
-  if (/عريض|الخط عريض|الكتابة عريض|تغميق|بولد|bold|تكبير الخط|خط عريض/.test(lower)) {
-    updated.customContentHtml = 'extra-bold';
-    return {
-      success: true,
-      message:
-        'تم تفعيل نمط الخط العريض الحكومي الرسمي لجميع نصوص المستند، الجداول، المبالغ والتفقيط بأعلى درجة وضوح وتباين!',
-      updatedDoc: updated,
-      actionTaken: 'SET_BOLD_TYPOGRAPHY',
-      suggestedPrompts: ['هوامش ضيقة', 'إضافة ختم رسمي', 'حفظ وطباعة'],
-    };
-  }
-
-  // 7. Margins Command (الهوامش)
-  if (/هامش|هوامش|الهوامش|هوامش ضيقة|هوامش عريضة|هوامش عادية/.test(lower)) {
-    if (/ضيق|صغير|ضيقة/.test(lower)) {
-      updated.pageMargins = 'narrow';
-      updated.customMarginPx = 12;
+  // 16. Signers & Officials (المسؤولين والتواقيع)
+  if (/مدير الفرع|رياض احمد محمد|المدير المالي|امين الصندوق|مقدم الطلب/.test(norm)) {
+    if (/رياض/.test(norm) || /مدير الفرع/.test(norm)) {
+      updated.managerName = 'رياض احمد محمد';
       return {
         success: true,
-        message: 'تم ضبط هوامش الورقة إلى (ضيقة - 12px) لتوسيع مساحة الكتابة إلى أقصى حد.',
+        message: 'تم تثبيت اسم مدير فرع صندوق النظافة: «رياض احمد محمد».',
         updatedDoc: updated,
-        actionTaken: 'SET_MARGINS_NARROW',
+        actionTaken: 'UPDATE_MANAGER_NAME',
       };
     }
-    if (/عريض|كبير|واسع|عريضة/.test(lower)) {
-      updated.pageMargins = 'wide';
-      updated.customMarginPx = 36;
-      return {
-        success: true,
-        message: 'تم ضبط هوامش الورقة إلى (عريضة - 36px) لتنسيق رسمي رحب.',
-        updatedDoc: updated,
-        actionTaken: 'SET_MARGINS_WIDE',
-      };
+    if (/المالي/.test(norm)) {
+      const match = cleanPrompt.match(/(?:المدير المالي|المالي)\s*(?:هو|:)?\s*([^\s,]+(?:\s+[^\s,]+){1,3})/);
+      if (match) {
+        updated.financeManagerName = match[1].trim();
+        return {
+          success: true,
+          message: `تم تحديث اسم المدير المالي إلى: «${updated.financeManagerName}».`,
+          updatedDoc: updated,
+          actionTaken: 'UPDATE_FINANCE_MANAGER',
+        };
+      }
     }
-    updated.pageMargins = 'normal';
-    updated.customMarginPx = 24;
-    return {
-      success: true,
-      message: 'تم إعادة ضبط هوامش الورقة إلى النمط القياسي المتوازن (عادي - 24px).',
-      updatedDoc: updated,
-      actionTaken: 'SET_MARGINS_NORMAL',
-    };
+    if (/امين الصندوق/.test(norm)) {
+      const match = cleanPrompt.match(/(?:امين الصندوق|أمين الصندوق)\s*(?:هو|:)?\s*([^\s,]+(?:\s+[^\s,]+){1,3})/);
+      if (match) {
+        updated.treasurerName = match[1].trim();
+        return {
+          success: true,
+          message: `تم تحديث اسم أمين الصندوق إلى: «${updated.treasurerName}».`,
+          updatedDoc: updated,
+          actionTaken: 'UPDATE_TREASURER',
+        };
+      }
+    }
   }
 
-  // 8. Tags Command (الوسوم والتصنيفات)
-  if (/وسم|وسوم|تاق|tag|تصنيف/.test(lower)) {
-    if (/احذف|ازالة|مسح|حذف/.test(lower)) {
-      // remove tag
+  // 17. Tags Command (الوسوم والتصنيفات)
+  if (/وسم|وسوم|تاق|tag|تصنيف/.test(norm)) {
+    if (/احذف|ازاله|مسح|حذف/.test(norm)) {
       const tagMatch = cleanPrompt.match(/(?:احذف|حذف|ازالة|مسح)\s*(?:وسم|الوسم)?\s*([^\s,]+)/);
       const tagToRemove = tagMatch ? tagMatch[1].replace(/^#+/, '') : '';
       if (tagToRemove && updated.tags) {
@@ -265,8 +606,8 @@ export function processOfflineAssistantCommand(
     }
   }
 
-  // 9. Document Number Command (رقم المستند)
-  if (/رقم|رقم المستند|الرقم|no|كود/.test(lower)) {
+  // 18. Document Number Command (رقم المستند)
+  if (/رقم|رقم المستند|الرقم|no|كود/.test(norm)) {
     const numMatch = cleanPrompt.match(/(\d+)/);
     if (numMatch) {
       updated.documentNumber = numMatch[1].padStart(4, '0');
@@ -279,9 +620,9 @@ export function processOfflineAssistantCommand(
     }
   }
 
-  // 10. Dates Command (التواريخ)
-  if (/تاريخ|اليوم|تاريخ اليوم|الهجري|الميلادي/.test(lower)) {
-    if (/اليوم|الآن|الحالي/.test(lower)) {
+  // 19. Dates Command (التواريخ)
+  if (/تاريخ|اليوم|تاريخ اليوم|الهجري|الميلادي/.test(norm)) {
+    if (/اليوم|الان|الحالي/.test(norm)) {
       updated.dateHijri = getCurrentHijriDate();
       updated.dateGregorian = getCurrentGregorianDate();
       return {
@@ -293,8 +634,8 @@ export function processOfflineAssistantCommand(
     }
   }
 
-  // 11. Attachments Command (المرفقات)
-  if (/مرفق|مرفقات|عدد المرفقات/.test(lower)) {
+  // 20. Attachments Command (المرفقات)
+  if (/مرفق|مرفقات|عدد المرفقات/.test(norm)) {
     const countMatch = cleanPrompt.match(/(\d+)/);
     if (countMatch) {
       updated.attachmentsCount = parseInt(countMatch[1], 10);
@@ -307,104 +648,9 @@ export function processOfflineAssistantCommand(
     }
   }
 
-  // 12. Add Text Box Command (إدراج مربع نص)
-  if (/مربع نص|مربع|صندوق نص|textbox|اضف نص|ملاحظة إدارية/.test(lower)) {
-    const newBox: CanvasElement = {
-      id: `elem-${Date.now()}`,
-      type: 'textbox',
-      x: 80,
-      y: 180,
-      width: 240,
-      height: 90,
-      content: 'ملاحظة إدارية: يتم المراجعة والتنفيذ وفقاً للوائح الصرف المعتمدة.',
-      layer: 'foreground',
-      opacity: 1,
-      fontSize: 13,
-      isBold: true,
-      color: '#0f172a',
-      backgroundColor: '#f8fafc',
-      borderColor: '#0284c7',
-      borderWidth: 1.5,
-      borderStyle: 'solid',
-      borderRadius: 8,
-    };
-    const elements = updated.canvasElements || [];
-    updated.canvasElements = [...elements, newBox];
-    return {
-      success: true,
-      message: 'تم إدراج مربع نص جديد على الورقة! يمكنك سحبه، تغيير مكانه، وتعديل نصه بحرية.',
-      updatedDoc: updated,
-      newElement: newBox,
-      actionTaken: 'ADD_TEXTBOX',
-    };
-  }
-
-  // 13. Add Watermark / Background Image Command (علامة مائية خلف النص)
-  if (/علامة مائية|خلف النص|watermark|ختم مائي/.test(lower)) {
-    const watermark: CanvasElement = {
-      id: `elem-${Date.now()}`,
-      type: 'shape',
-      shapeType: 'circle',
-      x: 320,
-      y: 200,
-      width: 200,
-      height: 200,
-      content: 'صندوق النظافة - معتمد',
-      layer: 'background',
-      opacity: 0.15,
-      fontSize: 16,
-      isBold: true,
-      color: '#0369a1',
-      backgroundColor: 'transparent',
-      borderColor: '#0284c7',
-      borderWidth: 3,
-      borderStyle: 'dashed',
-      borderRadius: 100,
-    };
-    const elements = updated.canvasElements || [];
-    updated.canvasElements = [...elements, watermark];
-    return {
-      success: true,
-      message: 'تمت إضافة علامة مائية رسمية خلف النص بشفافية مريحة لا تعيق قراءة المستند.',
-      updatedDoc: updated,
-      newElement: watermark,
-      actionTaken: 'ADD_WATERMARK',
-    };
-  }
-
-  // 14. Add Currency Symbol ﷼ (رمز الريال)
-  if (/رمز|ريال|رمز الريال|علامة/.test(lower)) {
-    const symbolElem: CanvasElement = {
-      id: `elem-${Date.now()}`,
-      type: 'symbol',
-      x: 550,
-      y: 195,
-      width: 50,
-      height: 40,
-      content: '﷼',
-      layer: 'foreground',
-      opacity: 1,
-      fontSize: 26,
-      isBold: true,
-      color: '#15803d',
-      backgroundColor: 'transparent',
-      borderWidth: 0,
-      borderStyle: 'none',
-    };
-    const elements = updated.canvasElements || [];
-    updated.canvasElements = [...elements, symbolElem];
-    return {
-      success: true,
-      message: 'تم إدراج رمز العملة الرسمية (﷼) على الورقة بنجاح.',
-      updatedDoc: updated,
-      newElement: symbolElem,
-      actionTaken: 'ADD_SYMBOL',
-    };
-  }
-
-  // 15. Status / Approval Command (الاعتماد والصرف)
-  if (/اعتمد|اعتماد|موافقة|صرف|تم الصرف|مدفوع/.test(lower)) {
-    if (/مدفوع|تم الصرف|تم الدفع/.test(lower)) {
+  // 21. Status / Approval Command (الاعتماد والصرف)
+  if (/اعتمد|اعتماد|موافقه|صرف|تم الصرف|مدفوع/.test(norm)) {
+    if (/مدفوع|تم الصرف|تم الدفع/.test(norm)) {
       updated.status = 'PAID';
       return {
         success: true,
@@ -436,7 +682,7 @@ export function processOfflineAssistantCommand(
 
   return {
     success: false,
-    message: 'لم يتم التعرف على الأمر بدقة. جرب كتابة: «عدل المبلغ إلى 200 ألف» أو «غير المستفيد إلى فلان» أو «اجعل الخط عريضاً».',
+    message: 'لم يتم التعرف على الأمر بدقة. جرب كتابة: «اجعل الكتابة عريض» أو «عدل المبلغ إلى 200 ألف» أو «أضف علامة مائية» أو «هوامش ضيقة».',
     updatedDoc: currentDoc,
     actionTaken: 'UNKNOWN',
   };
