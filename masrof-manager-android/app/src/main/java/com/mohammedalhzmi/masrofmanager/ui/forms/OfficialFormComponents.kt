@@ -52,6 +52,12 @@ fun OfficialField(value: String, label: String, onValueChange: (String) -> Unit,
 }
 
 @Composable
+fun OfficialTags(value: String, onValueChange: (String) -> Unit) {
+    OfficialField(value, "الوسوم — افصل بينها بفاصلة أو اضغط Enter", { input -> onValueChange(input.replace("\n", ",")) })
+    Text("وسوم مقترحة: كهرباء، صيانة، رواتب، وقود ومحروقات، قطع غيار", style = MaterialTheme.typography.labelSmall, color = Color(0xff8a651d))
+}
+
+@Composable
 fun OfficialDates(
     hijri: String, gregorian: String,
     onHijri: (String) -> Unit, onGregorian: (String) -> Unit

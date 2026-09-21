@@ -26,6 +26,7 @@ fun DashboardScreen(viewModel: MasrofViewModel, onAddDocument: () -> Unit, onPri
     var selectedIds by remember { mutableStateOf(setOf<Long>()) }
     var query by remember { mutableStateOf("") }
     var showArchive by remember { mutableStateOf(false) }
+    var selectedTag by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     val role = RolePreferences.currentRole(context)
     val canSettings = RolePreferences.can(context, AppPermission.SETTINGS)
@@ -54,6 +55,17 @@ fun DashboardScreen(viewModel: MasrofViewModel, onAddDocument: () -> Unit, onPri
             FilterChip(selected = !showArchive, onClick = { showArchive = false; selectedIds = emptySet() }, label = { Text("المستندات الحالية (${documents.size})") })
             FilterChip(selected = showArchive, onClick = { showArchive = true; selectedIds = emptySet() }, label = { Text("الأرشيف (${archivedDocuments.size})") })
         }
+        val sourceForTags = if (showArchive) archivedDocuments else documents
+        val tagCounts = sourceForTags.flatMap { it.tags.split(",").map(String::trim).filter(String::isNotBlank) }.groupingBy { it }.eachCount()
+        val quickTags = listOf("كهرباء", "صيانة", "رواتب", "وقود ومحروقات", "قطع غيار")
+        Text("الوسوم والتصنيف", style = MaterialTheme.typography.titleSmall)
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            FilterChip(selected = selectedTag == null, onClick = { selectedTag = null }, label = { Text("الكل (${sourceForTags.size})") })
+            tagCounts.toList().sortedByDescending { it.second }.forEach { (tag, count) -> FilterChip(selected = selectedTag == tag, onClick = { selectedTag = if (selectedTag == tag) null else tag }, label = { Text("$tag ($count)") }) }
+        }
+        var customTag by remember { mutableStateOf("") }
+        OutlinedTextField(value = customTag, onValueChange = { value -> if (value.endsWith("\n")) { val tag = value.trim(); if (tag.isNotBlank()) selectedTag = tag; customTag = "" } else customTag = value }, modifier = Modifier.fillMaxWidth(), singleLine = true, label = { Text("أدخل وسمًا ثم اضغط Enter") })
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) { quickTags.forEach { tag -> AssistChip(onClick = { selectedTag = tag }, label = { Text(tag) }) } }
         Spacer(modifier = Modifier.height(8.dp))
         if (canBackup) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -70,14 +82,15 @@ fun DashboardScreen(viewModel: MasrofViewModel, onAddDocument: () -> Unit, onPri
         val sourceDocuments = if (showArchive) archivedDocuments else documents
         val normalizedQuery = query.trim().lowercase()
         val visibleDocuments = sourceDocuments.filter { doc ->
-            normalizedQuery.isBlank() || listOf(doc.documentNumber, doc.dateHijri, doc.dateGregorian, doc.beneficiaryName.orEmpty(), documentTitle(doc.type)).any { it.lowercase().contains(normalizedQuery) }
+            (selectedTag == null || doc.tags.split(",").map(String::trim).contains(selectedTag)) &&
+            (normalizedQuery.isBlank() || listOf(doc.documentNumber, doc.dateHijri, doc.dateGregorian, doc.beneficiaryName.orEmpty(), documentTitle(doc.type), doc.tags).any { it.lowercase().contains(normalizedQuery) })
         }
         LazyColumn(modifier = Modifier.weight(1f)) {
             items(visibleDocuments, key = { it.id }) { doc ->
                 Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                     Row(modifier = Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(selectedIds.contains(doc.id), { checked -> selectedIds = if (checked) selectedIds + doc.id else selectedIds - doc.id })
-                        Column(modifier = Modifier.weight(1f)) { Text("${documentTitle(doc.type)} — ${doc.documentNumber}", style = MaterialTheme.typography.titleMedium); Text(doc.beneficiaryName.orEmpty()); if (doc.amount != null) Text("${doc.amount} ريال") }
+                        Column(modifier = Modifier.weight(1f)) { Text("${documentTitle(doc.type)} — ${doc.documentNumber}", style = MaterialTheme.typography.titleMedium); Text(doc.beneficiaryName.orEmpty()); if (doc.amount != null) Text("${doc.amount} ريال"); if (doc.tags.isNotBlank()) Text("وسوم: ${doc.tags}", style = MaterialTheme.typography.labelSmall) }
                         if (showArchive) TextButton(onClick = { viewModel.restoreDocument(doc) }) { Text("استعادة") }
                         else if (canEdit) TextButton(onClick = { onEdit("${doc.type.name.lowercase()}:${doc.id}") }) { Text("تعديل") }
                     }

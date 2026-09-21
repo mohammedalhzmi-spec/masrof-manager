@@ -10,7 +10,7 @@ data class Document(
     val amount: Double?, val amountWords: String?, val beneficiaryName: String?, val purpose: String?,
     val details: String?, val notes: String?, val status: DocumentStatus, val attachmentsCount: Int = 0,
     val createdAt: Long = System.currentTimeMillis(), val isArchived: Boolean = false, val archivedAt: Long? = null,
-    val updatedAt: Long = createdAt
+    val updatedAt: Long = createdAt, val tags: String = ""
 )
 
 @Entity(tableName = "organization_profile")

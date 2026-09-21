@@ -17,6 +17,7 @@ fun RequestFormScreen(viewModel: MasrofViewModel, onNavigateBack: () -> Unit, ex
     var details by remember(existing?.id) { mutableStateOf(existing?.details ?: FormMemory.read(context, "request", "details")) }
     var hijri by remember(existing?.id) { mutableStateOf(existing?.dateHijri.orEmpty()) }
     var gregorian by remember(existing?.id) { mutableStateOf(existing?.dateGregorian.orEmpty()) }
+    var tags by remember(existing?.id) { mutableStateOf(existing?.tags.orEmpty()) }
     val automaticNumber = DocumentNumbering.next(context, DocumentType.REQUEST).toString().padStart(4, '0')
     OfficialFormShell(if (existing == null) "ورقة تقديم طلب جديدة" else "تعديل ورقة تقديم طلب") {
         OfficialDates(hijri, gregorian, { hijri = it }, { gregorian = it })
@@ -25,8 +26,9 @@ fun RequestFormScreen(viewModel: MasrofViewModel, onNavigateBack: () -> Unit, ex
         OfficialField(requester, "اسم مقدم الطلب", { requester = it })
         OfficialField(details, "تفاصيل الطلب", { details = it }, 6)
         OfficialField(existing?.notes.orEmpty(), "المرفقات / رقم النموذج", { })
+        OfficialTags(tags, { tags = it })
         SaveOfficialButton(if (existing == null) "حفظ ورقة التقديم الرسمية" else "حفظ التعديلات") {
-            val value = Document(existing?.id ?: 0, DocumentType.REQUEST, existing?.documentNumber ?: automaticNumber, hijri, gregorian, null, null, requester, directedTo, details, existing?.notes, DocumentStatus.SUBMITTED, existing?.attachmentsCount ?: 0, existing?.createdAt ?: System.currentTimeMillis())
+            val value = Document(id = existing?.id ?: 0, type = DocumentType.REQUEST, documentNumber = existing?.documentNumber ?: automaticNumber, dateHijri = hijri, dateGregorian = gregorian, amount = null, amountWords = null, beneficiaryName = requester, purpose = directedTo, details = details, notes = existing?.notes, status = DocumentStatus.SUBMITTED, attachmentsCount = existing?.attachmentsCount ?: 0, createdAt = existing?.createdAt ?: System.currentTimeMillis(), isArchived = existing?.isArchived ?: false, archivedAt = existing?.archivedAt, updatedAt = System.currentTimeMillis(), tags = tags.split(",").map(String::trim).filter(String::isNotBlank).distinct().joinToString(","))
             if (existing == null) viewModel.addDocument(value) else viewModel.updateDocument(value)
             if (existing == null) DocumentNumbering.consume(context, DocumentType.REQUEST)
             FormMemory.remember(context, "request", "requester", requester); FormMemory.remember(context, "request", "directed", directedTo); FormMemory.remember(context, "request", "details", details)

@@ -85,24 +85,28 @@ object OfficialDocumentRenderer {
         boldPaint.color = textColor; boldPaint.typeface = Typeface.create(family, Typeface.BOLD)
         canvas.drawRect(18f, 18f, w - 18f, h - 18f, linePaint)
         canvas.drawRect(25f, 25f, w - 25f, h - 25f, linePaint)
-        drawHeader(canvas, header, document.type)
+        drawHeader(canvas, header, document)
         if (half) renderOrder(canvas, document) else when (document.type) { DocumentType.REQUEST -> renderRequest(canvas, document); DocumentType.RECEIPT -> renderReceipt(canvas, document); DocumentType.ORDER -> renderOrderPortrait(canvas, document) }
         renderElements(canvas, document, elements, context)
         design?.let { canvas.drawRect(it.marginLeft, it.marginTop, w - it.marginRight, h - it.marginBottom, Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = 0x55333333.toInt(); this.style = Paint.Style.STROKE; this.strokeWidth = 1f }) }
-        drawCentered(canvas, "نظام مالية صندوق النظافة والتحسين — مستند رسمي", w / 2f, h - 28f, bodyPaint)
+        drawCentered(canvas, "طبع بواسطة نظام مالية فرع صندوق النظافةوالتحسين مديرية الحزم", w / 2f, h - 28f, bodyPaint)
     }
 
-    private fun drawHeader(c: Canvas, header: DocumentHeader, type: DocumentType) {
+    private fun drawHeader(c: Canvas, header: DocumentHeader, document: Document) {
+        val type = document.type
         val w = c.width.toFloat(); val center = w / 2f
-        drawLeft(c, "الرقم: ${"................"}", 55f, 52f, bodyPaint)
-        drawLeft(c, "التاريخ:    /    / 144 هـ", 55f, 76f, bodyPaint)
-        drawLeft(c, "الموافق:    /    / 202 م", 55f, 100f, bodyPaint)
-        drawCentered(c, "الجمهورية اليمنية", center, 48f, boldPaint)
-        drawCentered(c, header.ministry, center, 70f, boldPaint)
-        drawCentered(c, header.administration, center, 92f, boldPaint)
-        drawCentered(c, header.branch, center, 114f, bodyPaint)
-        header.logos[type]?.let { c.drawBitmap(it, null, RectF(center - 38f, 32f, center + 38f, 112f), null) }
+        drawLeft(c, "الرقم : ${document.documentNumber}", 55f, 48f, bodyPaint)
+        drawLeft(c, "التاريخ الهجري: ${document.dateHijri}", 55f, 72f, bodyPaint)
+        drawLeft(c, "التاريخ الميلادي: ${document.dateGregorian}", 55f, 96f, bodyPaint)
+        drawLeft(c, "المرفقات: ${document.attachmentsCount}", 55f, 120f, bodyPaint)
+        drawRight(c, "الجمهورية اليمنية", w - 55f, 48f, boldPaint)
+        drawRight(c, header.ministry, w - 55f, 70f, boldPaint)
+        drawRight(c, "صندوق النظافة والتحسين م/إب", w - 55f, 92f, boldPaint)
+        drawRight(c, "فرع مديرية الحزم", w - 55f, 114f, bodyPaint)
+        drawCentered(c, "بِسْمِ اللهِ الرَّحْمَنِ الرَّحِيمِ", center, 25f, bodyPaint)
+        header.logos[type]?.let { c.drawBitmap(it, null, RectF(center - 42f, 34f, center + 42f, 118f), null) }
         c.drawLine(30f, 132f, w - 30f, 132f, linePaint)
+        drawLeft(c, "الترقيم: ${document.documentNumber}", 55f, 160f, boldPaint)
         drawCentered(c, title(type), center, 166f, titlePaint)
         c.drawRect(center - 112f, 140f, center + 112f, 178f, linePaint)
     }

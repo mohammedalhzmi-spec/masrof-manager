@@ -11,6 +11,7 @@ import com.mohammedalhzmi.masrofmanager.data.Document
 import com.mohammedalhzmi.masrofmanager.data.DocumentType
 import java.io.File
 import java.io.FileOutputStream
+import java.io.ByteArrayOutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import android.graphics.Color
@@ -54,10 +55,13 @@ object OfficialDocumentExporter {
             fun entry(name: String, value: String) {
                 zip.putNextEntry(ZipEntry(name)); zip.write(value.toByteArray(Charsets.UTF_8)); zip.closeEntry()
             }
-            entry("[Content_Types].xml", """<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>""")
+            val logo = AppPreferences.loadLogo(context, document.type)?.let { bitmap -> ByteArrayOutputStream().also { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray() }
+            fun bytesEntry(name: String, value: ByteArray) { zip.putNextEntry(ZipEntry(name)); zip.write(value); zip.closeEntry() }
+            entry("[Content_Types].xml", """<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>""")
             entry("_rels/.rels", """<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>""")
-            entry("word/_rels/document.xml.rels", """<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>""")
-            entry("word/document.xml", docxXml(document))
+            entry("word/_rels/document.xml.rels", if (logo != null) """<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/logo.png"/></Relationships>""" else """<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>""")
+            logo?.let { bytesEntry("word/media/logo.png", it) }
+            entry("word/document.xml", docxXml(document, logo != null))
         }
         return shareUri(context, file)
     }
@@ -72,11 +76,12 @@ object OfficialDocumentExporter {
 
     private fun shareUri(context: Context, file: File): Uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
 
-    private fun docxXml(d: Document): String {
+    private fun docxXml(d: Document, hasLogo: Boolean): String {
         fun esc(s: String) = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&apos;")
         fun p(label: String, value: String) = "<w:p><w:pPr><w:jc w:val=\"right\"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii=\"Amiri\" w:hAnsi=\"Amiri\"/></w:rPr><w:t>${esc(label)}${esc(value)}</w:t></w:r></w:p>"
         val title = when (d.type) { DocumentType.ORDER -> "أمر صرف"; DocumentType.REQUEST -> "ورقة تقديم طلب"; DocumentType.RECEIPT -> "سند قبض" }
-        return """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:b/><w:rFonts w:ascii="Amiri" w:hAnsi="Amiri"/></w:rPr><w:t>${esc(title)}</w:t></w:r></w:p>${p("رقم المستند: ", d.documentNumber)}${p("التاريخ الهجري: ", d.dateHijri)}${p("التاريخ الميلادي: ", d.dateGregorian)}${p("اسم المستفيد: ", d.beneficiaryName.orEmpty())}${p("المبلغ: ", d.amount?.toString().orEmpty())}${p("المبلغ كتابة: ", d.amountWords.orEmpty())}${p("الغرض: ", d.purpose.orEmpty())}${p("التفاصيل: ", d.details.orEmpty())}${p("الملاحظات والمرفقات: ", d.notes.orEmpty())}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720"/></w:sectPr></w:body></w:document>"""
+        val logoXml = if (hasLogo) "<w:p><w:pPr><w:jc w:val=\"center\"/></w:pPr><w:r><w:drawing><wp:inline xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\" xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" xmlns:pic=\"http://schemas.openxmlformats.org/drawingml/2006/picture\"><wp:extent cx=\"900000\" cy=\"900000\"/><wp:docPr id=\"1\" name=\"Official logo\"/><a:graphic><a:graphicData uri=\"http://schemas.openxmlformats.org/drawingml/2006/picture\"><pic:pic><pic:blipFill><a:blip r:embed=\"rId2\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>" else ""
+        return """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>$logoXml<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:b/><w:rFonts w:ascii="Amiri" w:hAnsi="Amiri"/></w:rPr><w:t>الجمهورية اليمنية - وزارة الإدارة والتنمية المحلية والريفية - صندوق النظافة والتحسين م/إب - فرع مديرية الحزم</w:t></w:r></w:p><w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:b/></w:rPr><w:t>${esc(title)}</w:t></w:r></w:p>${p("الرقم: ", d.documentNumber)}${p("التاريخ الهجري: ", d.dateHijri)}${p("التاريخ الميلادي: ", d.dateGregorian)}${p("المرفقات: ", d.attachmentsCount.toString())}${p("اسم المستفيد: ", d.beneficiaryName.orEmpty())}${p("المبلغ: ", d.amount?.toString().orEmpty())}${p("المبلغ كتابة: ", d.amountWords.orEmpty())}${p("الغرض: ", d.purpose.orEmpty())}${p("التفاصيل: ", d.details.orEmpty())}<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:t>طبع بواسطة نظام مالية فرع صندوق النظافةوالتحسين مديرية الحزم</w:t></w:r></w:p><w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720"/></w:sectPr></w:body></w:document>"""
     }
 
     private fun header(context: Context) = DocumentHeader(

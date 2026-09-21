@@ -19,6 +19,7 @@ fun ReceiptFormScreen(viewModel: MasrofViewModel, onNavigateBack: () -> Unit, ex
     var reason by remember(existing?.id) { mutableStateOf(existing?.purpose ?: FormMemory.read(context, "receipt", "reason")) }
     var hijri by remember(existing?.id) { mutableStateOf(existing?.dateHijri.orEmpty()) }
     var gregorian by remember(existing?.id) { mutableStateOf(existing?.dateGregorian.orEmpty()) }
+    var tags by remember(existing?.id) { mutableStateOf(existing?.tags.orEmpty()) }
     val automaticNumber = DocumentNumbering.next(context, DocumentType.RECEIPT).toString().padStart(4, '0')
     val amount = amountText.toDoubleOrNull()
     OfficialFormShell(if (existing == null) "ورقة استلام جديدة" else "تعديل ورقة استلام") {
@@ -29,8 +30,9 @@ fun ReceiptFormScreen(viewModel: MasrofViewModel, onNavigateBack: () -> Unit, ex
         OfficialField(amount?.let { NumberToWordsConverter.convert(it) } ?: "سيظهر المبلغ كتابةً هنا", "المبلغ كتابةً", { })
         OfficialField(source, "مصدر المبلغ", { source = it })
         OfficialField(reason, "وذلك مقابل", { reason = it }, 3)
+        OfficialTags(tags, { tags = it })
         SaveOfficialButton(if (existing == null) "حفظ ورقة الاستلام الرسمية" else "حفظ التعديلات") {
-            val value = Document(existing?.id ?: 0, DocumentType.RECEIPT, existing?.documentNumber ?: automaticNumber, hijri, gregorian, amount, amount?.let { NumberToWordsConverter.convert(it) }, recipient, reason, source, "أقر باستلام المبلغ كاملًا دون نقص", DocumentStatus.RECEIVED, existing?.attachmentsCount ?: 0, existing?.createdAt ?: System.currentTimeMillis())
+            val value = Document(id = existing?.id ?: 0, type = DocumentType.RECEIPT, documentNumber = existing?.documentNumber ?: automaticNumber, dateHijri = hijri, dateGregorian = gregorian, amount = amount, amountWords = amount?.let { NumberToWordsConverter.convert(it) }, beneficiaryName = recipient, purpose = reason, details = source, notes = "أقر باستلام المبلغ كاملًا دون نقص", status = DocumentStatus.RECEIVED, attachmentsCount = existing?.attachmentsCount ?: 0, createdAt = existing?.createdAt ?: System.currentTimeMillis(), isArchived = existing?.isArchived ?: false, archivedAt = existing?.archivedAt, updatedAt = System.currentTimeMillis(), tags = tags.split(",").map(String::trim).filter(String::isNotBlank).distinct().joinToString(","))
             if (existing == null) viewModel.addDocument(value) else viewModel.updateDocument(value)
             if (existing == null) DocumentNumbering.consume(context, DocumentType.RECEIPT)
             FormMemory.remember(context, "receipt", "recipient", recipient); FormMemory.remember(context, "receipt", "amount", amountText); FormMemory.remember(context, "receipt", "source", source); FormMemory.remember(context, "receipt", "reason", reason)
