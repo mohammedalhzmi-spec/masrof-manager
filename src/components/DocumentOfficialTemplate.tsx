@@ -4,6 +4,8 @@ import { YemenEmblem } from './YemenEmblem';
 import { BismillahCalligraphy, RepublicHeader, OfficialRubberStamp } from './OfficialCalligraphy';
 import { OfficialQrCode } from './OfficialQrCode';
 import { CanvasElementsLayer } from './CanvasElementsLayer';
+import { WordInlineEditable } from './WordInlineEditable';
+import { convertNumberToWords } from '../utils/numberToWords';
 
 interface DocumentOfficialTemplateProps {
   document: Document;
@@ -66,10 +68,21 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
     }
   };
 
-  const handleTextChange = (field: keyof Document, e: React.FormEvent<HTMLSpanElement | HTMLDivElement>) => {
+  const handleInlineChange = (field: keyof Document, value: any) => {
     if (!isEditable || !onFieldChange) return;
-    const text = e.currentTarget.innerText;
-    onFieldChange(field, text);
+    onFieldChange(field, value);
+  };
+
+  const handleAmountChange = (newAmountStr: string) => {
+    if (!isEditable || !onFieldChange) return;
+    const num = parseFloat(newAmountStr.replace(/[^\d.]/g, ''));
+    if (!isNaN(num)) {
+      onFieldChange('amount', num);
+      onFieldChange('amountWords', convertNumberToWords(num));
+    } else if (newAmountStr.trim() === '') {
+      onFieldChange('amount', 0);
+      onFieldChange('amountWords', '');
+    }
   };
 
   const qrVerificationText = `وثيقة مالية رسمية - صندوق النظافة مديرية الحزم | النوع: ${
@@ -139,41 +152,53 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
                 <div className="text-left text-xs font-bold leading-relaxed space-y-1 w-[33%] pl-1">
                   <div className="flex items-center justify-end gap-1.5">
                     <span>الرقم :</span>
-                    <span
-                      contentEditable={isEditable}
-                      suppressContentEditableWarning
-                      onBlur={(e) => handleTextChange('documentNumber', e)}
+                    <WordInlineEditable
+                      value={doc.documentNumber}
+                      onChange={(val) => handleInlineChange('documentNumber', val)}
+                      isEditable={isEditable}
                       className="font-mono text-sm font-black border-b border-dotted border-black px-1 min-w-[60px] text-center"
-                    >
-                      {doc.documentNumber}
-                    </span>
+                      placeholder="0001"
+                      dir="ltr"
+                      title="رقم المستند المالي"
+                    />
                   </div>
                   <div className="flex items-center justify-end gap-1.5">
                     <span>التاريخ :</span>
-                    <span
-                      contentEditable={isEditable}
-                      suppressContentEditableWarning
-                      onBlur={(e) => handleTextChange('dateHijri', e)}
+                    <WordInlineEditable
+                      value={doc.dateHijri}
+                      onChange={(val) => handleInlineChange('dateHijri', val)}
+                      isEditable={isEditable}
                       className="font-mono text-xs border-b border-dotted border-black px-1 min-w-[75px] text-center"
-                    >
-                      {doc.dateHijri || '   /   / 144هـ'}
-                    </span>
+                      placeholder="   /   / 144هـ"
+                      title="التاريخ الهجري"
+                    />
                   </div>
                   <div className="flex items-center justify-end gap-1.5">
                     <span>الموافق :</span>
-                    <span
-                      contentEditable={isEditable}
-                      suppressContentEditableWarning
-                      onBlur={(e) => handleTextChange('dateGregorian', e)}
+                    <WordInlineEditable
+                      value={doc.dateGregorian}
+                      onChange={(val) => handleInlineChange('dateGregorian', val)}
+                      isEditable={isEditable}
                       className="font-mono text-xs border-b border-dotted border-black px-1 min-w-[75px] text-center"
-                    >
-                      {doc.dateGregorian || '   /   / 202م'}
-                    </span>
+                      placeholder="   /   / 202م"
+                      title="التاريخ الميلادي"
+                    />
                   </div>
                   <div className="flex items-center justify-end gap-1.5">
                     <span>المرفقات :</span>
-                    <span className="font-mono text-xs border-b border-dotted border-black px-2 text-center">
-                      ( {doc.attachmentsCount || 1} )
+                    <span className="font-mono text-xs border-b border-dotted border-black px-2 text-center inline-flex items-center">
+                      (&nbsp;
+                      <WordInlineEditable
+                        value={doc.attachmentsCount || 1}
+                        onChange={(val) => handleInlineChange('attachmentsCount', parseInt(val, 10) || 1)}
+                        isEditable={isEditable}
+                        numeric
+                        minWidth="20px"
+                        className="text-center"
+                        placeholder="1"
+                        title="عدد المرفقات"
+                      />
+                      &nbsp;)
                     </span>
                   </div>
                 </div>
@@ -197,14 +222,15 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
                 <div className="w-[33%] text-left pl-1">
                   <div className="inline-flex items-center gap-1.5 font-sans font-black text-lg text-red-700 tracking-wider" dir="ltr">
                     <span>NO:</span>
-                    <span
-                      contentEditable={isEditable}
-                      suppressContentEditableWarning
-                      onBlur={(e) => handleTextChange('documentNumber', e)}
+                    <WordInlineEditable
+                      value={doc.documentNumber || '0001'}
+                      onChange={(val) => handleInlineChange('documentNumber', val)}
+                      isEditable={isEditable}
                       className="font-mono border-b border-dotted border-red-700 px-1 min-w-[50px] text-center"
-                    >
-                      {doc.documentNumber || '0001'}
-                    </span>
+                      placeholder="0001"
+                      dir="ltr"
+                      title="رقم المستند NO"
+                    />
                   </div>
                 </div>
               </div>
@@ -225,21 +251,29 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
                     <span className="whitespace-nowrap text-base font-bold">
                       يتم صرف مبلغ وقدرة:
                     </span>
-                    <span
-                      contentEditable={isEditable}
-                      suppressContentEditableWarning
-                      onBlur={(e) => handleTextChange('amountWords', e)}
+                    <WordInlineEditable
+                      value={doc.amountWords}
+                      onChange={(val) => handleInlineChange('amountWords', val)}
+                      isEditable={isEditable}
                       className="flex-1 border-b-2 border-dotted border-black text-center font-bold px-2 py-0.5 text-base text-slate-900 min-h-[28px]"
-                    >
-                      {doc.amountWords || '...........................................................................................'}
-                    </span>
+                      placeholder="..........................................................................................."
+                      title="تعديل المبلغ كتابة (التفقيط)"
+                    />
                   </div>
 
                   {/* Rounded Amount Box (مستطيل المبلغ بالأرقام) */}
-                  <div className="border-2 border-black rounded-lg px-4 py-1.5 bg-slate-50 min-w-[150px] text-center shadow-xs">
-                    <span className="font-mono text-lg font-black text-black tracking-wider">
-                      {doc.amount ? `${doc.amount.toLocaleString('ar-YE')} ر.ي` : '............. ر.ي'}
-                    </span>
+                  <div className="border-2 border-black rounded-lg px-3 py-1 bg-slate-50 min-w-[155px] text-center shadow-xs flex items-center justify-center gap-1">
+                    <WordInlineEditable
+                      value={doc.amount ? doc.amount.toLocaleString('ar-YE') : ''}
+                      onChange={handleAmountChange}
+                      isEditable={isEditable}
+                      numeric
+                      dir="ltr"
+                      placeholder="0"
+                      className="font-mono text-lg font-black text-black tracking-wider text-center"
+                      title="انقر لتعديل المبلغ رقماً مباشرة على الورقة (يتحدث التفقيط تلقائياً)"
+                    />
+                    <span className="font-mono text-base font-black text-black select-none">ر.ي</span>
                   </div>
                 </div>
 
@@ -248,14 +282,14 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
                   <span className="whitespace-nowrap text-base font-bold">
                     للإخ / وه :
                   </span>
-                  <span
-                    contentEditable={isEditable}
-                    suppressContentEditableWarning
-                    onBlur={(e) => handleTextChange('beneficiaryName', e)}
+                  <WordInlineEditable
+                    value={doc.beneficiaryName}
+                    onChange={(val) => handleInlineChange('beneficiaryName', val)}
+                    isEditable={isEditable}
                     className="flex-1 border-b-2 border-dotted border-black font-bold px-3 py-0.5 text-base min-h-[28px]"
-                  >
-                    {doc.beneficiaryName || '.........................................................................................................................'}
-                  </span>
+                    placeholder="........................................................................................................................."
+                    title="تعديل اسم المستفيد مباشرة على الورقة"
+                  />
                 </div>
 
                 {/* Line 4: وذالك مقابل / */}
@@ -263,14 +297,14 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
                   <span className="whitespace-nowrap text-base font-bold">
                     وذالك مقابل /
                   </span>
-                  <span
-                    contentEditable={isEditable}
-                    suppressContentEditableWarning
-                    onBlur={(e) => handleTextChange('purpose', e)}
+                  <WordInlineEditable
+                    value={doc.purpose}
+                    onChange={(val) => handleInlineChange('purpose', val)}
+                    isEditable={isEditable}
                     className="flex-1 border-b-2 border-dotted border-black font-bold px-3 py-0.5 text-base min-h-[28px]"
-                  >
-                    {doc.purpose || '.........................................................................................................................'}
-                  </span>
+                    placeholder="........................................................................................................................."
+                    title="تعديل الغرض والمبرر مباشرة على الورقة"
+                  />
                 </div>
 
                 {/* Line 5: Closing Statement */}
@@ -311,28 +345,28 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
                 {/* Right: المدير المالي للفرع - بدون اسم افتراضي، يتم إضافته في المحرر */}
                 <div className="space-y-1">
                   <p className="text-base font-black">المدير المالي للفرع</p>
-                  <p
-                    contentEditable={isEditable}
-                    suppressContentEditableWarning
-                    onBlur={(e) => handleTextChange('financeManagerName', e)}
-                    className="text-sm font-bold text-slate-900 py-1 min-h-[26px]"
-                  >
-                    {doc.financeManagerName || (isEditable ? '' : '................................')}
-                  </p>
+                  <WordInlineEditable
+                    value={doc.financeManagerName}
+                    onChange={(val) => handleInlineChange('financeManagerName', val)}
+                    isEditable={isEditable}
+                    className="text-sm font-bold text-slate-900 py-1 min-h-[26px] block text-center"
+                    placeholder={isEditable ? 'اكتب اسم المدير المالي هنا...' : '................................'}
+                    title="تعديل اسم المدير المالي"
+                  />
                   <p className="text-xs text-slate-800">ت/ ................................</p>
                 </div>
 
                 {/* Left: مدير فرع صندوق النظافة - اسم مدير الفرع رياض احمد محمد فقط */}
                 <div className="space-y-1">
                   <p className="text-base font-black">مدير فرع صندوق النظافة</p>
-                  <p
-                    contentEditable={isEditable}
-                    suppressContentEditableWarning
-                    onBlur={(e) => handleTextChange('managerName', e)}
-                    className="text-sm font-bold text-slate-900 py-1 min-h-[26px]"
-                  >
-                    {doc.managerName || org.managerName || 'رياض احمد محمد'}
-                  </p>
+                  <WordInlineEditable
+                    value={doc.managerName || org.managerName || 'رياض احمد محمد'}
+                    onChange={(val) => handleInlineChange('managerName', val)}
+                    isEditable={isEditable}
+                    className="text-sm font-bold text-slate-900 py-1 min-h-[26px] block text-center"
+                    placeholder="رياض احمد محمد"
+                    title="تعديل اسم مدير الفرع"
+                  />
                   <p className="text-xs text-slate-800">ت/ ................................</p>
                 </div>
               </div>
@@ -403,41 +437,53 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
                 <div className="text-left text-xs font-bold leading-relaxed space-y-1 w-[33%] pl-1">
                   <div className="flex items-center justify-end gap-1.5">
                     <span>الرقم :</span>
-                    <span
-                      contentEditable={isEditable}
-                      suppressContentEditableWarning
-                      onBlur={(e) => handleTextChange('documentNumber', e)}
+                    <WordInlineEditable
+                      value={doc.documentNumber}
+                      onChange={(val) => handleInlineChange('documentNumber', val)}
+                      isEditable={isEditable}
                       className="font-mono text-sm font-bold border-b border-dotted border-black px-1 min-w-[60px] text-center"
-                    >
-                      {doc.documentNumber}
-                    </span>
+                      placeholder="0001"
+                      dir="ltr"
+                      title="رقم المستند المالي"
+                    />
                   </div>
                   <div className="flex items-center justify-end gap-1.5">
                     <span>التاريخ :</span>
-                    <span
-                      contentEditable={isEditable}
-                      suppressContentEditableWarning
-                      onBlur={(e) => handleTextChange('dateHijri', e)}
+                    <WordInlineEditable
+                      value={doc.dateHijri}
+                      onChange={(val) => handleInlineChange('dateHijri', val)}
+                      isEditable={isEditable}
                       className="font-mono text-xs border-b border-dotted border-black px-1 min-w-[75px] text-center"
-                    >
-                      {doc.dateHijri || '   /   / 144هـ'}
-                    </span>
+                      placeholder="   /   / 144هـ"
+                      title="التاريخ الهجري"
+                    />
                   </div>
                   <div className="flex items-center justify-end gap-1.5">
                     <span>الموافق :</span>
-                    <span
-                      contentEditable={isEditable}
-                      suppressContentEditableWarning
-                      onBlur={(e) => handleTextChange('dateGregorian', e)}
+                    <WordInlineEditable
+                      value={doc.dateGregorian}
+                      onChange={(val) => handleInlineChange('dateGregorian', val)}
+                      isEditable={isEditable}
                       className="font-mono text-xs border-b border-dotted border-black px-1 min-w-[75px] text-center"
-                    >
-                      {doc.dateGregorian || '   /   / 202م'}
-                    </span>
+                      placeholder="   /   / 202م"
+                      title="التاريخ الميلادي"
+                    />
                   </div>
                   <div className="flex items-center justify-end gap-1.5">
                     <span>المرفقات :</span>
-                    <span className="font-mono text-xs border-b border-dotted border-black px-2 text-center">
-                      ( {doc.attachmentsCount || 1} )
+                    <span className="font-mono text-xs border-b border-dotted border-black px-2 text-center inline-flex items-center">
+                      (&nbsp;
+                      <WordInlineEditable
+                        value={doc.attachmentsCount || 1}
+                        onChange={(val) => handleInlineChange('attachmentsCount', parseInt(val, 10) || 1)}
+                        isEditable={isEditable}
+                        numeric
+                        minWidth="20px"
+                        className="text-center"
+                        placeholder="1"
+                        title="عدد المرفقات"
+                      />
+                      &nbsp;)
                     </span>
                   </div>
                 </div>
@@ -462,14 +508,15 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
               <div className="w-[33%] text-left pl-1">
                 <div className="inline-flex items-center gap-1.5 font-sans font-black text-base text-red-700 tracking-wider" dir="ltr">
                   <span>NO:</span>
-                  <span
-                    contentEditable={isEditable}
-                    suppressContentEditableWarning
-                    onBlur={(e) => handleTextChange('documentNumber', e)}
+                  <WordInlineEditable
+                    value={doc.documentNumber || '0001'}
+                    onChange={(val) => handleInlineChange('documentNumber', val)}
+                    isEditable={isEditable}
                     className="font-mono border-b border-dotted border-red-700 px-1 min-w-[50px] text-center"
-                  >
-                    {doc.documentNumber || '0001'}
-                  </span>
+                    placeholder="0001"
+                    dir="ltr"
+                    title="رقم المستند NO"
+                  />
                 </div>
               </div>
             </div>
@@ -489,16 +536,18 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
                 <span className="whitespace-nowrap text-base font-bold">
                   تكرموا مشكورين التوجية بصرف
                 </span>
-                <span
-                  contentEditable={isEditable}
-                  suppressContentEditableWarning
-                  onBlur={(e) => handleTextChange('amountWords', e)}
+                <WordInlineEditable
+                  value={
+                    doc.amount
+                      ? `${doc.amount.toLocaleString('ar-YE')} ريال يمني (${doc.amountWords || convertNumberToWords(doc.amount)})`
+                      : doc.amountWords
+                  }
+                  onChange={(val) => handleInlineChange('amountWords', val)}
+                  isEditable={isEditable}
                   className="flex-1 border-b-2 border-dotted border-black font-bold px-2 py-0.5 text-base min-h-[28px]"
-                >
-                  {doc.amount
-                    ? `${doc.amount.toLocaleString('ar-YE')} ريال يمني (${doc.amountWords})`
-                    : '.........................................................................................................................'}
-                </span>
+                  placeholder="........................................................................................................................."
+                  title="توجيه ومبلغ الصرف"
+                />
               </div>
 
               {/* For order of */}
@@ -506,14 +555,17 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
                 <span className="whitespace-nowrap text-base font-bold">
                   وذالك لامر :
                 </span>
-                <span
-                  contentEditable={isEditable}
-                  suppressContentEditableWarning
-                  onBlur={(e) => handleTextChange('purpose', e)}
+                <WordInlineEditable
+                  value={doc.purpose || doc.beneficiaryName}
+                  onChange={(val) => {
+                    handleInlineChange('purpose', val);
+                    if (!doc.beneficiaryName) handleInlineChange('beneficiaryName', val);
+                  }}
+                  isEditable={isEditable}
                   className="flex-1 border-b-2 border-dotted border-black font-bold px-2 py-0.5 text-base min-h-[28px]"
-                >
-                  {doc.purpose || doc.beneficiaryName || '.........................................................................................................................'}
-                </span>
+                  placeholder="........................................................................................................................."
+                  title="الجهة أو الغرض لامر الصرف"
+                />
               </div>
 
               {/* Details Header */}
@@ -521,14 +573,15 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
 
               {/* 6 Full Dotted Lines for details */}
               <div className="space-y-3 font-medium text-base">
-                <div
-                  contentEditable={isEditable}
-                  suppressContentEditableWarning
-                  onBlur={(e) => handleTextChange('details', e)}
-                  className="border-b-2 border-dotted border-black min-h-[28px] leading-relaxed px-2 font-bold"
-                >
-                  {doc.details || doc.notes || ''}
-                </div>
+                <WordInlineEditable
+                  value={doc.details || doc.notes || ''}
+                  onChange={(val) => handleInlineChange('details', val)}
+                  isEditable={isEditable}
+                  multiline
+                  className="border-b-2 border-dotted border-black min-h-[28px] leading-relaxed px-2 font-bold w-full block"
+                  placeholder="اكتب تفاصيل وبنود المصروفات هنا مباشرة على الأسطر..."
+                  title="كتابة تفاصيل وبنود الطلب مباشرة على السطور"
+                />
                 <div className="border-b-2 border-dotted border-black min-h-[28px]"></div>
                 <div className="border-b-2 border-dotted border-black min-h-[28px]"></div>
                 <div className="border-b-2 border-dotted border-black min-h-[28px]"></div>
@@ -570,14 +623,14 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
               <p className="text-base font-black">مقدم الطلب</p>
               <div className="flex items-center gap-1">
                 <span>الاسم :</span>
-                <span
-                  contentEditable={isEditable}
-                  suppressContentEditableWarning
-                  onBlur={(e) => handleTextChange('requesterName', e)}
+                <WordInlineEditable
+                  value={doc.requesterName}
+                  onChange={(val) => handleInlineChange('requesterName', val)}
+                  isEditable={isEditable}
                   className="border-b-2 border-dotted border-black flex-1 px-2 font-bold min-h-[24px]"
-                >
-                  {doc.requesterName || (isEditable ? '' : '...................................................')}
-                </span>
+                  placeholder={isEditable ? 'اكتب اسم مقدم الطلب...' : '...................................................'}
+                  title="اسم مقدم الطلب"
+                />
               </div>
               <div className="flex items-center gap-1">
                 <span>توقيع :</span>
@@ -586,11 +639,6 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
                 </span>
               </div>
             </div>
-          </div>
-
-          {/* 5. نص أسفل المستند تحت توقيعات الإداريين */}
-          <div className="mt-3 pt-2 border-t border-black/40 text-center text-[11.5px] font-bold text-slate-800 tracking-wide">
-            {org.systemFooterNote || 'طبع بواسطة نظام مالية فرع صندوق النظافةوالتحسين مديرية الحزم'}
           </div>
 
           {/* Foreground Canvas Elements (Above Text / Floating text boxes, stamps, icons) */}
@@ -650,41 +698,53 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
               <div className="text-left text-xs font-bold leading-relaxed space-y-1 w-[33%]">
                 <div className="flex items-center justify-end gap-1.5">
                   <span>الرقم :</span>
-                  <span
-                    contentEditable={isEditable}
-                    suppressContentEditableWarning
-                    onBlur={(e) => handleTextChange('documentNumber', e)}
+                  <WordInlineEditable
+                    value={doc.documentNumber}
+                    onChange={(val) => handleInlineChange('documentNumber', val)}
+                    isEditable={isEditable}
                     className="font-mono text-sm font-bold border-b border-dotted border-black px-1 min-w-[70px] text-center"
-                  >
-                    {doc.documentNumber}
-                  </span>
+                    placeholder="0001"
+                    dir="ltr"
+                    title="رقم المستند"
+                  />
                 </div>
                 <div className="flex items-center justify-end gap-1.5">
                   <span>التاريخ :</span>
-                  <span
-                    contentEditable={isEditable}
-                    suppressContentEditableWarning
-                    onBlur={(e) => handleTextChange('dateHijri', e)}
+                  <WordInlineEditable
+                    value={doc.dateHijri}
+                    onChange={(val) => handleInlineChange('dateHijri', val)}
+                    isEditable={isEditable}
                     className="font-mono text-xs border-b border-dotted border-black px-1 min-w-[75px] text-center"
-                  >
-                    {doc.dateHijri || '   /   / 144هـ'}
-                  </span>
+                    placeholder="   /   / 144هـ"
+                    title="التاريخ الهجري"
+                  />
                 </div>
                 <div className="flex items-center justify-end gap-1.5">
                   <span>الموافق :</span>
-                  <span
-                    contentEditable={isEditable}
-                    suppressContentEditableWarning
-                    onBlur={(e) => handleTextChange('dateGregorian', e)}
+                  <WordInlineEditable
+                    value={doc.dateGregorian}
+                    onChange={(val) => handleInlineChange('dateGregorian', val)}
+                    isEditable={isEditable}
                     className="font-mono text-xs border-b border-dotted border-black px-1 min-w-[75px] text-center"
-                  >
-                    {doc.dateGregorian || '   /   / 202م'}
-                  </span>
+                    placeholder="   /   / 202م"
+                    title="التاريخ الميلادي"
+                  />
                 </div>
                 <div className="flex items-center justify-end gap-1.5">
                   <span>المرفقات :</span>
-                  <span className="font-mono text-xs border-b border-dotted border-black px-2 text-center">
-                    ( {doc.attachmentsCount || 1} )
+                  <span className="font-mono text-xs border-b border-dotted border-black px-2 text-center inline-flex items-center">
+                    (&nbsp;
+                    <WordInlineEditable
+                      value={doc.attachmentsCount || 1}
+                      onChange={(val) => handleInlineChange('attachmentsCount', parseInt(val, 10) || 1)}
+                      isEditable={isEditable}
+                      numeric
+                      minWidth="20px"
+                      className="text-center"
+                      placeholder="1"
+                      title="عدد المرفقات"
+                    />
+                    &nbsp;)
                   </span>
                 </div>
               </div>
@@ -708,14 +768,15 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
               <div className="w-[33%] text-left pl-1">
                 <div className="inline-flex items-center gap-1.5 font-sans font-black text-base text-red-700 tracking-wider" dir="ltr">
                   <span>NO:</span>
-                  <span
-                    contentEditable={isEditable}
-                    suppressContentEditableWarning
-                    onBlur={(e) => handleTextChange('documentNumber', e)}
+                  <WordInlineEditable
+                    value={doc.documentNumber || '0001'}
+                    onChange={(val) => handleInlineChange('documentNumber', val)}
+                    isEditable={isEditable}
                     className="font-mono border-b border-dotted border-red-700 px-1 min-w-[50px] text-center"
-                  >
-                    {doc.documentNumber || '0001'}
-                  </span>
+                    placeholder="0001"
+                    dir="ltr"
+                    title="رقم المستند NO"
+                  />
                 </div>
               </div>
             </div>
@@ -727,14 +788,14 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
                 <span className="whitespace-nowrap text-base font-bold">
                   انا الموقع ادناه
                 </span>
-                <span
-                  contentEditable={isEditable}
-                  suppressContentEditableWarning
-                  onBlur={(e) => handleTextChange('beneficiaryName', e)}
+                <WordInlineEditable
+                  value={doc.beneficiaryName}
+                  onChange={(val) => handleInlineChange('beneficiaryName', val)}
+                  isEditable={isEditable}
                   className="flex-1 border-b-2 border-dotted border-black font-bold px-3 py-0.5 text-base min-h-[28px]"
-                >
-                  {doc.beneficiaryName || '.........................................................................................................................'}
-                </span>
+                  placeholder="........................................................................................................................."
+                  title="اسم المستفيد الموقع أدناه"
+                />
               </div>
 
               {/* Line 2: واعمل بوظيفة */}
@@ -742,14 +803,14 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
                 <span className="whitespace-nowrap text-base font-bold">
                   واعمل بوظيفة
                 </span>
-                <span
-                  contentEditable={isEditable}
-                  suppressContentEditableWarning
-                  onBlur={(e) => handleTextChange('jobTitle', e)}
+                <WordInlineEditable
+                  value={doc.jobTitle}
+                  onChange={(val) => handleInlineChange('jobTitle', val)}
+                  isEditable={isEditable}
                   className="flex-1 border-b-2 border-dotted border-black font-bold px-3 py-0.5 text-base min-h-[28px]"
-                >
-                  {doc.jobTitle || '.........................................................................................................................'}
-                </span>
+                  placeholder="........................................................................................................................."
+                  title="المسمى الوظيفي"
+                />
               </div>
 
               {/* Line 3: إستلمت مبلغ وقدرة: ... رقماً ... */}
@@ -757,28 +818,30 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
                 <span className="whitespace-nowrap text-base font-bold">
                   إستلمت مبلغ وقدرة:
                 </span>
-                <span
-                  contentEditable={isEditable}
-                  suppressContentEditableWarning
-                  onBlur={(e) => handleTextChange('amountWords', e)}
+                <WordInlineEditable
+                  value={doc.amountWords}
+                  onChange={(val) => handleInlineChange('amountWords', val)}
+                  isEditable={isEditable}
                   className="flex-1 border-b-2 border-dotted border-black font-bold px-2 py-0.5 text-base min-h-[28px]"
-                >
-                  {doc.amountWords || '..................................................................'}
-                </span>
+                  placeholder=".................................................................."
+                  title="المبلغ كتابة"
+                />
                 <span className="whitespace-nowrap text-base font-bold mr-2">
                   رقماً
                 </span>
-                <span
-                  contentEditable={isEditable}
-                  suppressContentEditableWarning
-                  onBlur={(e) => {
-                    const val = parseFloat(e.currentTarget.innerText.replace(/[^\d.]/g, ''));
-                    if (!isNaN(val) && onFieldChange) onFieldChange('amount', val);
-                  }}
-                  className="font-mono text-base font-black border-b-2 border-dotted border-black px-3 py-0.5 min-w-[120px] text-center"
-                >
-                  {doc.amount ? `${doc.amount.toLocaleString('ar-YE')} ريال` : '......................'}
-                </span>
+                <div className="border-b-2 border-dotted border-black px-2 py-0.5 min-w-[130px] text-center flex items-center justify-center gap-1">
+                  <WordInlineEditable
+                    value={doc.amount ? doc.amount.toLocaleString('ar-YE') : ''}
+                    onChange={handleAmountChange}
+                    isEditable={isEditable}
+                    numeric
+                    dir="ltr"
+                    className="font-mono text-base font-black text-center"
+                    placeholder="0"
+                    title="المبلغ رقماً (يتحدث التفقيط تلقائياً)"
+                  />
+                  <span className="font-mono text-xs font-bold select-none">ريال</span>
+                </div>
               </div>
 
               {/* Line 4: من فرع صندوق النظافة والتحسين مديرية الحزم */}
@@ -791,33 +854,55 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
                 <span className="whitespace-nowrap text-base font-bold">
                   وذالك مقابل:
                 </span>
-                <span
-                  contentEditable={isEditable}
-                  suppressContentEditableWarning
-                  onBlur={(e) => handleTextChange('purpose', e)}
+                <WordInlineEditable
+                  value={doc.purpose}
+                  onChange={(val) => handleInlineChange('purpose', val)}
+                  isEditable={isEditable}
                   className="flex-1 border-b-2 border-dotted border-black font-bold px-3 py-0.5 text-base min-h-[28px]"
-                >
-                  {doc.purpose || '.........................................................................................................................'}
-                </span>
+                  placeholder="........................................................................................................................."
+                  title="الغرض والمبرر"
+                />
               </div>
 
               {/* Line 6: لشهر: ... سنة: 144 هـ  202 م */}
               <div className="flex items-center gap-4 text-base font-bold">
                 <span className="whitespace-nowrap">لشهر:</span>
-                <span
-                  contentEditable={isEditable}
-                  suppressContentEditableWarning
-                  onBlur={(e) => handleTextChange('monthPeriod', e)}
+                <WordInlineEditable
+                  value={doc.monthPeriod}
+                  onChange={(val) => handleInlineChange('monthPeriod', val)}
+                  isEditable={isEditable}
                   className="border-b-2 border-dotted border-black px-3 min-w-[150px] text-center font-bold"
-                >
-                  {doc.monthPeriod || '..........................'}
-                </span>
+                  placeholder=".........................."
+                  title="الفترة / الشهر"
+                />
                 <span className="whitespace-nowrap">سنة:</span>
-                <span className="font-mono">
-                  144{doc.yearHijri || '6'} هـ
+                <span className="font-mono inline-flex items-center">
+                  144
+                  <WordInlineEditable
+                    value={doc.yearHijri || '6'}
+                    onChange={(val) => handleInlineChange('yearHijri', val)}
+                    isEditable={isEditable}
+                    numeric
+                    minWidth="15px"
+                    className="text-center font-bold px-0.5"
+                    placeholder="6"
+                    title="السنة الهجرية"
+                  />
+                  &nbsp;هـ
                 </span>
-                <span className="font-mono">
-                  202{doc.yearGregorian || '6'} م
+                <span className="font-mono inline-flex items-center">
+                  202
+                  <WordInlineEditable
+                    value={doc.yearGregorian || '6'}
+                    onChange={(val) => handleInlineChange('yearGregorian', val)}
+                    isEditable={isEditable}
+                    numeric
+                    minWidth="15px"
+                    className="text-center font-bold px-0.5"
+                    placeholder="6"
+                    title="السنة الميلادية"
+                  />
+                  &nbsp;م
                 </span>
               </div>
 
@@ -831,14 +916,14 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
                 <div className="flex-1 space-y-3">
                   <div className="flex items-center gap-2">
                     <span className="text-base font-black">المستلم:</span>
-                    <span
-                      contentEditable={isEditable}
-                      suppressContentEditableWarning
-                      onBlur={(e) => handleTextChange('beneficiaryName', e)}
+                    <WordInlineEditable
+                      value={doc.beneficiaryName}
+                      onChange={(val) => handleInlineChange('beneficiaryName', val)}
+                      isEditable={isEditable}
                       className="border-b-2 border-dotted border-black flex-1 font-bold px-2 py-0.5 text-base"
-                    >
-                      {doc.beneficiaryName || '................................................................................'}
-                    </span>
+                      placeholder="................................................................................"
+                      title="اسم المستلم الموقع"
+                    />
                   </div>
                 </div>
 
@@ -881,42 +966,42 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
                 {/* 1. أمين الصندوق - بدون اسم افتراضي ليتم إضافته في المحرر */}
                 <div className="space-y-1">
                   <p className="text-sm font-black">امين الصندوق</p>
-                  <p
-                    contentEditable={isEditable}
-                    suppressContentEditableWarning
-                    onBlur={(e) => handleTextChange('treasurerName', e)}
-                    className="text-xs font-bold text-slate-900 py-1 min-h-[22px]"
-                  >
-                    {doc.treasurerName || (isEditable ? '' : '.....................')}
-                  </p>
+                  <WordInlineEditable
+                    value={doc.treasurerName}
+                    onChange={(val) => handleInlineChange('treasurerName', val)}
+                    isEditable={isEditable}
+                    className="text-xs font-bold text-slate-900 py-1 min-h-[22px] block text-center"
+                    placeholder={isEditable ? 'اكتب اسم أمين الصندوق...' : '.....................'}
+                    title="اسم أمين الصندوق"
+                  />
                   <p className="text-xs">التوقيع: ....................</p>
                 </div>
 
                 {/* 2. المدير المالي للفرع - بدون اسم افتراضي ليتم إضافته في المحرر */}
                 <div className="space-y-1">
                   <p className="text-sm font-black">المدير المالي للفرع</p>
-                  <p
-                    contentEditable={isEditable}
-                    suppressContentEditableWarning
-                    onBlur={(e) => handleTextChange('financeManagerName', e)}
-                    className="text-xs font-black text-slate-900 py-1 min-h-[22px]"
-                  >
-                    {doc.financeManagerName || (isEditable ? '' : '.....................')}
-                  </p>
+                  <WordInlineEditable
+                    value={doc.financeManagerName}
+                    onChange={(val) => handleInlineChange('financeManagerName', val)}
+                    isEditable={isEditable}
+                    className="text-xs font-black text-slate-900 py-1 min-h-[22px] block text-center"
+                    placeholder={isEditable ? 'اكتب اسم المدير المالي...' : '.....................'}
+                    title="اسم المدير المالي"
+                  />
                   <p className="text-xs">التوقيع: ....................</p>
                 </div>
 
                 {/* 3. مدير فرع صندوق النظافة - رياض احمد محمد فقط */}
                 <div className="space-y-1">
                   <p className="text-sm font-black">مدير فرع صندوق النظافة</p>
-                  <p
-                    contentEditable={isEditable}
-                    suppressContentEditableWarning
-                    onBlur={(e) => handleTextChange('managerName', e)}
-                    className="text-sm font-black text-slate-900 py-1 min-h-[22px]"
-                  >
-                    {doc.managerName || org.managerName || 'رياض احمد محمد'}
-                  </p>
+                  <WordInlineEditable
+                    value={doc.managerName || org.managerName || 'رياض احمد محمد'}
+                    onChange={(val) => handleInlineChange('managerName', val)}
+                    isEditable={isEditable}
+                    className="text-sm font-black text-slate-900 py-1 min-h-[22px] block text-center"
+                    placeholder="رياض احمد محمد"
+                    title="اسم مدير الفرع"
+                  />
                   <p className="text-xs">التوقيع: ....................</p>
                 </div>
               </div>

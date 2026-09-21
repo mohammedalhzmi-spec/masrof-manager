@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { Document, OrganizationProfile } from '../types';
 import { DocumentOfficialTemplate } from './DocumentOfficialTemplate';
+import { convertNumberToWords } from '../utils/numberToWords';
 import { exportToPdf, exportToImage, exportToWord, shareDocument } from '../utils/exportHelper';
 import { WordDocumentEditorModal } from './WordDocumentEditorModal';
 
@@ -29,9 +30,30 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
   onUpdateDocument,
 }) => {
   const [showStamp, setShowStamp] = useState<boolean>(true);
+  const [inlineEditEnabled, setInlineEditEnabled] = useState<boolean>(true);
   const [editingDoc, setEditingDoc] = useState<Document | null>(null);
   const [activeExportingId, setActiveExportingId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
+
+  const handleFieldChangeInPrint = (docId: string, field: keyof Document, value: any) => {
+    if (!onUpdateDocument) return;
+    const target = documents.find((d) => d.id === docId);
+    if (!target) return;
+    const updated = { ...target, [field]: value };
+    if (field === 'amount') {
+      const num = typeof value === 'number' ? value : parseFloat(value);
+      if (!isNaN(num)) {
+        updated.amount = num;
+        updated.amountWords = convertNumberToWords(num);
+      }
+    }
+    onUpdateDocument(updated);
+    try {
+      localStorage.setItem(`masrof_draft_${updated.id}`, JSON.stringify(updated));
+    } catch (e) {
+      console.error('Failed to auto-save in print view', e);
+    }
+  };
 
   const handlePrint = () => {
     window.print();
@@ -102,6 +124,23 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
               <span>{feedback}</span>
             </div>
           )}
+
+          {/* Toggle Direct In-Page Editing */}
+          <button
+            onClick={() => setInlineEditEnabled(!inlineEditEnabled)}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border text-xs font-bold transition shadow-xs ${
+              inlineEditEnabled
+                ? 'bg-blue-600 text-white border-blue-400 ring-2 ring-blue-500/30'
+                : 'bg-slate-800 text-slate-300 border-slate-700 hover:text-white'
+            }`}
+            title="تفعيل التحرير المباشر داخل صفحة المستند بنظام وورد 100%"
+          >
+            <Edit3 className="w-3.5 h-3.5" />
+            <span>التحرير المباشر بالورقة: {inlineEditEnabled ? 'مفعّل 100%' : 'معطّل'}</span>
+            {inlineEditEnabled && (
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            )}
+          </button>
 
           {/* Toggle Official Stamp */}
           <button
@@ -213,7 +252,8 @@ export const OfficialPrintView: React.FC<OfficialPrintViewProps> = ({
                   containerId={`official-print-doc-${doc.id}`}
                   document={doc}
                   organization={organization}
-                  isEditable={false}
+                  isEditable={inlineEditEnabled}
+                  onFieldChange={(field, val) => handleFieldChangeInPrint(doc.id, field, val)}
                   showStamp={showStamp}
                 />
               </div>

@@ -12,6 +12,8 @@ import {
   RotateCcw,
   Sparkles,
   Stamp,
+  Undo2,
+  Redo2,
   CheckCircle,
   HelpCircle,
   Eye,
@@ -84,10 +86,103 @@ export const WordDocumentEditorModal: React.FC<WordDocumentEditorModalProps> = (
   const containerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Sync state if initialDoc changes
+  // Auto-Save & 100% Memory Persistence state
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'saved' | 'saving'>('saved');
+  const [lastSavedTime, setLastSavedTime] = useState<string>('محفوظ الآن');
+
+  // History stack for 100% Word-like Undo / Redo
+  const [history, setHistory] = useState<Document[]>([initialDoc]);
+  const [historyIndex, setHistoryIndex] = useState<number>(0);
+
+  const pushToHistory = (newDoc: Document) => {
+    setHistory((prev) => {
+      const sliced = prev.slice(0, historyIndex + 1);
+      if (sliced.length >= 30) sliced.shift();
+      return [...sliced, newDoc];
+    });
+    setHistoryIndex((prev) => Math.min(prev + 1, 29));
+  };
+
+  const handleUndo = () => {
+    if (historyIndex > 0) {
+      const prevIdx = historyIndex - 1;
+      setHistoryIndex(prevIdx);
+      setDoc(history[prevIdx]);
+    }
+  };
+
+  const handleRedo = () => {
+    if (historyIndex < history.length - 1) {
+      const nextIdx = historyIndex + 1;
+      setHistoryIndex(nextIdx);
+      setDoc(history[nextIdx]);
+    }
+  };
+
+  // Keyboard shortcuts (Ctrl+Z, Ctrl+Y, Ctrl+S)
   useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        if (e.shiftKey) {
+          e.preventDefault();
+          handleRedo();
+        } else {
+          e.preventDefault();
+          handleUndo();
+        }
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        handleRedo();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        handleSaveAndNotify(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [historyIndex, history, doc]);
+
+  // Sync state and check draft memory if initialDoc changes
+  useEffect(() => {
+    try {
+      const savedDraft = localStorage.getItem(`masrof_draft_${initialDoc.id}`);
+      if (savedDraft) {
+        const parsed = JSON.parse(savedDraft);
+        if (parsed && parsed.id === initialDoc.id) {
+          setDoc(parsed);
+          setHistory([parsed]);
+          setHistoryIndex(0);
+          return;
+        }
+      }
+    } catch (e) {
+      console.error('Failed to parse draft', e);
+    }
     setDoc(initialDoc);
+    setHistory([initialDoc]);
+    setHistoryIndex(0);
   }, [initialDoc]);
+
+  // Debounced continuous auto-save to localStorage & parent state (حفظ البيانات وتذكرها 100%)
+  useEffect(() => {
+    setAutoSaveStatus('saving');
+    const timer = setTimeout(() => {
+      onSave(doc, false);
+      try {
+        localStorage.setItem(`masrof_draft_${doc.id}`, JSON.stringify(doc));
+        localStorage.setItem('masrof_last_edited_doc_id', doc.id);
+      } catch (e) {
+        console.error('Failed to auto-save document draft', e);
+      }
+      setAutoSaveStatus('saved');
+      const now = new Date();
+      setLastSavedTime(
+        `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`
+      );
+    }, 450);
+
+    return () => clearTimeout(timer);
+  }, [doc]);
 
   if (!isOpen) return null;
 
@@ -98,10 +193,12 @@ export const WordDocumentEditorModal: React.FC<WordDocumentEditorModalProps> = (
     if (!cleaned) return;
     const currentTags = doc.tags || [];
     if (!currentTags.includes(cleaned)) {
-      setDoc((prev) => ({
-        ...prev,
+      const nextDoc = {
+        ...doc,
         tags: [...currentTags, cleaned],
-      }));
+      };
+      setDoc(nextDoc);
+      pushToHistory(nextDoc);
     }
     if (tagToAdd === undefined) {
       setNewTagInput('');
@@ -110,10 +207,12 @@ export const WordDocumentEditorModal: React.FC<WordDocumentEditorModalProps> = (
 
   const handleRemoveTag = (tagToRemove: string) => {
     const currentTags = doc.tags || [];
-    setDoc((prev) => ({
-      ...prev,
+    const nextDoc = {
+      ...doc,
       tags: currentTags.filter((t) => t !== tagToRemove),
-    }));
+    };
+    setDoc(nextDoc);
+    pushToHistory(nextDoc);
   };
 
   // Handle direct field updates
@@ -128,6 +227,7 @@ export const WordDocumentEditorModal: React.FC<WordDocumentEditorModalProps> = (
           next.amountWords = convertNumberToWords(num);
         }
       }
+      pushToHistory(next);
       return next;
     });
   };
@@ -397,6 +497,24 @@ export const WordDocumentEditorModal: React.FC<WordDocumentEditorModalProps> = (
 
         {/* Action Buttons */}
         <div className="flex items-center gap-2">
+          {/* Real-time AutoSave Status Indicator */}
+          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800/90 border border-slate-700 text-[11px]">
+            {autoSaveStatus === 'saving' ? (
+              <span className="flex items-center gap-1.5 text-amber-300 font-bold">
+                <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
+                <span>جارِ الحفظ التلقائي...</span>
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
+                <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                <span>محفوظ في الذاكرة (100%)</span>
+              </span>
+            )}
+            <span className="text-slate-400 font-mono text-[10px]">
+              {lastSavedTime}
+            </span>
+          </div>
+
           {saveFeedback && (
             <div className="flex items-center gap-1 px-3 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-bold animate-fade-in">
               <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
@@ -498,8 +616,27 @@ export const WordDocumentEditorModal: React.FC<WordDocumentEditorModalProps> = (
           </button>
         </div>
 
-        {/* Center: Quick Export & Stamp Toggle */}
+        {/* Center: Undo/Redo & Quick Export & Stamp Toggle */}
         <div className="flex items-center gap-1.5">
+          {/* Undo / Redo Controls */}
+          <div className="flex items-center bg-slate-900 rounded-lg p-0.5 border border-slate-700">
+            <button
+              onClick={handleUndo}
+              disabled={historyIndex <= 0}
+              className="p-1.5 rounded text-slate-300 hover:text-white disabled:opacity-30 disabled:hover:text-slate-300 transition"
+              title="تراجع (Ctrl+Z)"
+            >
+              <Undo2 className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={handleRedo}
+              disabled={historyIndex >= history.length - 1}
+              className="p-1.5 rounded text-slate-300 hover:text-white disabled:opacity-30 disabled:hover:text-slate-300 transition"
+              title="إعادة (Ctrl+Y)"
+            >
+              <Redo2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
           <button
             disabled={isExporting}
             onClick={handlePdfExport}
@@ -1264,7 +1401,7 @@ export const WordDocumentEditorModal: React.FC<WordDocumentEditorModalProps> = (
         {/* 3.2 Word Document Canvas Page */}
         <div
           ref={containerRef}
-          className="flex-1 overflow-auto p-4 sm:p-8 flex items-start justify-center"
+          className="flex-1 overflow-auto p-4 sm:p-8 flex flex-col items-center justify-start"
           onClick={(e) => {
             // If clicked on canvas backdrop, deselect active element
             if (e.target === containerRef.current) {
@@ -1272,6 +1409,28 @@ export const WordDocumentEditorModal: React.FC<WordDocumentEditorModalProps> = (
             }
           }}
         >
+          {/* Top In-Page Editing Notice & Autosave Indicator */}
+          <div className="w-full max-w-[850px] mb-3 flex items-center justify-between px-3.5 py-1.5 rounded-lg bg-slate-900/90 border border-slate-700/80 text-xs text-slate-300 shadow-sm shrink-0">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-blue-600 text-white font-black text-[11px]">
+                W
+              </span>
+              <span className="font-bold text-slate-100">
+                التحرير المباشر داخل صفحة المستند بنظام وورد 100%:
+              </span>
+              <span className="text-slate-400 hidden md:inline">
+                انقر على أي سطر، رقم، اسم، أو تاريخ واكتب مباشرة على الورقة مع الحفظ الفوري وتذكر البيانات.
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2 text-[11px]">
+              <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-mono font-bold">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span>محفوظ 100%</span>
+              </span>
+            </div>
+          </div>
+
           <div className="my-auto transition-transform duration-200 shadow-2xl bg-white">
             <DocumentOfficialTemplate
               containerId="word-canvas-element"

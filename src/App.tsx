@@ -319,8 +319,8 @@ export default function App() {
                 ? prev.map((d) => (d.id === updated.id ? updated : d))
                 : [updated, ...prev]
             );
-            setWordEditorDocument(null);
             if (andPrint) {
+              setWordEditorDocument(null);
               setPrintState({
                 isPrinting: true,
                 documents: [updated],
