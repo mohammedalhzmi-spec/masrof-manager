@@ -15,7 +15,7 @@ import { SettingsModal } from './components/SettingsModal';
 import { BackupModal } from './components/BackupModal';
 import { Document, DocumentType, OrganizationProfile } from './types';
 import { sampleDocuments, initialOrganizationProfile } from './utils/initialData';
-import { GitBranch, ShieldCheck, Sparkles, Building2, CheckCircle2 } from 'lucide-react';
+import { GitBranch, ShieldCheck, Sparkles, Building2, CheckCircle2, Smartphone, Download } from 'lucide-react';
 
 export default function App() {
   // Persistence state
@@ -226,6 +226,35 @@ export default function App() {
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {/* Android APK Download Banner */}
+        <div className="mb-6 p-4 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-700 text-white shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4 border border-emerald-500/40">
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-xl bg-white/15 border border-white/20 flex items-center justify-center text-white flex-shrink-0 shadow-inner">
+              <Smartphone className="w-6 h-6 animate-pulse" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded bg-white/20 text-[10px] font-bold tracking-wide uppercase">Android APK</span>
+                <span className="text-xs font-bold text-emerald-100">تم اكتمال بناء تطبيق الأندرويد بنجاح</span>
+              </div>
+              <h2 className="text-sm font-black text-white mt-0.5">ملف التطبيق بصيغة APK (داخل ملف مضغوط ZIP) جاهز للتحميل الفوري</h2>
+              <p className="text-xs text-emerald-100/90 mt-0.5">
+                يمكنك تحميل حزمة التطبيق المضغوطة لتثبيتها مباشرة على هاتفك الذكي (Android).
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0 w-full sm:w-auto justify-end">
+            <a
+              href="/masrof-manager-android-apk.zip"
+              download="masrof-manager-android-apk.zip"
+              className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-white text-emerald-800 hover:bg-emerald-50 text-xs font-black transition shadow-lg flex items-center justify-center gap-2 transform hover:scale-105"
+            >
+              <Download className="w-4 h-4 text-emerald-700 animate-bounce" />
+              <span>تحميل ملف التطبيق APK (مضغوط)</span>
+            </a>
+          </div>
+        </div>
+
         {/* Developer & System Rights Banner (matching the original Android dashboard notice) */}
         {showDeveloperNotice && (
           <div className="mb-6 p-4 rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 text-white shadow-lg flex items-center justify-between gap-4 border border-slate-700 animate-in fade-in duration-300">
