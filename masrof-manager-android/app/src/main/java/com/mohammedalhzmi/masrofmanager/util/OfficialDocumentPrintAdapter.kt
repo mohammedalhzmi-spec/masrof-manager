@@ -72,7 +72,8 @@ object OfficialDocumentRenderer {
         canvas.drawColor(design?.let { runCatching { Color.parseColor(it.backgroundColor) }.getOrDefault(Color.WHITE) } ?: (header.backgroundColors[document.type] ?: Color.WHITE))
         header.backgroundImages[document.type]?.let { bitmap ->
             val scale = header.backgroundScale[document.type] ?: 1f
-            val bw = w * scale; val bh = h * scale
+            val watermarkSize = minOf(w, h) * 0.58f * scale
+            val bw = watermarkSize; val bh = watermarkSize
             val offset = header.backgroundOffset[document.type] ?: (0f to 0f)
             val target = RectF((w - bw) / 2f + offset.first, (h - bh) / 2f + offset.second, (w + bw) / 2f + offset.first, (h + bh) / 2f + offset.second)
             val imagePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { alpha = ((header.backgroundOpacity[document.type] ?: 0.18f) * 255).toInt() }
@@ -117,8 +118,9 @@ object OfficialDocumentRenderer {
         drawRight(c, "يتم صرف مبلغ وقدره:", right, 292f, bodyPaint)
         drawBoxed(c, d.amount?.toString() ?: "................", 70f, 263f, 290f, 304f)
         drawRight(c, "فقط: ${d.amountWords ?: "................................................"}", right, 338f, bodyPaint)
-        drawRight(c, "وذلك مقابل / ${d.purpose.orEmpty()}", right, 382f, bodyPaint)
-        drawCentered(c, "ولكم خالص الشكر والتقدير", w / 2f, 422f, boldPaint)
+        drawRight(c, "وذلك مقابل /", right, 382f, bodyPaint)
+        drawParagraph(c, d.purpose.orEmpty().ifBlank { "................................................" }, right, 410f, bodyPaint)
+        drawCentered(c, "ولكم خالص الشكر والتقدير", w / 2f, 470f, boldPaint)
         drawLeft(c, "المدير المالي للفرع", 70f, bottom - 92f, boldPaint)
         drawLeft(c, "الاسم: ................................", 70f, bottom - 68f, bodyPaint)
         drawLeft(c, "التوقيع: .........................", 70f, bottom - 42f, bodyPaint)
@@ -134,7 +136,8 @@ object OfficialDocumentRenderer {
         val right = c.width - 55f; val bottom = c.height.toFloat()
         drawRight(c, "إلى الأخ / مدير فرع صندوق النظافة والتحسين", right, 220f, boldPaint); drawRight(c, "المحترم", right, 246f, bodyPaint)
         drawRight(c, "نتكرم بالتوجيه بصرف / اعتماد الطلب الموضح أدناه:", right, 292f, bodyPaint)
-        drawParagraph(c, d.details ?: "................................................................................................", right, 336f, bodyPaint)
+        c.drawRect(55f, 310f, right, 455f, linePaint)
+        drawParagraph(c, d.details ?: "................................................................................................", right - 12f, 338f, bodyPaint)
         drawRight(c, "وتكرموا مشكورين بالتوجيه", right, 510f, boldPaint)
         drawRight(c, "اسم مقدم الطلب: ${d.beneficiaryName.orEmpty()}", right, bottom - 170f, bodyPaint)
         drawRight(c, "مدير الفرع: رياض احمد محمد", right, bottom - 135f, boldPaint)
@@ -147,8 +150,9 @@ object OfficialDocumentRenderer {
         val right = c.width - 55f; val bottom = c.height.toFloat()
         drawRight(c, "أنا الموقع أدناه: ${d.beneficiaryName.orEmpty()}", right, 220f, boldPaint)
         drawRight(c, "وأعمل بوظيفة: ................................................", right, 258f, bodyPaint)
-        drawRight(c, "استلمت مبلغًا وقدره: ${d.amount ?: "................"}", right, 300f, bodyPaint)
-        drawRight(c, "فقط: ${d.amountWords ?: "................................................"}", right, 340f, bodyPaint)
+        drawRight(c, "استلمت مبلغًا وقدره:", right, 300f, bodyPaint)
+        drawBoxed(c, d.amount?.toString() ?: "................", 70f, 270f, 300f, 310f)
+        drawRight(c, "فقط: ${d.amountWords ?: "................................................"}", right, 350f, bodyPaint)
         drawRight(c, "من فرع صندوق النظافة والتحسين", right, 392f, bodyPaint)
         drawRight(c, "وذلك مقابل: ${d.purpose.orEmpty()}", right, 435f, bodyPaint)
         drawParagraph(c, "وأقر بأنني استلمت المبلغ كاملًا دون نقص وأصبحت ذمتي خالية من ذلك.", right, 485f, bodyPaint)
@@ -196,5 +200,14 @@ object OfficialDocumentRenderer {
     private fun drawRight(c: Canvas, text: String, x: Float, y: Float, p: Paint) { p.textAlign = Paint.Align.RIGHT; c.drawText(text, x, y, p); p.textAlign = Paint.Align.CENTER }
     private fun drawLeft(c: Canvas, text: String, x: Float, y: Float, p: Paint) { p.textAlign = Paint.Align.LEFT; c.drawText(text, x, y, p); p.textAlign = Paint.Align.CENTER }
     private fun drawBoxed(c: Canvas, text: String, l: Float, t: Float, r: Float, b: Float) { c.drawRoundRect(l, t, r, b, 8f, 8f, linePaint); drawCentered(c, text, (l + r) / 2f, (t + b) / 2f + 5f, bodyPaint) }
-    private fun drawParagraph(c: Canvas, text: String, x: Float, y: Float, p: Paint) { drawRight(c, text, x, y, p) }
+    private fun drawParagraph(c: Canvas, text: String, x: Float, y: Float, p: Paint) {
+        val maxWidth = (x - 70f).coerceAtLeast(180f)
+        val words = text.trim().split(Regex("\\s+")).filter(String::isNotBlank)
+        var line = ""; var lineY = y
+        for (word in words) {
+            val candidate = if (line.isBlank()) word else "$line $word"
+            if (line.isNotBlank() && p.measureText(candidate) > maxWidth) { drawRight(c, line, x, lineY, p); line = word; lineY += p.textSize * 1.55f } else line = candidate
+        }
+        if (line.isNotBlank()) drawRight(c, line, x, lineY, p)
+    }
 }
