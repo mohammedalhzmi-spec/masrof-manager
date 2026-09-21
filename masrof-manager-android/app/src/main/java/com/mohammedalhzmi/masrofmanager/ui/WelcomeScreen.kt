@@ -30,7 +30,7 @@ fun WelcomeScreen(onFinished: () -> Unit) {
     Box(Modifier.fillMaxSize().background(Color(0xfff7faf7)), contentAlignment = Alignment.Center) {
         Card(Modifier.fillMaxWidth().padding(24.dp), shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Color.White), elevation = CardDefaults.cardElevation(8.dp)) {
             Column(Modifier.fillMaxWidth().padding(22.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Image(painterResource(R.drawable.ic_launcher_logo_bitmap), "شعار نظام المالية", Modifier.size(170.dp), contentScale = ContentScale.Fit)
+                Image(painterResource(R.drawable.developer_welcome), "غلاف نظام المالية الرسمي", Modifier.fillMaxWidth().height(300.dp).clip(RoundedCornerShape(16.dp)), contentScale = ContentScale.Crop)
                 Text("نظام المالية لصندوق النظافة الحزم", style = MaterialTheme.typography.headlineSmall, color = Color(0xff173b25))
                 Text("نظام مالي وإداري متكامل", style = MaterialTheme.typography.bodyMedium, color = Color(0xff6b7280))
                 Spacer(Modifier.height(22.dp))
