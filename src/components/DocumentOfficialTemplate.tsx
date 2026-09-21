@@ -156,7 +156,7 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
                       value={doc.documentNumber}
                       onChange={(val) => handleInlineChange('documentNumber', val)}
                       isEditable={isEditable}
-                      className="font-mono text-sm font-black border-b border-dotted border-black px-1 min-w-[60px] text-center"
+                      className="font-mono text-sm font-black border-b border-solid border-black px-1 min-w-[60px] text-center"
                       placeholder="0001"
                       dir="ltr"
                       title="رقم المستند المالي"
@@ -168,7 +168,7 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
                       value={doc.dateHijri}
                       onChange={(val) => handleInlineChange('dateHijri', val)}
                       isEditable={isEditable}
-                      className="font-mono text-xs border-b border-dotted border-black px-1 min-w-[75px] text-center"
+                      className="font-mono text-xs border-b border-solid border-black px-1 min-w-[75px] text-center"
                       placeholder="   /   / 144هـ"
                       title="التاريخ الهجري"
                     />
@@ -179,14 +179,14 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
                       value={doc.dateGregorian}
                       onChange={(val) => handleInlineChange('dateGregorian', val)}
                       isEditable={isEditable}
-                      className="font-mono text-xs border-b border-dotted border-black px-1 min-w-[75px] text-center"
+                      className="font-mono text-xs border-b border-solid border-black px-1 min-w-[75px] text-center"
                       placeholder="   /   / 202م"
                       title="التاريخ الميلادي"
                     />
                   </div>
                   <div className="flex items-center justify-end gap-1.5">
                     <span>المرفقات :</span>
-                    <span className="font-mono text-xs border-b border-dotted border-black px-2 text-center inline-flex items-center">
+                    <span className="font-mono text-xs border-b border-solid border-black px-2 text-center inline-flex items-center">
                       (&nbsp;
                       <WordInlineEditable
                         value={doc.attachmentsCount || 1}
@@ -226,7 +226,7 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
                       value={doc.documentNumber || '0001'}
                       onChange={(val) => handleInlineChange('documentNumber', val)}
                       isEditable={isEditable}
-                      className="font-mono border-b border-dotted border-red-700 px-1 min-w-[50px] text-center"
+                      className="font-mono border-b border-solid border-red-700 px-1 min-w-[50px] text-center"
                       placeholder="0001"
                       dir="ltr"
                       title="رقم المستند NO"
@@ -255,7 +255,7 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
                       value={doc.amountWords}
                       onChange={(val) => handleInlineChange('amountWords', val)}
                       isEditable={isEditable}
-                      className="flex-1 border-b-2 border-dotted border-black text-center font-bold px-2 py-0.5 text-base text-slate-900 min-h-[28px]"
+                      className="flex-1 border-b-2 border-solid border-black text-center font-bold px-2 py-0.5 text-base text-slate-900 min-h-[28px]"
                       placeholder="..........................................................................................."
                       title="تعديل المبلغ كتابة (التفقيط)"
                     />
@@ -286,7 +286,7 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
                     value={doc.beneficiaryName}
                     onChange={(val) => handleInlineChange('beneficiaryName', val)}
                     isEditable={isEditable}
-                    className="flex-1 border-b-2 border-dotted border-black font-bold px-3 py-0.5 text-base min-h-[28px]"
+                    className="flex-1 border-b-2 border-solid border-black font-bold px-3 py-0.5 text-base min-h-[28px]"
                     placeholder="........................................................................................................................."
                     title="تعديل اسم المستفيد مباشرة على الورقة"
                   />
@@ -301,7 +301,7 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
                     value={doc.purpose}
                     onChange={(val) => handleInlineChange('purpose', val)}
                     isEditable={isEditable}
-                    className="flex-1 border-b-2 border-dotted border-black font-bold px-3 py-0.5 text-base min-h-[28px]"
+                    className="flex-1 border-b-2 border-solid border-black font-bold px-3 py-0.5 text-base min-h-[28px]"
                     placeholder="........................................................................................................................."
                     title="تعديل الغرض والمبرر مباشرة على الورقة"
                   />
@@ -314,7 +314,7 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
 
                 {/* وسوم وتصنيف المصروف */}
                 {doc.tags && doc.tags.length > 0 && (
-                  <div className="mt-2 pt-1 border-t border-dotted border-slate-300 flex items-center gap-1.5 flex-wrap text-xs text-slate-700">
+                  <div className="mt-2 pt-1 border-t border-solid border-slate-300 flex items-center gap-1.5 flex-wrap text-xs text-slate-700">
                     <span className="font-bold text-slate-800">وسوم وتصنيف المصروف:</span>
                     {doc.tags.map((tag) => (
                       <span
@@ -441,7 +441,7 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
                       value={doc.documentNumber}
                       onChange={(val) => handleInlineChange('documentNumber', val)}
                       isEditable={isEditable}
-                      className="font-mono text-sm font-bold border-b border-dotted border-black px-1 min-w-[60px] text-center"
+                      className="font-mono text-sm font-bold border-b border-solid border-black px-1 min-w-[60px] text-center"
                       placeholder="0001"
                       dir="ltr"
                       title="رقم المستند المالي"
@@ -453,7 +453,7 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
                       value={doc.dateHijri}
                       onChange={(val) => handleInlineChange('dateHijri', val)}
                       isEditable={isEditable}
-                      className="font-mono text-xs border-b border-dotted border-black px-1 min-w-[75px] text-center"
+                      className="font-mono text-xs border-b border-solid border-black px-1 min-w-[75px] text-center"
                       placeholder="   /   / 144هـ"
                       title="التاريخ الهجري"
                     />
@@ -464,14 +464,14 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
                       value={doc.dateGregorian}
                       onChange={(val) => handleInlineChange('dateGregorian', val)}
                       isEditable={isEditable}
-                      className="font-mono text-xs border-b border-dotted border-black px-1 min-w-[75px] text-center"
+                      className="font-mono text-xs border-b border-solid border-black px-1 min-w-[75px] text-center"
                       placeholder="   /   / 202م"
                       title="التاريخ الميلادي"
                     />
                   </div>
                   <div className="flex items-center justify-end gap-1.5">
                     <span>المرفقات :</span>
-                    <span className="font-mono text-xs border-b border-dotted border-black px-2 text-center inline-flex items-center">
+                    <span className="font-mono text-xs border-b border-solid border-black px-2 text-center inline-flex items-center">
                       (&nbsp;
                       <WordInlineEditable
                         value={doc.attachmentsCount || 1}
@@ -512,7 +512,7 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
                     value={doc.documentNumber || '0001'}
                     onChange={(val) => handleInlineChange('documentNumber', val)}
                     isEditable={isEditable}
-                    className="font-mono border-b border-dotted border-red-700 px-1 min-w-[50px] text-center"
+                    className="font-mono border-b border-solid border-red-700 px-1 min-w-[50px] text-center"
                     placeholder="0001"
                     dir="ltr"
                     title="رقم المستند NO"
@@ -544,7 +544,7 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
                   }
                   onChange={(val) => handleInlineChange('amountWords', val)}
                   isEditable={isEditable}
-                  className="flex-1 border-b-2 border-dotted border-black font-bold px-2 py-0.5 text-base min-h-[28px]"
+                  className="flex-1 border-b-2 border-solid border-black font-bold px-2 py-0.5 text-base min-h-[28px]"
                   placeholder="........................................................................................................................."
                   title="توجيه ومبلغ الصرف"
                 />
@@ -562,7 +562,7 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
                     if (!doc.beneficiaryName) handleInlineChange('beneficiaryName', val);
                   }}
                   isEditable={isEditable}
-                  className="flex-1 border-b-2 border-dotted border-black font-bold px-2 py-0.5 text-base min-h-[28px]"
+                  className="flex-1 border-b-2 border-solid border-black font-bold px-2 py-0.5 text-base min-h-[28px]"
                   placeholder="........................................................................................................................."
                   title="الجهة أو الغرض لامر الصرف"
                 />
@@ -578,20 +578,20 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
                   onChange={(val) => handleInlineChange('details', val)}
                   isEditable={isEditable}
                   multiline
-                  className="border-b-2 border-dotted border-black min-h-[28px] leading-relaxed px-2 font-bold w-full block"
+                  className="border-b-2 border-solid border-black min-h-[28px] leading-relaxed px-2 font-bold w-full block"
                   placeholder="اكتب تفاصيل وبنود المصروفات هنا مباشرة على الأسطر..."
                   title="كتابة تفاصيل وبنود الطلب مباشرة على السطور"
                 />
-                <div className="border-b-2 border-dotted border-black min-h-[28px]"></div>
-                <div className="border-b-2 border-dotted border-black min-h-[28px]"></div>
-                <div className="border-b-2 border-dotted border-black min-h-[28px]"></div>
-                <div className="border-b-2 border-dotted border-black min-h-[28px]"></div>
-                <div className="border-b-2 border-dotted border-black min-h-[28px]"></div>
+                <div className="border-b-2 border-solid border-black min-h-[28px]"></div>
+                <div className="border-b-2 border-solid border-black min-h-[28px]"></div>
+                <div className="border-b-2 border-solid border-black min-h-[28px]"></div>
+                <div className="border-b-2 border-solid border-black min-h-[28px]"></div>
+                <div className="border-b-2 border-solid border-black min-h-[28px]"></div>
               </div>
 
               {/* وسوم وتصنيف المصروف */}
               {doc.tags && doc.tags.length > 0 && (
-                <div className="mt-3 pt-1 border-t border-dotted border-slate-300 flex items-center gap-1.5 flex-wrap text-xs text-slate-700">
+                <div className="mt-3 pt-1 border-t border-solid border-slate-300 flex items-center gap-1.5 flex-wrap text-xs text-slate-700">
                   <span className="font-bold text-slate-800">وسوم وتصنيف المصروف:</span>
                   {doc.tags.map((tag) => (
                     <span
@@ -627,14 +627,14 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
                   value={doc.requesterName}
                   onChange={(val) => handleInlineChange('requesterName', val)}
                   isEditable={isEditable}
-                  className="border-b-2 border-dotted border-black flex-1 px-2 font-bold min-h-[24px]"
+                  className="border-b-2 border-solid border-black flex-1 px-2 font-bold min-h-[24px]"
                   placeholder={isEditable ? 'اكتب اسم مقدم الطلب...' : '...................................................'}
                   title="اسم مقدم الطلب"
                 />
               </div>
               <div className="flex items-center gap-1">
                 <span>توقيع :</span>
-                <span className="border-b-2 border-dotted border-black flex-1">
+                <span className="border-b-2 border-solid border-black flex-1">
                   ...................................................
                 </span>
               </div>
@@ -702,7 +702,7 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
                     value={doc.documentNumber}
                     onChange={(val) => handleInlineChange('documentNumber', val)}
                     isEditable={isEditable}
-                    className="font-mono text-sm font-bold border-b border-dotted border-black px-1 min-w-[70px] text-center"
+                    className="font-mono text-sm font-bold border-b border-solid border-black px-1 min-w-[70px] text-center"
                     placeholder="0001"
                     dir="ltr"
                     title="رقم المستند"
@@ -714,7 +714,7 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
                     value={doc.dateHijri}
                     onChange={(val) => handleInlineChange('dateHijri', val)}
                     isEditable={isEditable}
-                    className="font-mono text-xs border-b border-dotted border-black px-1 min-w-[75px] text-center"
+                    className="font-mono text-xs border-b border-solid border-black px-1 min-w-[75px] text-center"
                     placeholder="   /   / 144هـ"
                     title="التاريخ الهجري"
                   />
@@ -725,14 +725,14 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
                     value={doc.dateGregorian}
                     onChange={(val) => handleInlineChange('dateGregorian', val)}
                     isEditable={isEditable}
-                    className="font-mono text-xs border-b border-dotted border-black px-1 min-w-[75px] text-center"
+                    className="font-mono text-xs border-b border-solid border-black px-1 min-w-[75px] text-center"
                     placeholder="   /   / 202م"
                     title="التاريخ الميلادي"
                   />
                 </div>
                 <div className="flex items-center justify-end gap-1.5">
                   <span>المرفقات :</span>
-                  <span className="font-mono text-xs border-b border-dotted border-black px-2 text-center inline-flex items-center">
+                  <span className="font-mono text-xs border-b border-solid border-black px-2 text-center inline-flex items-center">
                     (&nbsp;
                     <WordInlineEditable
                       value={doc.attachmentsCount || 1}
@@ -772,7 +772,7 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
                     value={doc.documentNumber || '0001'}
                     onChange={(val) => handleInlineChange('documentNumber', val)}
                     isEditable={isEditable}
-                    className="font-mono border-b border-dotted border-red-700 px-1 min-w-[50px] text-center"
+                    className="font-mono border-b border-solid border-red-700 px-1 min-w-[50px] text-center"
                     placeholder="0001"
                     dir="ltr"
                     title="رقم المستند NO"
@@ -792,7 +792,7 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
                   value={doc.beneficiaryName}
                   onChange={(val) => handleInlineChange('beneficiaryName', val)}
                   isEditable={isEditable}
-                  className="flex-1 border-b-2 border-dotted border-black font-bold px-3 py-0.5 text-base min-h-[28px]"
+                  className="flex-1 border-b-2 border-solid border-black font-bold px-3 py-0.5 text-base min-h-[28px]"
                   placeholder="........................................................................................................................."
                   title="اسم المستفيد الموقع أدناه"
                 />
@@ -807,7 +807,7 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
                   value={doc.jobTitle}
                   onChange={(val) => handleInlineChange('jobTitle', val)}
                   isEditable={isEditable}
-                  className="flex-1 border-b-2 border-dotted border-black font-bold px-3 py-0.5 text-base min-h-[28px]"
+                  className="flex-1 border-b-2 border-solid border-black font-bold px-3 py-0.5 text-base min-h-[28px]"
                   placeholder="........................................................................................................................."
                   title="المسمى الوظيفي"
                 />
@@ -822,14 +822,14 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
                   value={doc.amountWords}
                   onChange={(val) => handleInlineChange('amountWords', val)}
                   isEditable={isEditable}
-                  className="flex-1 border-b-2 border-dotted border-black font-bold px-2 py-0.5 text-base min-h-[28px]"
+                  className="flex-1 border-b-2 border-solid border-black font-bold px-2 py-0.5 text-base min-h-[28px]"
                   placeholder=".................................................................."
                   title="المبلغ كتابة"
                 />
                 <span className="whitespace-nowrap text-base font-bold mr-2">
                   رقماً
                 </span>
-                <div className="border-b-2 border-dotted border-black px-2 py-0.5 min-w-[130px] text-center flex items-center justify-center gap-1">
+                <div className="border-b-2 border-solid border-black px-2 py-0.5 min-w-[130px] text-center flex items-center justify-center gap-1">
                   <WordInlineEditable
                     value={doc.amount ? doc.amount.toLocaleString('ar-YE') : ''}
                     onChange={handleAmountChange}
@@ -858,7 +858,7 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
                   value={doc.purpose}
                   onChange={(val) => handleInlineChange('purpose', val)}
                   isEditable={isEditable}
-                  className="flex-1 border-b-2 border-dotted border-black font-bold px-3 py-0.5 text-base min-h-[28px]"
+                  className="flex-1 border-b-2 border-solid border-black font-bold px-3 py-0.5 text-base min-h-[28px]"
                   placeholder="........................................................................................................................."
                   title="الغرض والمبرر"
                 />
@@ -871,7 +871,7 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
                   value={doc.monthPeriod}
                   onChange={(val) => handleInlineChange('monthPeriod', val)}
                   isEditable={isEditable}
-                  className="border-b-2 border-dotted border-black px-3 min-w-[150px] text-center font-bold"
+                  className="border-b-2 border-solid border-black px-3 min-w-[150px] text-center font-bold"
                   placeholder=".........................."
                   title="الفترة / الشهر"
                 />
@@ -920,7 +920,7 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
                       value={doc.beneficiaryName}
                       onChange={(val) => handleInlineChange('beneficiaryName', val)}
                       isEditable={isEditable}
-                      className="border-b-2 border-dotted border-black flex-1 font-bold px-2 py-0.5 text-base"
+                      className="border-b-2 border-solid border-black flex-1 font-bold px-2 py-0.5 text-base"
                       placeholder="................................................................................"
                       title="اسم المستلم الموقع"
                     />
@@ -930,7 +930,7 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
                 {/* Fingerprint container */}
                 <div className="text-center border-2 border-dashed border-black rounded-sm p-1 w-[100px] h-[105px] flex flex-col items-center justify-between">
                   <span className="text-[11px] font-black">بصمة المستلم</span>
-                  <div className="w-12 h-14 border border-dotted border-slate-400 rounded-full flex items-center justify-center opacity-40 text-[9px]">
+                  <div className="w-12 h-14 border border-solid border-slate-400 rounded-full flex items-center justify-center opacity-40 text-[9px]">
                     (الإبهام)
                   </div>
                 </div>
@@ -938,7 +938,7 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
 
               {/* وسوم وتصنيف المصروف */}
               {doc.tags && doc.tags.length > 0 && (
-                <div className="mt-3 pt-1 border-t border-dotted border-slate-300 flex items-center gap-1.5 flex-wrap text-xs text-slate-700">
+                <div className="mt-3 pt-1 border-t border-solid border-slate-300 flex items-center gap-1.5 flex-wrap text-xs text-slate-700">
                   <span className="font-bold text-slate-800">وسوم وتصنيف المصروف:</span>
                   {doc.tags.map((tag) => (
                     <span
