@@ -928,7 +928,7 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
                 </div>
 
                 {/* Fingerprint container */}
-                <div className="text-center border-2 border-dashed border-black rounded-sm p-1 w-[100px] h-[105px] flex flex-col items-center justify-between">
+                <div className="text-center border-2 border-solid border-black rounded-sm p-1 w-[100px] h-[105px] flex flex-col items-center justify-between">
                   <span className="text-[11px] font-black">بصمة المستلم</span>
                   <div className="w-12 h-14 border border-solid border-slate-400 rounded-full flex items-center justify-center opacity-40 text-[9px]">
                     (الإبهام)
