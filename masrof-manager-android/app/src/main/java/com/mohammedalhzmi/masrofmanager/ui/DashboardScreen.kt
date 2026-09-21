@@ -22,7 +22,10 @@ import androidx.compose.material.icons.filled.Settings
 @Composable
 fun DashboardScreen(viewModel: MasrofViewModel, onAddDocument: () -> Unit, onPrint: (String) -> Unit, onEdit: (String) -> Unit, onSettings: () -> Unit) {
     val documents by viewModel.allDocuments.collectAsState()
+    val archivedDocuments by viewModel.archivedDocuments.collectAsState()
     var selectedIds by remember { mutableStateOf(setOf<Long>()) }
+    var query by remember { mutableStateOf("") }
+    var showArchive by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val role = RolePreferences.currentRole(context)
     val canSettings = RolePreferences.can(context, AppPermission.SETTINGS)
@@ -38,13 +41,19 @@ fun DashboardScreen(viewModel: MasrofViewModel, onAddDocument: () -> Unit, onPri
 
     Column(modifier = Modifier.padding(16.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Column { Text("نظام مالية صندوق النظافة", style = MaterialTheme.typography.headlineMedium); Text("الدور الحالي: ${role.title}", style = MaterialTheme.typography.bodySmall) }
+            Column { Text("نظام المالية لصندوق النظافة الحزم", style = MaterialTheme.typography.headlineMedium); Text("الدور الحالي: ${role.title}", style = MaterialTheme.typography.bodySmall) }
             if (canSettings) IconButton(onClick = onSettings) { Icon(Icons.Default.Settings, contentDescription = "الإعدادات") }
         }
         Spacer(modifier = Modifier.height(12.dp))
         AnimatedVisibility(visible = showDeveloperNotice) { Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer), modifier = Modifier.fillMaxWidth()) { Text("هذا التطبيق من برمجة وتطوير المطور محمد الحزمي\nجميع الحقوق محفوظة للمطور 2026", modifier = Modifier.padding(12.dp)) } }
         Spacer(modifier = Modifier.height(8.dp))
         Button(onClick = onAddDocument, modifier = Modifier.fillMaxWidth()) { Text("إضافة مستند جديد") }
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedTextField(value = query, onValueChange = { query = it }, modifier = Modifier.fillMaxWidth(), singleLine = true, label = { Text("بحث بالنوع أو التاريخ أو الرقم أو اسم المستفيد") })
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(selected = !showArchive, onClick = { showArchive = false; selectedIds = emptySet() }, label = { Text("المستندات الحالية (${documents.size})") })
+            FilterChip(selected = showArchive, onClick = { showArchive = true; selectedIds = emptySet() }, label = { Text("الأرشيف (${archivedDocuments.size})") })
+        }
         Spacer(modifier = Modifier.height(8.dp))
         if (canBackup) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -58,20 +67,26 @@ fun DashboardScreen(viewModel: MasrofViewModel, onAddDocument: () -> Unit, onPri
             OutlinedButton(onClick = { AppBackupManager.shareBackup(context); viewModel.recordAudit("SHARE_BACKUP", "مشاركة النسخة الاحتياطية") }, modifier = Modifier.fillMaxWidth()) { Text("مشاركة النسخة الاحتياطية إلى السحابة") }
         }
         Spacer(modifier = Modifier.height(12.dp))
+        val sourceDocuments = if (showArchive) archivedDocuments else documents
+        val normalizedQuery = query.trim().lowercase()
+        val visibleDocuments = sourceDocuments.filter { doc ->
+            normalizedQuery.isBlank() || listOf(doc.documentNumber, doc.dateHijri, doc.dateGregorian, doc.beneficiaryName.orEmpty(), documentTitle(doc.type)).any { it.lowercase().contains(normalizedQuery) }
+        }
         LazyColumn(modifier = Modifier.weight(1f)) {
-            items(documents, key = { it.id }) { doc ->
+            items(visibleDocuments, key = { it.id }) { doc ->
                 Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                     Row(modifier = Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(selectedIds.contains(doc.id), { checked -> selectedIds = if (checked) selectedIds + doc.id else selectedIds - doc.id })
                         Column(modifier = Modifier.weight(1f)) { Text("${documentTitle(doc.type)} — ${doc.documentNumber}", style = MaterialTheme.typography.titleMedium); Text(doc.beneficiaryName.orEmpty()); if (doc.amount != null) Text("${doc.amount} ريال") }
-                        if (canEdit) TextButton(onClick = { onEdit("${doc.type.name.lowercase()}:${doc.id}") }) { Text("تعديل") }
+                        if (showArchive) TextButton(onClick = { viewModel.restoreDocument(doc) }) { Text("استعادة") }
+                        else if (canEdit) TextButton(onClick = { onEdit("${doc.type.name.lowercase()}:${doc.id}") }) { Text("تعديل") }
                     }
                 }
             }
         }
         if (selectedIds.isNotEmpty()) {
             Button(onClick = { viewModel.recordAudit("PRINT_EXPORT", "عدد المستندات: ${selectedIds.size}"); onPrint(selectedIds.joinToString(",")) }, modifier = Modifier.fillMaxWidth()) { Text("تصدير / طباعة المحدد (${selectedIds.size})") }
-            if (selectedIds.size == 1 && canDelete) TextButton(onClick = { documents.find { it.id in selectedIds }?.let { viewModel.deleteDocument(it); selectedIds = emptySet() } }, modifier = Modifier.fillMaxWidth()) { Text("حذف المستند المحدد") }
+            if (selectedIds.size == 1 && canDelete) TextButton(onClick = { visibleDocuments.find { it.id in selectedIds }?.let { if (showArchive) viewModel.restoreDocument(it) else viewModel.archiveDocument(it); selectedIds = emptySet() } }, modifier = Modifier.fillMaxWidth()) { Text(if (showArchive) "استعادة المستند المحدد" else "أرشفة المستند المحدد") }
         }
     }
 }

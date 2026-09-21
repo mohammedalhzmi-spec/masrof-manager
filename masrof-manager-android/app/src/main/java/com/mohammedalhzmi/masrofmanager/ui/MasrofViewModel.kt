@@ -34,6 +34,8 @@ class MasrofViewModel(
 ) : ViewModel() {
     val allDocuments = repository.allDocuments
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val archivedDocuments = repository.archivedDocuments
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val lastDocumentNumber = repository.getLastDocumentNumber()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
@@ -88,6 +90,7 @@ class MasrofViewModel(
 
     suspend fun ensureDefaultAdmin() {
         if (repository.userCount() == 0) repository.insertUser(UserEntity(username = "admin", passwordHash = AuthSecurity.hash("admin1234"), fullName = "مدير النظام", role = "ADMIN"))
+        repository.archiveOlderThan(System.currentTimeMillis() - 365L * 24L * 60L * 60L * 1000L, System.currentTimeMillis())
     }
 
     suspend fun restoreRememberedUser(context: Context): AuthenticatedUser? {
@@ -140,6 +143,14 @@ class MasrofViewModel(
 
     fun deleteDocument(document: Document) {
         viewModelScope.launch { repository.delete(document); audit("DELETE_DOCUMENT", document.documentNumber) }
+    }
+
+    fun archiveDocument(document: Document) {
+        viewModelScope.launch(Dispatchers.IO) { repository.archive(document, System.currentTimeMillis()); audit("ARCHIVE_DOCUMENT", document.documentNumber) }
+    }
+
+    fun restoreDocument(document: Document) {
+        viewModelScope.launch(Dispatchers.IO) { repository.restore(document, System.currentTimeMillis()); audit("RESTORE_DOCUMENT", document.documentNumber) }
     }
 
     fun exportDatabase(context: Context, uri: Uri) {

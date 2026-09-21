@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
 
-@Database(entities = [Document::class, OrganizationProfile::class, ContactEntity::class, UserEntity::class, AuditLogEntity::class, DocumentDesignEntity::class, DesignElementEntity::class], version = 7, exportSchema = false)
+@Database(entities = [Document::class, OrganizationProfile::class, ContactEntity::class, UserEntity::class, AuditLogEntity::class, DocumentDesignEntity::class, DesignElementEntity::class], version = 8, exportSchema = false)
 @TypeConverters(Converters::class)
 abstract class MasrofDatabase : RoomDatabase() {
     abstract fun documentDao(): DocumentDao
@@ -48,6 +48,15 @@ abstract class MasrofDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE document_designs ADD COLUMN marginTop REAL NOT NULL DEFAULT 25.0")
                 db.execSQL("ALTER TABLE document_designs ADD COLUMN marginRight REAL NOT NULL DEFAULT 25.0")
                 db.execSQL("ALTER TABLE document_designs ADD COLUMN marginBottom REAL NOT NULL DEFAULT 25.0")
+            }
+        }
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE documents ADD COLUMN isArchived INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE documents ADD COLUMN archivedAt INTEGER")
+                db.execSQL("ALTER TABLE documents ADD COLUMN updatedAt INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("UPDATE documents SET updatedAt = createdAt WHERE updatedAt = 0")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_documents_isArchived ON documents(isArchived)")
             }
         }
     }

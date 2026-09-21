@@ -159,7 +159,7 @@ object OfficialDocumentRenderer {
             val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { alpha = (e.opacity.coerceIn(0f, 1f) * 255).toInt() }
             c.save(); c.rotate(e.rotation, e.x + e.width / 2f, e.y + e.height / 2f)
             when (e.type) {
-                "TEXT" -> drawRichText(c, resolve(e.content, d), e, p)
+                "TEXT" -> drawRichText(c, resolve(e.content, d), e, p, context)
                 "RECT" -> { p.style = Paint.Style.FILL; p.color = runCatching { Color.parseColor(e.fillColor) }.getOrDefault(Color.TRANSPARENT); c.drawRoundRect(e.x, e.y, e.x + e.width, e.y + e.height, e.cornerRadius, e.cornerRadius, p); p.style = Paint.Style.STROKE; p.strokeWidth = e.strokeWidth; p.color = runCatching { Color.parseColor(e.strokeColor) }.getOrDefault(Color.DKGRAY); c.drawRoundRect(e.x, e.y, e.x + e.width, e.y + e.height, e.cornerRadius, e.cornerRadius, p) }
                 "CIRCLE" -> { p.style = Paint.Style.FILL; p.color = runCatching { Color.parseColor(e.fillColor) }.getOrDefault(Color.TRANSPARENT); c.drawOval(e.x, e.y, e.x + e.width, e.y + e.height, p); p.style = Paint.Style.STROKE; p.strokeWidth = e.strokeWidth; p.color = runCatching { Color.parseColor(e.strokeColor) }.getOrDefault(Color.DKGRAY); c.drawOval(e.x, e.y, e.x + e.width, e.y + e.height, p) }
                 "LINE" -> { p.style = Paint.Style.STROKE; p.strokeWidth = e.strokeWidth; p.color = runCatching { Color.parseColor(e.strokeColor) }.getOrDefault(Color.DKGRAY); c.drawLine(e.x, e.y + e.height / 2f, e.x + e.width, e.y + e.height / 2f, p) }
@@ -170,8 +170,8 @@ object OfficialDocumentRenderer {
             }; c.restore()
         }
     }
-    private fun drawRichText(c: Canvas, value: String, e: DesignElementEntity, p: Paint) {
-        p.color = runCatching { Color.parseColor(e.textColor) }.getOrDefault(Color.BLACK); p.textSize = e.fontSize; p.typeface = Typeface.create(when (e.fontFamily) { "SERIF" -> Typeface.SERIF; "MONOSPACE" -> Typeface.MONOSPACE; else -> Typeface.SANS_SERIF }, if (e.bold && e.italic) Typeface.BOLD_ITALIC else if (e.bold) Typeface.BOLD else if (e.italic) Typeface.ITALIC else Typeface.NORMAL); p.isUnderlineText = e.underline
+    private fun drawRichText(c: Canvas, value: String, e: DesignElementEntity, p: Paint, context: Context?) {
+        p.color = runCatching { Color.parseColor(e.textColor) }.getOrDefault(Color.BLACK); p.textSize = e.fontSize; val style = if (e.bold && e.italic) Typeface.BOLD_ITALIC else if (e.bold) Typeface.BOLD else if (e.italic) Typeface.ITALIC else Typeface.NORMAL; p.typeface = context?.let { ctx -> runCatching { Typeface.createFromAsset(ctx.assets, "fonts/${when (e.fontFamily) { "AMIRI" -> if (e.bold) "amiri_bold.ttf" else "amiri_regular.ttf"; "CAIRO" -> if (e.bold) "cairo_bold.ttf" else "cairo_regular.ttf"; "SCHEHERAZADE" -> if (e.bold) "scheherazade_bold.ttf" else "scheherazade_regular.ttf"; else -> return@runCatching null }}") }.getOrNull() } ?: Typeface.create(when (e.fontFamily) { "SERIF" -> Typeface.SERIF; "MONOSPACE" -> Typeface.MONOSPACE; else -> Typeface.SANS_SERIF }, style); p.isUnderlineText = e.underline
         val lines = value.split("\n"); val lineHeight = e.fontSize * e.lineSpacing; val x = when (e.textAlign) { "CENTER" -> e.x + e.width / 2f; "END" -> e.x + e.width; else -> e.x }; p.textAlign = when (e.textAlign) { "CENTER" -> Paint.Align.CENTER; "END" -> Paint.Align.RIGHT; else -> Paint.Align.LEFT }
         lines.forEachIndexed { index, line -> c.drawText(line, x, e.y + e.fontSize + index * lineHeight, p) }; p.textAlign = Paint.Align.LEFT
     }

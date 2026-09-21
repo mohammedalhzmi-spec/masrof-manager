@@ -12,10 +12,14 @@ class MasrofRepository(
 ) {
     // Document operations
     val allDocuments: Flow<List<Document>> = documentDao.getAllDocuments()
+    val archivedDocuments: Flow<List<Document>> = documentDao.getArchivedDocuments()
     fun getLastDocumentNumber() = documentDao.getLastDocumentNumber()
     suspend fun insert(document: Document) = documentDao.insert(document)
     suspend fun update(document: Document) = documentDao.update(document)
     suspend fun delete(document: Document) = documentDao.delete(document)
+    suspend fun archive(document: Document, timestamp: Long) = documentDao.archive(document.id, timestamp)
+    suspend fun restore(document: Document, timestamp: Long) = documentDao.restore(document.id, timestamp)
+    suspend fun archiveOlderThan(cutoff: Long, timestamp: Long) = documentDao.archiveOlderThan(cutoff, timestamp)
 
     // Settings operations
     fun getOrganizationProfile() = settingsDao.getOrganizationProfile()
