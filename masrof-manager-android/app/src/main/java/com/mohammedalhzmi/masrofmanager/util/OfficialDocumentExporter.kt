@@ -16,6 +16,7 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import android.graphics.Color
 import android.graphics.BitmapFactory
+import com.example.R
 
 object OfficialDocumentExporter {
     fun exportPdf(context: Context, documents: List<Document>): Uri {
@@ -132,4 +133,5 @@ object OfficialDocumentExporter {
     )
 
     private fun loadBackground(context: Context, type: DocumentType) = AppPreferences.backgroundImageUri(context, type)?.let { runCatching { context.contentResolver.openInputStream(Uri.parse(it)).use(BitmapFactory::decodeStream) }.getOrNull() }
+        ?: BitmapFactory.decodeResource(context.resources, R.drawable.ic_launcher_logo_bitmap)
 }
