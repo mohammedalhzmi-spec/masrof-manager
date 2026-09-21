@@ -32,6 +32,7 @@ export interface Document {
   customMarginPx?: number;
   fontFamily?: string;
   borderStyle?: 'classic' | 'double' | 'bold' | 'decorative' | 'gold' | 'islamic' | 'simple';
+  isArchived?: boolean;
   createdAt: number;
 }
 

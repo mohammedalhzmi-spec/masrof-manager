@@ -13,11 +13,15 @@ import { WordDocumentEditorModal } from './components/WordDocumentEditorModal';
 import { GitSyncModal } from './components/GitSyncModal';
 import { SettingsModal } from './components/SettingsModal';
 import { BackupModal } from './components/BackupModal';
+import { SplashLoginScreen } from './components/SplashLoginScreen';
 import { Document, DocumentType, OrganizationProfile } from './types';
 import { sampleDocuments, initialOrganizationProfile } from './utils/initialData';
 import { GitBranch, ShieldCheck, Sparkles, Building2, CheckCircle2, Smartphone, Download } from 'lucide-react';
 
 export default function App() {
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
+    return localStorage.getItem('masrof_logged_in') === 'true';
+  });
   // Persistence state
   const [documents, setDocuments] = useState<Document[]>(() => {
     try {
@@ -156,6 +160,27 @@ export default function App() {
     }
   };
 
+  const handleToggleArchive = (id: string) => {
+    setDocuments((prev) =>
+      prev.map((d) => (d.id === id ? { ...d, isArchived: !d.isArchived } : d))
+    );
+  };
+
+  const handleArchiveOldDocuments = () => {
+    const oneYearAgo = Date.now() - 365 * 86400000;
+    let count = 0;
+    setDocuments((prev) =>
+      prev.map((d) => {
+        if (!d.isArchived && d.createdAt < oneYearAgo) {
+          count++;
+          return { ...d, isArchived: true };
+        }
+        return d;
+      })
+    );
+    alert(`تمت أرشفة ${count} مستنداً مضى عليها أكثر من عام بنجاح ونقلها إلى قسم الأرشيف.`);
+  };
+
   // Selection handlers
   const handleToggleSelect = (id: string) => {
     setSelectedIds((prev) => {
@@ -197,6 +222,18 @@ export default function App() {
     setOrganization(newOrg);
     setSelectedIds(new Set());
   };
+
+  // If not logged in, show the animated splash screen
+  if (!isLoggedIn) {
+    return (
+      <SplashLoginScreen
+        onLoginSuccess={() => {
+          setIsLoggedIn(true);
+          localStorage.setItem('masrof_logged_in', 'true');
+        }}
+      />
+    );
+  }
 
   // If currently in print preview view, render the official print page directly
   if (printState.isPrinting) {
@@ -308,6 +345,8 @@ export default function App() {
           onOpenWordEditor={(doc) => setWordEditorDocument(doc)}
           onDeleteDocument={handleDeleteDocument}
           onNewDocument={handleOpenCreate}
+          onToggleArchive={handleToggleArchive}
+          onArchiveOldDocuments={handleArchiveOldDocuments}
         />
       </main>
 

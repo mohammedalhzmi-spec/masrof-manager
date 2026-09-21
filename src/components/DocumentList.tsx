@@ -9,14 +9,14 @@ import {
   FileSpreadsheet,
   FileCheck2,
   Receipt,
-  Eye,
   Calendar,
   User,
   Paperclip,
-  FileText,
   Edit3,
   Tag,
   X,
+  Archive,
+  RotateCcw,
 } from 'lucide-react';
 import { Document, DocumentType } from '../types';
 
@@ -33,6 +33,8 @@ interface DocumentListProps {
   onOpenWordEditor?: (doc: Document) => void;
   onDeleteDocument: (id: string) => void;
   onNewDocument: (type: DocumentType) => void;
+  onToggleArchive: (id: string) => void;
+  onArchiveOldDocuments: () => void;
 }
 
 export const DocumentList: React.FC<DocumentListProps> = ({
@@ -48,10 +50,16 @@ export const DocumentList: React.FC<DocumentListProps> = ({
   onOpenWordEditor,
   onDeleteDocument,
   onNewDocument,
+  onToggleArchive,
+  onArchiveOldDocuments,
 }) => {
-  const [filterType, setFilterType] = useState<'ALL' | DocumentType>('ALL');
+  const [filterType, setFilterType] = useState<'ALL' | DocumentType | 'ARCHIVE'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [internalSelectedTag, setInternalSelectedTag] = useState<string | null>(null);
+
+  // Advanced Archive Search Filters
+  const [archiveSearchType, setArchiveSearchType] = useState<'ALL' | DocumentType>('ALL');
+  const [archiveDateQuery, setArchiveDateQuery] = useState('');
 
   const activeTag = selectedTag !== undefined ? selectedTag : internalSelectedTag;
   const setActiveTag = (tag: string | null) => {
@@ -59,15 +67,33 @@ export const DocumentList: React.FC<DocumentListProps> = ({
     setInternalSelectedTag(tag);
   };
 
+  const activeDocuments = documents.filter((d) => !d.isArchived);
+  const archivedDocuments = documents.filter((d) => d.isArchived);
+
   const allTags = Array.from(
     new Set(documents.flatMap((d) => d.tags || []).filter(Boolean))
   );
 
   const filteredDocuments = documents.filter((doc) => {
-    if (filterType !== 'ALL' && doc.type !== filterType) {
-      return false;
+    if (filterType === 'ARCHIVE') {
+      if (!doc.isArchived) return false;
+      if (archiveSearchType !== 'ALL' && doc.type !== archiveSearchType) {
+        return false;
+      }
+      if (archiveDateQuery.trim()) {
+        const dq = archiveDateQuery.toLowerCase();
+        const matchHijri = doc.dateHijri.toLowerCase().includes(dq);
+        const matchGreg = doc.dateGregorian.toLowerCase().includes(dq);
+        if (!matchHijri && !matchGreg) return false;
+      }
+    } else {
+      if (doc.isArchived) return false;
+      if (filterType !== 'ALL' && doc.type !== filterType) {
+        return false;
+      }
     }
-    if (activeTag && !(doc.tags || []).includes(activeTag)) {
+
+    if (activeTag && filterType !== 'ARCHIVE' && !(doc.tags || []).includes(activeTag)) {
       return false;
     }
     if (searchQuery.trim()) {
@@ -125,7 +151,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
                 : 'bg-white text-slate-600 hover:bg-slate-200 border border-slate-200'
             }`}
           >
-            الكل ({documents.length})
+            الكل ({activeDocuments.length})
           </button>
           <button
             onClick={() => setFilterType('ORDER')}
@@ -135,7 +161,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
                 : 'bg-white text-emerald-800 hover:bg-emerald-50 border border-emerald-200'
             }`}
           >
-            أوامر الصرف ({documents.filter((d) => d.type === 'ORDER').length})
+            أوامر الصرف ({activeDocuments.filter((d) => d.type === 'ORDER').length})
           </button>
           <button
             onClick={() => setFilterType('REQUEST')}
@@ -145,7 +171,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
                 : 'bg-white text-blue-800 hover:bg-blue-50 border border-blue-200'
             }`}
           >
-            طلبات الصرف ({documents.filter((d) => d.type === 'REQUEST').length})
+            طلبات الصرف ({activeDocuments.filter((d) => d.type === 'REQUEST').length})
           </button>
           <button
             onClick={() => setFilterType('RECEIPT')}
@@ -155,25 +181,120 @@ export const DocumentList: React.FC<DocumentListProps> = ({
                 : 'bg-white text-amber-800 hover:bg-amber-50 border border-amber-200'
             }`}
           >
-            سندات القبض ({documents.filter((d) => d.type === 'RECEIPT').length})
+            سندات القبض ({activeDocuments.filter((d) => d.type === 'RECEIPT').length})
+          </button>
+
+          {/* Archive Tab */}
+          <button
+            onClick={() => setFilterType('ARCHIVE')}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+              filterType === 'ARCHIVE'
+                ? 'bg-purple-700 text-white shadow'
+                : 'bg-white text-purple-800 hover:bg-purple-50 border border-purple-200'
+            }`}
+          >
+            <Archive className="w-3.5 h-3.5" />
+            <span>الأرشيف ({archivedDocuments.length})</span>
           </button>
         </div>
 
-        {/* Search input */}
-        <div className="relative w-full md:w-72">
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="بحث برقم المستند، المستفيد، البيان..."
-            className="w-full pr-9 pl-4 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 shadow-sm"
-          />
-          <Search className="w-4 h-4 text-slate-400 absolute right-3 top-2.5 pointer-events-none" />
+        {/* Search input & Archive Old button */}
+        <div className="flex items-center gap-2 w-full md:w-auto">
+          {filterType !== 'ARCHIVE' && (
+            <button
+              onClick={onArchiveOldDocuments}
+              className="flex items-center gap-1.5 px-3 py-2 bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 rounded-lg text-xs font-bold transition whitespace-nowrap"
+              title="نقل المستندات التي مضى عليها أكثر من عام إلى الأرشيف"
+            >
+              <Archive className="w-3.5 h-3.5" />
+              <span>أرشفة القديمة (&gt; سنة)</span>
+            </button>
+          )}
+          <div className="relative w-full md:w-64">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={filterType === 'ARCHIVE' ? 'بحث عام داخل الأرشيف...' : 'بحث برقم المستند، المستفيد...'}
+              className="w-full pr-9 pl-4 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 shadow-sm"
+            />
+            <Search className="w-4 h-4 text-slate-400 absolute right-3 top-2.5 pointer-events-none" />
+          </div>
         </div>
       </div>
 
-      {/* Tags Filter Bar */}
-      {allTags.length > 0 && (
+      {/* Advanced Archive Search & Filter Interface */}
+      {filterType === 'ARCHIVE' && (
+        <div className="p-4 bg-purple-50/80 border-b border-purple-200 flex flex-col md:flex-row items-center justify-between gap-3 animate-in fade-in duration-200">
+          <div className="flex items-center gap-2 flex-wrap w-full md:w-auto">
+            <span className="text-xs font-bold text-purple-900 flex items-center gap-1">
+              <Archive className="w-4 h-4 text-purple-700" />
+              <span>تصفية المستندات المؤرشفة حسب النوع:</span>
+            </span>
+            <button
+              onClick={() => setArchiveSearchType('ALL')}
+              className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
+                archiveSearchType === 'ALL'
+                  ? 'bg-purple-800 text-white shadow'
+                  : 'bg-white text-purple-900 hover:bg-purple-100 border border-purple-300'
+              }`}
+            >
+              الكل ({archivedDocuments.length})
+            </button>
+            <button
+              onClick={() => setArchiveSearchType('ORDER')}
+              className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
+                archiveSearchType === 'ORDER'
+                  ? 'bg-emerald-700 text-white shadow'
+                  : 'bg-white text-emerald-800 hover:bg-emerald-50 border border-emerald-300'
+              }`}
+            >
+              أوامر الصرف ({archivedDocuments.filter(d => d.type === 'ORDER').length})
+            </button>
+            <button
+              onClick={() => setArchiveSearchType('REQUEST')}
+              className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
+                archiveSearchType === 'REQUEST'
+                  ? 'bg-blue-700 text-white shadow'
+                  : 'bg-white text-blue-800 hover:bg-blue-50 border border-blue-300'
+              }`}
+            >
+              طلبات الصرف ({archivedDocuments.filter(d => d.type === 'REQUEST').length})
+            </button>
+            <button
+              onClick={() => setArchiveSearchType('RECEIPT')}
+              className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
+                archiveSearchType === 'RECEIPT'
+                  ? 'bg-amber-700 text-white shadow'
+                  : 'bg-white text-amber-800 hover:bg-amber-50 border border-amber-300'
+              }`}
+            >
+              سندات القبض ({archivedDocuments.filter(d => d.type === 'RECEIPT').length})
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2 w-full md:w-auto">
+            <input
+              type="text"
+              value={archiveDateQuery}
+              onChange={(e) => setArchiveDateQuery(e.target.value)}
+              placeholder="البحث الدقيق بالتاريخ (هجري / ميلادي)..."
+              className="px-3 py-1.5 bg-white border border-purple-300 rounded-lg text-xs font-medium focus:outline-none focus:ring-2 focus:ring-purple-500 w-full md:w-56"
+            />
+            {archiveDateQuery && (
+              <button
+                onClick={() => setArchiveDateQuery('')}
+                className="text-xs text-purple-700 hover:text-purple-900 px-2 py-1 font-bold whitespace-nowrap"
+              >
+                إلغاء التاريخ
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Tags Filter Bar (Only in active view) */}
+      {filterType !== 'ARCHIVE' && allTags.length > 0 && (
         <div className="px-4 sm:px-5 py-2.5 bg-slate-50 border-b border-slate-200/80 flex items-center gap-1.5 flex-wrap">
           <span className="text-xs font-bold text-slate-500 flex items-center gap-1 ml-1">
             <Tag className="w-3.5 h-3.5 text-blue-600" />
@@ -192,7 +313,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
           </button>
 
           {allTags.map((t) => {
-            const count = documents.filter((d) => (d.tags || []).includes(t)).length;
+            const count = activeDocuments.filter((d) => (d.tags || []).includes(t)).length;
             const isCurrent = activeTag === t;
             return (
               <button
@@ -231,44 +352,58 @@ export const DocumentList: React.FC<DocumentListProps> = ({
       {/* Selection Summary bar */}
       <div className="px-5 py-2.5 bg-slate-100/70 border-b border-slate-200 flex items-center justify-between text-xs text-slate-600">
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => (allSelected ? onClearSelection() : onSelectAll())}
-            className="flex items-center gap-1.5 font-bold hover:text-slate-900 transition"
-          >
-            {allSelected ? (
-              <CheckSquare className="w-4 h-4 text-emerald-600" />
-            ) : (
-              <Square className="w-4 h-4 text-slate-400" />
-            )}
-            <span>{allSelected ? 'إلغاء تحديد الكل' : 'تحديد جميع المستندات'}</span>
-          </button>
-          {selectedIds.size > 0 && (
+          {filterType !== 'ARCHIVE' && (
+            <button
+              onClick={() => (allSelected ? onClearSelection() : onSelectAll())}
+              className="flex items-center gap-1.5 font-bold hover:text-slate-900 transition"
+            >
+              {allSelected ? (
+                <CheckSquare className="w-4 h-4 text-emerald-600" />
+              ) : (
+                <Square className="w-4 h-4 text-slate-400" />
+              )}
+              <span>{allSelected ? 'إلغاء تحديد الكل' : 'تحديد جميع المستندات'}</span>
+            </button>
+          )}
+          {selectedIds.size > 0 && filterType !== 'ARCHIVE' && (
             <span className="font-semibold text-emerald-700">
               (تم تحديد {selectedIds.size} من أصل {filteredDocuments.length})
             </span>
           )}
+          {filterType === 'ARCHIVE' && (
+            <span className="font-bold text-purple-800 flex items-center gap-1">
+              <Archive className="w-3.5 h-3.5" />
+              <span>قسم أرشيف المستندات القديمة • البحث المتقدم مفعل</span>
+            </span>
+          )}
         </div>
         <span className="text-slate-500">
-          إجمالي المستندات المعروضة: <strong>{filteredDocuments.length}</strong>
+          إجمالي المعروض: <strong>{filteredDocuments.length}</strong>
         </span>
       </div>
 
       {/* Document Items List */}
       {filteredDocuments.length === 0 ? (
         <div className="p-12 text-center">
-          <FileSpreadsheet className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-          <h4 className="text-base font-bold text-slate-700 mb-1">لا توجد مستندات مطابقة</h4>
+          <Archive className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+          <h4 className="text-base font-bold text-slate-700 mb-1">
+            {filterType === 'ARCHIVE' ? 'لا توجد مستندات مطابقة للبحث في الأرشيف' : 'لا توجد مستندات مطابقة'}
+          </h4>
           <p className="text-xs text-slate-500 mb-4">
-            لم يتم العثور على أي مستندات تطابق معايير البحث أو التصفية الحالية.
+            {filterType === 'ARCHIVE'
+              ? 'جرب تغيير شروط البحث برقم المستند، التاريخ، أو نوع المستند.'
+              : 'لم يتم العثور على أي مستندات تطابق معايير البحث أو التصفية الحالية.'}
           </p>
-          <div className="flex justify-center gap-2">
-            <button
-              onClick={() => onNewDocument('ORDER')}
-              className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition shadow"
-            >
-              + إضافة أمر صرف جديد
-            </button>
-          </div>
+          {filterType !== 'ARCHIVE' && (
+            <div className="flex justify-center gap-2">
+              <button
+                onClick={() => onNewDocument('ORDER')}
+                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition shadow"
+              >
+                + إضافة أمر صرف جديد
+              </button>
+            </div>
+          )}
         </div>
       ) : (
         <div className="divide-y divide-slate-100">
@@ -284,16 +419,18 @@ export const DocumentList: React.FC<DocumentListProps> = ({
               >
                 {/* Left Side: Checkbox & Main Info */}
                 <div className="flex items-start gap-3 flex-1 min-w-0">
-                  <button
-                    onClick={() => onToggleSelect(doc.id)}
-                    className="mt-1 flex-shrink-0 text-slate-400 hover:text-emerald-600 transition"
-                  >
-                    {isSelected ? (
-                      <CheckSquare className="w-5 h-5 text-emerald-600" />
-                    ) : (
-                      <Square className="w-5 h-5 text-slate-300" />
-                    )}
-                  </button>
+                  {filterType !== 'ARCHIVE' && (
+                    <button
+                      onClick={() => onToggleSelect(doc.id)}
+                      className="mt-1 flex-shrink-0 text-slate-400 hover:text-emerald-600 transition"
+                    >
+                      {isSelected ? (
+                        <CheckSquare className="w-5 h-5 text-emerald-600" />
+                      ) : (
+                        <Square className="w-5 h-5 text-slate-300" />
+                      )}
+                    </button>
+                  )}
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap mb-1.5">
@@ -307,6 +444,12 @@ export const DocumentList: React.FC<DocumentListProps> = ({
                         <span>•</span>
                         <span>{doc.dateGregorian}</span>
                       </div>
+                      {doc.isArchived && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
+                          <Archive className="w-3 h-3" />
+                          مؤرشف (أكثر من عام)
+                        </span>
+                      )}
                     </div>
 
                     {/* Beneficiary */}
@@ -328,31 +471,6 @@ export const DocumentList: React.FC<DocumentListProps> = ({
                         <span className="truncate">{doc.notes}</span>
                       </div>
                     )}
-
-                    {/* Document Tags Chips */}
-                    {doc.tags && doc.tags.length > 0 && (
-                      <div className="flex items-center gap-1.5 flex-wrap mt-2">
-                        {doc.tags.map((t) => (
-                          <button
-                            key={t}
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setActiveTag(activeTag === t ? null : t);
-                            }}
-                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold transition ${
-                              activeTag === t
-                                ? 'bg-blue-600 text-white shadow-2xs'
-                                : 'bg-blue-50 text-blue-800 hover:bg-blue-100 border border-blue-200/80'
-                            }`}
-                            title={`تصفية المستندات بوسم #${t}`}
-                          >
-                            <Tag className="w-2.5 h-2.5" />
-                            <span>#{t}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
                   </div>
                 </div>
 
@@ -371,49 +489,73 @@ export const DocumentList: React.FC<DocumentListProps> = ({
 
                   {/* Actions Group */}
                   <div className="flex items-center gap-1.5">
-                    {/* Word Editor Button */}
-                    {onOpenWordEditor && (
+                    {doc.isArchived ? (
+                      /* Restore Button to main list */
                       <button
-                        id={`word-edit-btn-${doc.id}`}
-                        onClick={() => onOpenWordEditor(doc)}
-                        className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-800 text-xs font-bold border border-blue-200 transition"
-                        title="فتح في محرر وورد لإضافة البيانات وتعديل الورقة"
+                        onClick={() => onToggleArchive(doc.id)}
+                        className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md transition"
+                        title="استعادة المستند وإعادته إلى القائمة الرئيسية"
                       >
-                        <Edit3 className="w-3.5 h-3.5 text-blue-600" />
-                        <span>محرر وورد</span>
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span>استعادة المستند</span>
                       </button>
+                    ) : (
+                      <>
+                        {/* Archive Single Button */}
+                        <button
+                          onClick={() => onToggleArchive(doc.id)}
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-800 text-xs font-bold border border-purple-200 transition"
+                          title="نقل المستند إلى الأرشيف"
+                        >
+                          <Archive className="w-3.5 h-3.5 text-purple-600" />
+                          <span>أرشفة</span>
+                        </button>
+
+                        {/* Word Editor Button */}
+                        {onOpenWordEditor && (
+                          <button
+                            id={`word-edit-btn-${doc.id}`}
+                            onClick={() => onOpenWordEditor(doc)}
+                            className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-800 text-xs font-bold border border-blue-200 transition"
+                            title="فتح في محرر وورد"
+                          >
+                            <Edit3 className="w-3.5 h-3.5 text-blue-600" />
+                            <span>محرر وورد</span>
+                          </button>
+                        )}
+
+                        {/* Print Preview Button */}
+                        <button
+                          id={`print-btn-${doc.id}`}
+                          onClick={() => onPrintDocument(doc)}
+                          className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold border border-emerald-200 transition"
+                          title="معاينة وطباعة المستند الرسمي"
+                        >
+                          <Printer className="w-3.5 h-3.5" />
+                          <span>طباعة</span>
+                        </button>
+
+                        {/* Edit Button */}
+                        <button
+                          id={`edit-btn-${doc.id}`}
+                          onClick={() => onEditDocument(doc)}
+                          className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs transition"
+                          title="تعديل المستند"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+
+                        {/* Delete Button */}
+                        <button
+                          id={`delete-btn-${doc.id}`}
+                          onClick={() => onDeleteDocument(doc.id)}
+                          className="p-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 text-xs transition"
+                          title="حذف المستند"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </>
                     )}
-
-                    {/* Print Preview Button */}
-                    <button
-                      id={`print-btn-${doc.id}`}
-                      onClick={() => onPrintDocument(doc)}
-                      className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold border border-emerald-200 transition"
-                      title="معاينة وطباعة المستند الرسمي"
-                    >
-                      <Printer className="w-3.5 h-3.5" />
-                      <span>طباعة رسمية</span>
-                    </button>
-
-                    {/* Edit Button */}
-                    <button
-                      id={`edit-btn-${doc.id}`}
-                      onClick={() => onEditDocument(doc)}
-                      className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs transition"
-                      title="تعديل المستند"
-                    >
-                      <Edit className="w-4 h-4" />
-                    </button>
-
-                    {/* Delete Button */}
-                    <button
-                      id={`delete-btn-${doc.id}`}
-                      onClick={() => onDeleteDocument(doc.id)}
-                      className="p-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 text-xs transition"
-                      title="حذف المستند"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
                   </div>
                 </div>
               </div>
