@@ -13,15 +13,15 @@ function gitApiPlugin(): Plugin {
           return next();
         }
 
-        const androidPath = path.resolve(__dirname, 'masrof-manager-android');
+        const repoPath = path.resolve(__dirname);
 
         res.setHeader('Content-Type', 'application/json');
 
         if (req.method === 'GET' && req.url === '/api/git/status') {
           try {
-            const branch = execSync('git rev-parse --abbrev-ref HEAD', { cwd: androidPath, encoding: 'utf-8' }).trim();
-            const lastCommit = execSync('git log -n 1 --pretty=format:"%h - %s (%cr) <%an>"', { cwd: androidPath, encoding: 'utf-8' }).trim();
-            const status = execSync('git status --porcelain', { cwd: androidPath, encoding: 'utf-8' }).trim();
+            const branch = execSync('git rev-parse --abbrev-ref HEAD', { cwd: repoPath, encoding: 'utf-8' }).trim();
+            const lastCommit = execSync('git log -n 1 --pretty=format:"%h - %s (%cr) <%an>"', { cwd: repoPath, encoding: 'utf-8' }).trim();
+            const status = execSync('git status --porcelain', { cwd: repoPath, encoding: 'utf-8' }).trim();
             const remoteUrl = 'https://github.com/mohammedalhzmi-spec/masrof-manager1';
 
             res.end(JSON.stringify({
@@ -61,11 +61,11 @@ function gitApiPlugin(): Plugin {
               }
 
               // Check if changes exist
-              const status = execSync('git status --porcelain', { cwd: androidPath, encoding: 'utf-8' }).trim();
+              const status = execSync('git status --porcelain', { cwd: repoPath, encoding: 'utf-8' }).trim();
               if (status.length > 0) {
-                execSync('git add -A', { cwd: androidPath });
+                execSync('git add -A', { cwd: repoPath });
                 const message = commitMessage?.trim() || 'تحديثات نظام مالية صندوق النظافة';
-                execSync(`git commit -m "${message.replace(/"/g, '\\"')}"`, { cwd: androidPath });
+                execSync(`git commit -m "${message.replace(/"/g, '\\"')}"`, { cwd: repoPath });
               }
 
               // Execute git push using authenticated URL
@@ -73,7 +73,7 @@ function gitApiPlugin(): Plugin {
               const pushUrl = `https://${cleanToken}@github.com/mohammedalhzmi-spec/masrof-manager1.git`;
               
               const pushOutput = execSync(`git push ${pushUrl} main`, {
-                cwd: androidPath,
+                cwd: repoPath,
                 encoding: 'utf-8',
               });
 
@@ -97,7 +97,7 @@ function gitApiPlugin(): Plugin {
         if (req.method === 'GET' && req.url === '/api/git/download') {
           try {
             const archiveFile = '/tmp/masrof-manager1-source.tar.gz';
-            execSync(`tar -czf ${archiveFile} -C . masrof-manager-android`);
+            execSync(`tar -czf ${archiveFile} --exclude=node_modules --exclude=.git .`, { cwd: repoPath });
             const fs = await import('fs');
             const data = fs.readFileSync(archiveFile);
             res.setHeader('Content-Type', 'application/gzip');
@@ -112,7 +112,7 @@ function gitApiPlugin(): Plugin {
 
         if (req.method === 'POST' && req.url === '/api/git/pull') {
           try {
-            const pullOutput = execSync('git pull origin main', { cwd: androidPath, encoding: 'utf-8' });
+            const pullOutput = execSync('git pull origin main', { cwd: repoPath, encoding: 'utf-8' });
             res.end(JSON.stringify({ success: true, message: 'تم سحب آخر التحديثات بنجاح', output: pullOutput }));
           } catch (err: any) {
             res.statusCode = 500;
