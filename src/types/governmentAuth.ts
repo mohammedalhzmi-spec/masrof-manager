@@ -17,13 +17,15 @@ export interface DeviceRegistration {
   userId: string;
   installationId: string;
   deviceName: string;
-  androidVersion: string;
-  appVersion: string;
+  androidVersion?: string;
+  appVersion?: string;
   status: DeviceStatus;
-  lastSeenAt: number;
+  lastSeenAt?: number;
+  requestedAt?: number;
   approvedBy?: string;
   approvedAt?: number;
   revokedAt?: number;
+  rejectionReason?: string;
 }
 
 export interface AccessRequest {
@@ -44,7 +46,7 @@ export interface AccessRequest {
 export interface GovernmentAuditLog {
   id: string;
   timestamp: number;
-  action: 'LOGIN_REQUESTED' | 'LOGIN_APPROVED' | 'LOGIN_REJECTED' | 'DEVICE_REVOKED' | 'USER_SUSPENDED' | 'DOCUMENT_APPROVED' | 'DOCUMENT_PAID';
+  action: string;
   details: string;
   username: string;
   deviceId: string;
