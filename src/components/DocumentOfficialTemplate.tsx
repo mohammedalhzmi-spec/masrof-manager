@@ -38,7 +38,7 @@ export const DocumentOfficialTemplate: React.FC<DocumentOfficialTemplateProps> =
 }) => {
   const isOrder = doc.type === 'ORDER';
   const isReceipt = doc.type === 'RECEIPT';
-  const isRequest = doc.type === 'REQUEST';
+  const isRequest = doc.type === 'DISBURSEMENT_REQUEST';
 
   const getMarginClass = () => {
     switch (doc.pageMargins) {

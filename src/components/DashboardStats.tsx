@@ -16,7 +16,7 @@ interface DashboardStatsProps {
 export const DashboardStats: React.FC<DashboardStatsProps> = ({ documents }) => {
   const totalAmount = documents.reduce((sum, doc) => sum + (doc.amount || 0), 0);
   const ordersCount = documents.filter((d) => d.type === 'ORDER').length;
-  const requestsCount = documents.filter((d) => d.type === 'REQUEST').length;
+  const requestsCount = documents.filter((d) => d.type === 'DISBURSEMENT_REQUEST').length;
   const receiptsCount = documents.filter((d) => d.type === 'RECEIPT').length;
   const approvedCount = documents.filter((d) => d.status === 'APPROVED' || d.status === 'PAID').length;
 

@@ -120,11 +120,11 @@ export const DocumentList: React.FC<DocumentListProps> = ({
             أمر صرف مالي
           </span>
         );
-      case 'REQUEST':
+      case 'DISBURSEMENT_REQUEST':
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-blue-100 text-blue-800 border border-blue-200">
             <FileCheck2 className="w-3.5 h-3.5" />
-            ورقة تقديم طلب
+            طلب صرف مالي
           </span>
         );
       case 'RECEIPT':
@@ -164,14 +164,14 @@ export const DocumentList: React.FC<DocumentListProps> = ({
             أوامر الصرف ({activeDocuments.filter((d) => d.type === 'ORDER').length})
           </button>
           <button
-            onClick={() => setFilterType('REQUEST')}
+            onClick={() => setFilterType('DISBURSEMENT_REQUEST')}
             className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition ${
-              filterType === 'REQUEST'
+              filterType === 'DISBURSEMENT_REQUEST'
                 ? 'bg-blue-700 text-white shadow'
                 : 'bg-white text-blue-800 hover:bg-blue-50 border border-blue-200'
             }`}
           >
-            طلبات الصرف ({activeDocuments.filter((d) => d.type === 'REQUEST').length})
+            طلبات الصرف ({activeDocuments.filter((d) => d.type === 'DISBURSEMENT_REQUEST').length})
           </button>
           <button
             onClick={() => setFilterType('RECEIPT')}
@@ -252,14 +252,14 @@ export const DocumentList: React.FC<DocumentListProps> = ({
               أوامر الصرف ({archivedDocuments.filter(d => d.type === 'ORDER').length})
             </button>
             <button
-              onClick={() => setArchiveSearchType('REQUEST')}
+              onClick={() => setArchiveSearchType('DISBURSEMENT_REQUEST')}
               className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
-                archiveSearchType === 'REQUEST'
+                archiveSearchType === 'DISBURSEMENT_REQUEST'
                   ? 'bg-blue-700 text-white shadow'
                   : 'bg-white text-blue-800 hover:bg-blue-50 border border-blue-300'
               }`}
             >
-              طلبات الصرف ({archivedDocuments.filter(d => d.type === 'REQUEST').length})
+              طلبات الصرف ({archivedDocuments.filter(d => d.type === 'DISBURSEMENT_REQUEST').length})
             </button>
             <button
               onClick={() => setArchiveSearchType('RECEIPT')}

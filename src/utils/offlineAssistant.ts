@@ -130,7 +130,7 @@ export function processOfflineAssistantCommand(
   // 3. Template Switcher (تغيير نوع القالب)
   if (/قالب|نموذج|نوع المستند|تحويل الى|حول الى/.test(norm) || /امر صرف|ورقه استلام|ورقه تقديم طلب/.test(norm)) {
     if (/طلب|تقديم طلب|ورقه طلب/.test(norm)) {
-      updated.type = 'REQUEST';
+      updated.type = 'DISBURSEMENT_REQUEST';
       return {
         success: true,
         message: 'تم تحويل قالب المستند إلى «ورقة تقديم طلب (طولي)» مع التنسيقات والأسطر الرسمية.',

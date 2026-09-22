@@ -107,7 +107,7 @@ export const Header: React.FC<HeaderProps> = ({
             {/* Create Request */}
             <button
               id="new-request-btn"
-              onClick={() => onNewDocument('REQUEST')}
+              onClick={() => onNewDocument('DISBURSEMENT_REQUEST')}
               className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-md shadow-blue-700/20 active:scale-95"
             >
               <PlusCircle className="w-3.5 h-3.5" />

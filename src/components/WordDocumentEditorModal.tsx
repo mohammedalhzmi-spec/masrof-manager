@@ -908,12 +908,12 @@ export const WordDocumentEditorModal: React.FC<WordDocumentEditorModalProps> = (
               أمر صرف (عرضي)
             </button>
             <button
-              onClick={() => handleFieldChange('type', 'REQUEST')}
+              onClick={() => handleFieldChange('type', 'DISBURSEMENT_REQUEST')}
               className={`px-2.5 py-1 rounded-md font-bold transition text-[11px] ${
-                doc.type === 'REQUEST' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-300'
+                doc.type === 'DISBURSEMENT_REQUEST' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-300'
               }`}
             >
-              ورقة تقديم طلب (طولي)
+              طلب صرف (طولي)
             </button>
             <button
               onClick={() => handleFieldChange('type', 'RECEIPT')}
@@ -1226,7 +1226,7 @@ export const WordDocumentEditorModal: React.FC<WordDocumentEditorModalProps> = (
             </div>
 
             {/* Details for Request */}
-            {doc.type === 'REQUEST' && (
+            {doc.type === 'DISBURSEMENT_REQUEST' && (
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1">
                   التفاصيل والبنود (على الأسطر المنقطة)
@@ -1296,7 +1296,7 @@ export const WordDocumentEditorModal: React.FC<WordDocumentEditorModalProps> = (
               )}
 
               {/* 4. مقدم الطلب */}
-              {doc.type === 'REQUEST' && (
+              {doc.type === 'DISBURSEMENT_REQUEST' && (
                 <div>
                   <label className="block text-[11px] text-slate-400 mb-0.5 font-bold">
                     مقدم الطلب

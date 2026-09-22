@@ -97,13 +97,13 @@ export function exportToWord(
 ): void {
   const isOrder = doc.type === 'ORDER';
   const isReceipt = doc.type === 'RECEIPT';
-  const isRequest = doc.type === 'REQUEST';
+  const isRequest = doc.type === 'DISBURSEMENT_REQUEST';
 
   const docTitle = isOrder
     ? 'امر صرف'
     : isReceipt
-    ? 'ورقة إستلام'
-    : 'ورقة تقديم طلب';
+    ? 'سند قبض'
+    : 'طلب صرف';
 
   let bodyContent = '';
 

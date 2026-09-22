@@ -188,10 +188,12 @@ export const DocumentModal: React.FC<DocumentModalProps> = ({
     switch (type) {
       case 'ORDER':
         return 'امر صرف مالي رسمي';
-      case 'REQUEST':
-        return 'ورقة تقديم طلب صرف';
+      case 'DISBURSEMENT_REQUEST':
+        return 'طلب صرف مالي';
       case 'RECEIPT':
-        return 'ورقة إستلام وسند صرف';
+        return 'سند قبض / استلام مالي';
+      default:
+        return 'مستند رسمي حكومي';
     }
   };
 
@@ -203,7 +205,7 @@ export const DocumentModal: React.FC<DocumentModalProps> = ({
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-emerald-600/30 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
               {type === 'ORDER' && <FileSpreadsheet className="w-5 h-5" />}
-              {type === 'REQUEST' && <FileCheck2 className="w-5 h-5" />}
+              {type === 'DISBURSEMENT_REQUEST' && <FileCheck2 className="w-5 h-5" />}
               {type === 'RECEIPT' && <Receipt className="w-5 h-5" />}
             </div>
             <div>
@@ -257,15 +259,15 @@ export const DocumentModal: React.FC<DocumentModalProps> = ({
               </button>
               <button
                 type="button"
-                onClick={() => setType('REQUEST')}
+                onClick={() => setType('DISBURSEMENT_REQUEST')}
                 className={`py-2 px-3 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 ${
-                  type === 'REQUEST'
+                  type === 'DISBURSEMENT_REQUEST'
                     ? 'bg-blue-800 text-white shadow'
                     : 'text-slate-600 hover:bg-white'
                 }`}
               >
                 <FileCheck2 className="w-3.5 h-3.5" />
-                <span>ورقة تقديم طلب</span>
+                <span>طلب صرف</span>
               </button>
               <button
                 type="button"
@@ -448,7 +450,7 @@ export const DocumentModal: React.FC<DocumentModalProps> = ({
           </div>
 
           {/* Details for Request */}
-          {type === 'REQUEST' && (
+          {type === 'DISBURSEMENT_REQUEST' && (
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
                 التفاصيل (تظهر على الأسطر المنقطة في ورقة الطلب)
