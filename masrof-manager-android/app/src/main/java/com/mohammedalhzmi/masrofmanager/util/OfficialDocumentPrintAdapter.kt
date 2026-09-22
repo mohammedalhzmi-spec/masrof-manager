@@ -108,21 +108,35 @@ object OfficialDocumentRenderer {
     private fun drawHeader(c: Canvas, header: DocumentHeader, document: Document, context: Context?) {
         val type = document.type
         val w = c.width.toFloat(); val center = w / 2f
-        drawLeft(c, "الرقم : ${document.documentNumber.ifBlank { "........................................" }}", 55f, 48f, bodyPaint)
-        drawLeft(c, "التاريخ : ${document.dateHijri.ifBlank { "       /       /     144 هـ" }}", 55f, 72f, bodyPaint)
-        drawLeft(c, "الموافق : ${document.dateGregorian.ifBlank { "       /       /     2026 م" }}", 55f, 96f, bodyPaint)
-        drawLeft(c, "المرفقات : ${if (document.attachmentsCount > 0) document.attachmentsCount else "................................"}", 55f, 120f, bodyPaint)
-        drawRight(c, "الجمهورية اليمنية", w - 55f, 48f, boldPaint)
-        drawRight(c, header.ministry, w - 55f, 70f, boldPaint)
-        drawRight(c, "صندوق النظافة والتحسين م/إب", w - 55f, 92f, boldPaint)
-        drawRight(c, "فرع مديرية الحزم", w - 55f, 114f, bodyPaint)
-        drawCentered(c, "بِسْمِ اللهِ الرَّحْمَنِ الرَّحِيمِ", center, 25f, bodyPaint)
+        val headerBody = Paint(bodyPaint).apply { textSize = 11f; textAlign = Paint.Align.LEFT }
+        val headerBold = Paint(boldPaint).apply { textSize = 11.5f; textAlign = Paint.Align.RIGHT }
+        val leftX = 42f
+        drawLeft(c, "NO: ${document.documentNumber.ifBlank { "...." }}", leftX, 48f, headerBody)
+        drawLeft(c, "التاريخ : ${document.dateHijri.ifBlank { "       /       /   144 هـ" }}", leftX, 68f, headerBody)
+        drawLeft(c, "الموافق : ${document.dateGregorian.ifBlank { "       /       /     2026 م" }}", leftX, 88f, headerBody)
+        drawLeft(c, "المرفقات : ${if (document.attachmentsCount > 0) "( ${document.attachmentsCount} )" else "(         )"}", leftX, 108f, headerBody)
+        val rightX = w - 34f
+        drawFittedRight(c, "الجمهورية اليمنية", rightX, 46f, headerBold, w * .34f, 9f)
+        drawFittedRight(c, "وزارة الإدارة والتنمية المحلية والريفية", rightX, 65f, headerBold, w * .34f, 8f)
+        drawFittedRight(c, "صندوق النظافة والتحسين م/إب", rightX, 84f, headerBold, w * .34f, 9f)
+        drawFittedRight(c, "فرع مديرية الحزم", rightX, 103f, headerBody, w * .34f, 9f)
+        drawCentered(c, "بِسْمِ اللهِ الرَّحْمَنِ الرَّحِيمِ", center, 24f, headerBody)
         val officialLogo = header.logos[type] ?: context?.let { ctx: Context -> BitmapFactory.decodeResource(ctx.resources, R.drawable.official_emblem) }
-        officialLogo?.let { c.drawBitmap(it, null, RectF(center - 42f, 34f, center + 42f, 118f), null) }
-        c.drawLine(30f, 132f, w - 30f, 132f, linePaint)
-        drawLeft(c, "الترقيم: ${document.documentNumber}", 55f, 160f, boldPaint)
-        drawCentered(c, title(type), center, 166f, titlePaint)
-        c.drawRect(center - 112f, 140f, center + 112f, 178f, linePaint)
+        officialLogo?.let { c.drawBitmap(it, null, RectF(center - 34f, 32f, center + 34f, 106f), null) }
+        c.drawLine(30f, 123f, w - 30f, 123f, linePaint)
+        drawLeft(c, "NO: ${document.documentNumber.ifBlank { "...." }}", leftX, 151f, headerBold)
+        drawCentered(c, title(type), center, 157f, titlePaint)
+        c.drawRect(center - 112f, 134f, center + 112f, 170f, linePaint)
+    }
+
+    private fun drawFittedRight(c: Canvas, text: String, x: Float, y: Float, paint: Paint, maxWidth: Float, minSize: Float) {
+        val original = paint.textSize
+        paint.textAlign = Paint.Align.RIGHT
+        paint.textSize = original
+        while (paint.measureText(text) > maxWidth && paint.textSize > minSize) paint.textSize -= .5f
+        c.drawText(text, x, y, paint)
+        paint.textSize = original
+        paint.textAlign = Paint.Align.CENTER
     }
 
     private fun renderOrder(c: Canvas, d: Document) {
@@ -134,12 +148,12 @@ object OfficialDocumentRenderer {
         drawRight(c, "وذلك مقابل /", right, 382f, bodyPaint)
         drawParagraph(c, d.purpose.orEmpty().ifBlank { "................................................" }, right, 410f, bodyPaint)
         drawCentered(c, "ولكم خالص الشكر والتقدير", w / 2f, 470f, boldPaint)
-        drawLeft(c, "المدير المالي للفرع", 70f, bottom - 92f, boldPaint)
-        drawLeft(c, "الاسم: ................................", 70f, bottom - 68f, bodyPaint)
-        drawLeft(c, "التوقيع: .........................", 70f, bottom - 42f, bodyPaint)
-        drawRight(c, "مدير الفرع: رياض أحمد محمد", right, bottom - 92f, boldPaint)
-        drawRight(c, "التوقيع: .........................", right, bottom - 52f, bodyPaint)
-        drawLeft(c, "المرفقات: ${d.attachmentsCount}", 55f, bottom - 20f, bodyPaint)
+        drawLeft(c, "مدير الفرع: رياض أحمد محمد", 58f, bottom - 112f, boldPaint)
+        drawLeft(c, "التوقيع: .........................", 58f, bottom - 84f, bodyPaint)
+        drawLeft(c, "المدير المالي للفرع", 238f, bottom - 112f, boldPaint)
+        drawLeft(c, "الاسم: ................................", 238f, bottom - 84f, bodyPaint)
+        drawLeft(c, "التوقيع: .........................", 238f, bottom - 56f, bodyPaint)
+        drawLeft(c, "المرفقات: ${d.attachmentsCount}", 55f, bottom - 24f, bodyPaint)
         drawRight(c, "الاسم: ${d.beneficiaryName.orEmpty()}    رقم: ${d.documentNumber}", right, 205f, bodyPaint)
     }
 
@@ -152,10 +166,13 @@ object OfficialDocumentRenderer {
         c.drawRect(55f, 310f, right, 455f, linePaint)
         drawParagraph(c, d.details ?: "................................................................................................", right - 12f, 338f, bodyPaint)
         drawRight(c, "وتكرموا مشكورين بالتوجيه", right, 510f, boldPaint)
-        drawRight(c, "اسم مقدم الطلب: ${d.beneficiaryName.orEmpty()}", right, bottom - 170f, bodyPaint)
-        drawRight(c, "مدير الفرع: رياض أحمد محمد", right, bottom - 135f, boldPaint)
-        drawRight(c, "التوقيع: ................................................", right, bottom - 100f, bodyPaint)
-        drawLeft(c, "المرفقات: ${d.attachmentsCount}", 55f, bottom - 42f, bodyPaint)
+        drawRight(c, "اسم مقدم الطلب: ${d.beneficiaryName.orEmpty()}", right, bottom - 190f, bodyPaint)
+        drawLeft(c, "مدير الفرع: رياض أحمد محمد", 58f, bottom - 112f, boldPaint)
+        drawLeft(c, "التوقيع: ................................", 58f, bottom - 84f, bodyPaint)
+        drawLeft(c, "المدير المالي للفرع", 238f, bottom - 112f, boldPaint)
+        drawLeft(c, "الاسم: ................................", 238f, bottom - 84f, bodyPaint)
+        drawLeft(c, "التوقيع: ................................", 238f, bottom - 56f, bodyPaint)
+        drawLeft(c, "المرفقات: ${d.attachmentsCount}", 55f, bottom - 24f, bodyPaint)
         drawRight(c, "رقم الطلب: ${d.documentNumber}", right, 195f, bodyPaint)
     }
 
@@ -169,11 +186,16 @@ object OfficialDocumentRenderer {
         drawRight(c, "من فرع صندوق النظافة والتحسين", right, 392f, bodyPaint)
         drawRight(c, "وذلك مقابل: ${d.purpose.orEmpty()}", right, 435f, bodyPaint)
         drawParagraph(c, "وأقر بأنني استلمت المبلغ كاملًا دون نقص وأصبحت ذمتي خالية من ذلك.", right, 485f, bodyPaint)
-        drawLeft(c, "أمين الصندوق", 55f, bottom - 122f, boldPaint); drawLeft(c, "الاسم: ........................", 55f, bottom - 96f, bodyPaint); drawLeft(c, "التوقيع: ................", 55f, bottom - 68f, bodyPaint)
-        drawCentered(c, "المستلم", c.width / 2f, bottom - 122f, boldPaint); drawCentered(c, "الاسم: ........................", c.width / 2f, bottom - 96f, bodyPaint); drawCentered(c, "التوقيع: ................", c.width / 2f, bottom - 68f, bodyPaint)
-        drawRight(c, "المدير المالي للفرع", right, bottom - 122f, boldPaint); drawRight(c, "الاسم: ........................", right, bottom - 96f, bodyPaint); drawRight(c, "التوقيع: ................", right, bottom - 68f, bodyPaint)
-        drawRight(c, "مدير الفرع: رياض أحمد محمد", right, bottom - 38f, boldPaint)
-        drawLeft(c, "المرفقات: ${d.attachmentsCount}", 55f, bottom - 42f, bodyPaint)
+        drawCentered(c, "المستلم", c.width / 2f, bottom - 188f, boldPaint)
+        drawCentered(c, "الاسم: ........................", c.width / 2f, bottom - 160f, bodyPaint)
+        drawCentered(c, "التوقيع والإبهام: ................", c.width / 2f, bottom - 132f, bodyPaint)
+        drawLeft(c, "مدير الفرع: رياض أحمد محمد", 58f, bottom - 92f, boldPaint)
+        drawLeft(c, "التوقيع: .........................", 58f, bottom - 64f, bodyPaint)
+        drawLeft(c, "أمين الصندوق", 238f, bottom - 92f, boldPaint)
+        drawLeft(c, "الاسم والتوقيع: ................", 238f, bottom - 64f, bodyPaint)
+        drawRight(c, "المدير المالي للفرع", right, bottom - 92f, boldPaint)
+        drawRight(c, "الاسم والتوقيع: ................", right, bottom - 64f, bodyPaint)
+        drawLeft(c, "المرفقات: ${d.attachmentsCount}", 55f, bottom - 24f, bodyPaint)
         drawRight(c, "رقم الاستلام: ${d.documentNumber}", right, 195f, bodyPaint)
     }
 
