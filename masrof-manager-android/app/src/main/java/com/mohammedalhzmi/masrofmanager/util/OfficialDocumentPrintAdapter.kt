@@ -106,7 +106,7 @@ object OfficialDocumentRenderer {
         drawRight(c, "صندوق النظافة والتحسين م/إب", w - 55f, 92f, boldPaint)
         drawRight(c, "فرع مديرية الحزم", w - 55f, 114f, bodyPaint)
         drawCentered(c, "بِسْمِ اللهِ الرَّحْمَنِ الرَّحِيمِ", center, 25f, bodyPaint)
-        val officialLogo = header.logos[type] ?: context?.let { ctx: Context -> BitmapFactory.decodeResource(ctx.resources, R.drawable.ic_launcher_logo_bitmap) }
+        val officialLogo = header.logos[type] ?: context?.let { ctx: Context -> BitmapFactory.decodeResource(ctx.resources, R.drawable.official_emblem) }
         officialLogo?.let { c.drawBitmap(it, null, RectF(center - 42f, 34f, center + 42f, 118f), null) }
         c.drawLine(30f, 132f, w - 30f, 132f, linePaint)
         drawLeft(c, "الترقيم: ${document.documentNumber}", 55f, 160f, boldPaint)

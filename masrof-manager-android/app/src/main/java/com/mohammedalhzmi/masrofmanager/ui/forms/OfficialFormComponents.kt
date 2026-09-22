@@ -47,7 +47,7 @@ fun OfficialFormShell(title: String, content: @Composable () -> Unit) {
                             Text("الموافق: ................")
                             Text("المرفقات: ................")
                         }
-                        Image(painterResource(R.drawable.ic_launcher_logo_bitmap), "الشعار الرسمي", modifier = Modifier.size(64.dp), contentScale = ContentScale.Fit)
+                        Image(painterResource(R.drawable.official_emblem), "الشعار الرسمي", modifier = Modifier.size(64.dp), contentScale = ContentScale.Fit)
                         Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
                             Text("الجمهورية اليمنية", style = MaterialTheme.typography.labelMedium)
                             Text("وزارة الإدارة والتنمية المحلية والريفية", style = MaterialTheme.typography.labelSmall)

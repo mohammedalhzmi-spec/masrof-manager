@@ -56,7 +56,7 @@ object OfficialDocumentExporter {
             fun entry(name: String, value: String) {
                 zip.putNextEntry(ZipEntry(name)); zip.write(value.toByteArray(Charsets.UTF_8)); zip.closeEntry()
             }
-            val logo = ((AppPreferences.loadLogo(context, document.type) ?: BitmapFactory.decodeResource(context.resources, R.drawable.ic_launcher_logo_bitmap))).let { bitmap -> ByteArrayOutputStream().also { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray() }
+            val logo = ((AppPreferences.loadLogo(context, document.type) ?: BitmapFactory.decodeResource(context.resources, R.drawable.official_emblem))).let { bitmap -> ByteArrayOutputStream().also { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray() }
             fun bytesEntry(name: String, value: ByteArray) { zip.putNextEntry(ZipEntry(name)); zip.write(value); zip.closeEntry() }
             entry("[Content_Types].xml", """<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>""")
             entry("_rels/.rels", """<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>""")
@@ -133,5 +133,5 @@ object OfficialDocumentExporter {
     )
 
     private fun loadBackground(context: Context, type: DocumentType) = AppPreferences.backgroundImageUri(context, type)?.let { runCatching { context.contentResolver.openInputStream(Uri.parse(it)).use(BitmapFactory::decodeStream) }.getOrNull() }
-        ?: BitmapFactory.decodeResource(context.resources, R.drawable.ic_launcher_logo_bitmap)
+        ?: BitmapFactory.decodeResource(context.resources, R.drawable.official_emblem)
 }
