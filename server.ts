@@ -119,7 +119,7 @@ app.post('/api/gov/auth/login', (req, res) => {
 
   const user = users.find(u => u.username.toLowerCase() === username.toLowerCase());
   if (!user) {
-    return.status(404).json({ success: false, message: 'اسم المستخدم غير موجود في السجلات الحكومية.' });
+    return res.status(404).json({ success: false, message: 'اسم المستخدم غير موجود في السجلات الحكومية.' });
   }
 
   if (!user.active) {
