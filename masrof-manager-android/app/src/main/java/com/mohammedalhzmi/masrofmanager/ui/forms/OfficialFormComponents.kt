@@ -19,7 +19,13 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import com.example.R
 
 @Composable
 fun OfficialFormShell(title: String, content: @Composable () -> Unit) {
@@ -33,7 +39,25 @@ fun OfficialFormShell(title: String, content: @Composable () -> Unit) {
             Column(modifier = Modifier.padding(14.dp)) {
                 Text("صفحة المستند الأصلية — اكتب البيانات مباشرة داخل الحقول", style = MaterialTheme.typography.labelLarge, color = Color(0xff8a651d))
                 Spacer(modifier = Modifier.height(6.dp))
-                Column(modifier = Modifier.fillMaxWidth().background(Color.White).border(1.dp, Color(0xffe5e7eb)).padding(10.dp)) { content() }
+                Column(modifier = Modifier.fillMaxWidth().background(Color.White).border(1.dp, Color(0xffe5e7eb)).padding(10.dp)) {
+                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("الرقم: ................")
+                            Text("التاريخ: ................")
+                            Text("الموافق: ................")
+                            Text("المرفقات: ................")
+                        }
+                        Image(painterResource(R.drawable.ic_launcher_logo_bitmap), "الشعار الرسمي", modifier = Modifier.size(64.dp), contentScale = ContentScale.Fit)
+                        Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                            Text("الجمهورية اليمنية", style = MaterialTheme.typography.labelMedium)
+                            Text("وزارة الإدارة والتنمية المحلية والريفية", style = MaterialTheme.typography.labelSmall)
+                            Text("صندوق النظافة والتحسين م/إب", style = MaterialTheme.typography.labelSmall)
+                            Text("فرع مديرية الحزم", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Column(modifier = Modifier.fillMaxWidth().border(1.dp, Color(0xffb48a3a)).padding(8.dp)) { content() }
+                }
             }
         }
     }
@@ -63,8 +87,8 @@ fun OfficialDates(
     onHijri: (String) -> Unit, onGregorian: (String) -> Unit
 ) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-        OfficialField(hijri, "التاريخ الهجري", onHijri, 1)
-        OfficialField(gregorian, "التاريخ الميلادي", onGregorian, 1)
+        OfficialField(hijri, "التاريخ", onHijri, 1)
+        OfficialField(gregorian, "الموافق", onGregorian, 1)
     }
 }
 
