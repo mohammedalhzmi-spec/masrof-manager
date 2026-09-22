@@ -16,11 +16,12 @@ fun AppNavigation(viewModel: MasrofViewModel) {
     val context = LocalContext.current
     NavHost(navController = navController, startDestination = "dashboard") {
         composable("dashboard") {
-            DashboardScreen(viewModel, { navController.navigate("select_type") }, { navController.navigate("print_preview/$it") }, { token ->
+            DashboardScreen(viewModel, { navController.navigate("select_type") }, { navController.navigate("document_book") }, { navController.navigate("print_preview/$it") }, { token ->
                 val parts = token.split(":")
                 if (parts.size == 2) navController.navigate("edit/${parts[0]}/${parts[1]}")
             }, { navController.navigate("settings") })
         }
+        composable("document_book") { DocumentBookScreen(viewModel) { navController.popBackStack() } }
         composable("select_type") { DocumentTypeSelectionScreen(allowedTypes = DocumentType.values().filter { RolePreferences.canCreate(context, it) }.toSet()) { navController.navigate("${it.name.lowercase()}_form") } }
         composable("request_form") { RequestFormScreen(viewModel, onNavigateBack = { navController.popBackStack() }) }
         composable("order_form") { PaymentOrderFormScreen(viewModel, onNavigateBack = { navController.popBackStack() }) }

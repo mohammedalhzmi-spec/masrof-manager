@@ -20,7 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 
 @Composable
-fun DashboardScreen(viewModel: MasrofViewModel, onAddDocument: () -> Unit, onPrint: (String) -> Unit, onEdit: (String) -> Unit, onSettings: () -> Unit) {
+fun DashboardScreen(viewModel: MasrofViewModel, onAddDocument: () -> Unit, onCreateBook: () -> Unit, onPrint: (String) -> Unit, onEdit: (String) -> Unit, onSettings: () -> Unit) {
     val documents by viewModel.allDocuments.collectAsState()
     val archivedDocuments by viewModel.archivedDocuments.collectAsState()
     var selectedIds by remember { mutableStateOf(setOf<Long>()) }
@@ -49,6 +49,7 @@ fun DashboardScreen(viewModel: MasrofViewModel, onAddDocument: () -> Unit, onPri
         AnimatedVisibility(visible = showDeveloperNotice) { Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer), modifier = Modifier.fillMaxWidth()) { Text("هذا التطبيق من برمجة وتطوير المطور محمد الحزمي\nجميع الحقوق محفوظة للمطور 2026", modifier = Modifier.padding(12.dp)) } }
         Spacer(modifier = Modifier.height(8.dp))
         Button(onClick = onAddDocument, modifier = Modifier.fillMaxWidth()) { Text("إضافة مستند جديد") }
+        OutlinedButton(onClick = onCreateBook, modifier = Modifier.fillMaxWidth()) { Text("إنشاء دفتر مستندات مرقّم") }
         Spacer(modifier = Modifier.height(8.dp))
         OutlinedTextField(value = query, onValueChange = { query = it }, modifier = Modifier.fillMaxWidth(), singleLine = true, label = { Text("بحث بالنوع أو التاريخ أو الرقم أو اسم المستفيد") })
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
