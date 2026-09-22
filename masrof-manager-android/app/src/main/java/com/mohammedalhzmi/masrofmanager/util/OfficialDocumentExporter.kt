@@ -24,8 +24,11 @@ object OfficialDocumentExporter {
         val pdf = PdfDocument()
         documents.forEachIndexed { index, document ->
             val design = DesignRenderLoader.design(context, document.type)
-            val half = AppPreferences.pageSize(context, document.type) == "HALF_A4" || (document.type == DocumentType.ORDER && AppPreferences.pageSize(context, document.type).isBlank())
-            val width = design?.pageWidth?.toInt() ?: if (half) 842 else 595; val height = design?.pageHeight?.toInt() ?: if (half) 595 else 842
+            val selectedPageSize = AppPreferences.pageSize(context, document.type)
+            val half = selectedPageSize == "HALF_A4" || (document.type == DocumentType.ORDER && selectedPageSize.isBlank())
+            val landscape = design?.orientation == "LANDSCAPE"
+            val width = if (half) 842 else (design?.pageWidth?.toInt() ?: if (landscape) 842 else 595)
+            val height = if (half) 595 else (design?.pageHeight?.toInt() ?: if (landscape) 595 else 842)
             val page = pdf.startPage(PdfDocument.PageInfo.Builder(width, height, index + 1).create())
             OfficialDocumentRenderer.render(page.canvas, document, header(context), DesignRenderLoader.elements(context, document.type), context, design)
             pdf.finishPage(page)
@@ -38,8 +41,11 @@ object OfficialDocumentExporter {
     fun exportPng(context: Context, document: Document): Uri {
         val file = File(context.filesDir, "masrof-${document.documentNumber}.png")
         val design = DesignRenderLoader.design(context, document.type)
-        val half = AppPreferences.pageSize(context, document.type) == "HALF_A4"
-        val baseWidth = design?.pageWidth?.toInt() ?: if (half) 842 else 595; val baseHeight = design?.pageHeight?.toInt() ?: if (half) 595 else 842
+        val selectedPageSize = AppPreferences.pageSize(context, document.type)
+        val half = selectedPageSize == "HALF_A4" || (document.type == DocumentType.ORDER && selectedPageSize.isBlank())
+        val landscape = design?.orientation == "LANDSCAPE"
+        val baseWidth = if (half) 842 else (design?.pageWidth?.toInt() ?: if (landscape) 842 else 595)
+        val baseHeight = if (half) 595 else (design?.pageHeight?.toInt() ?: if (landscape) 595 else 842)
         val bitmap = Bitmap.createBitmap(baseWidth * 2, baseHeight * 2, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         canvas.scale(2f, 2f)

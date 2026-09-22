@@ -49,8 +49,9 @@ class OfficialDocumentPrintAdapter(private val documents: List<Document>, privat
                 if (cancellationSignal.isCanceled) return
                 val half = header.pageSizes[document.type] == "HALF_A4" || (document.type == DocumentType.ORDER && !header.pageSizes.containsKey(document.type))
                 val design = if (context != null) DesignRenderLoader.design(context, document.type) else null
-                val width = design?.pageWidth?.toInt() ?: if (half) 842 else 595
-                val height = design?.pageHeight?.toInt() ?: if (half) 595 else 842
+                val landscape = design?.orientation == "LANDSCAPE"
+                val width = if (half) 842 else (design?.pageWidth?.toInt() ?: if (landscape) 842 else 595)
+                val height = if (half) 595 else (design?.pageHeight?.toInt() ?: if (landscape) 595 else 842)
                 val page = pdf.startPage(PdfDocument.PageInfo.Builder(width, height, index + 1).create())
                 OfficialDocumentRenderer.render(page.canvas, document, header, if (context != null) DesignRenderLoader.elements(context, document.type) else emptyList(), context, design)
                 pdf.finishPage(page)
@@ -69,7 +70,16 @@ object OfficialDocumentRenderer {
     private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = navy; style = Paint.Style.STROKE; strokeWidth = 2f }
 
     fun render(canvas: Canvas, document: Document, header: DocumentHeader = DocumentHeader("وزارة الإدارة والتنمية المحلية والريفية", "صندوق النظافة والتحسين", "فرع المديرية"), elements: List<DesignElementEntity> = emptyList(), context: Context? = null, design: DocumentDesignEntity? = null) {
-        val w = canvas.width.toFloat(); val h = canvas.height.toFloat(); val half = h < w
+        val targetW = canvas.width.toFloat()
+        val targetH = canvas.height.toFloat()
+        val landscape = targetW > targetH
+        val baseW = if (landscape) 842f else 595f
+        val baseH = if (landscape) 595f else 842f
+        canvas.save()
+        canvas.scale(targetW / baseW, targetH / baseH)
+        val w = baseW
+        val h = baseH
+        val half = landscape
         canvas.drawColor(design?.let { runCatching { Color.parseColor(it.backgroundColor) }.getOrDefault(Color.WHITE) } ?: (header.backgroundColors[document.type] ?: Color.WHITE))
         header.backgroundImages[document.type]?.let { bitmap ->
             val scale = header.backgroundScale[document.type] ?: 1f
@@ -92,6 +102,7 @@ object OfficialDocumentRenderer {
         renderElements(canvas, document, elements, context)
         design?.let { canvas.drawRect(it.marginLeft, it.marginTop, w - it.marginRight, h - it.marginBottom, Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = 0x55333333.toInt(); this.style = Paint.Style.STROKE; this.strokeWidth = 1f }) }
         drawCentered(canvas, "طبع بواسطة نظام مالية فرع صندوق النظافةوالتحسين مديرية الحزم", w / 2f, h - 28f, bodyPaint)
+        canvas.restore()
     }
 
     private fun drawHeader(c: Canvas, header: DocumentHeader, document: Document, context: Context?) {
