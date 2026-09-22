@@ -1,0 +1,54 @@
+{
+  "users": [
+    {
+      "id": "usr_admin",
+      "username": "director",
+      "fullName": "المهندس / مدير النظام العام (السلطة العليا)",
+      "role": "SYSTEM_ADMIN",
+      "active": true
+    },
+    {
+      "id": "usr_finance",
+      "username": "finance",
+      "fullName": "أ. محمد الحزمي (المدير المالي التنفيذي)",
+      "role": "FINANCE_DIRECTOR",
+      "active": true
+    },
+    {
+      "id": "usr_accountant",
+      "username": "accountant",
+      "fullName": "أ. أحمد علي (المحاسب الرئيسي)",
+      "role": "ACCOUNTANT",
+      "active": true
+    },
+    {
+      "id": "usr_staff",
+      "username": "staff",
+      "fullName": "موظف إداري معتمد",
+      "role": "ADMIN_USER",
+      "active": true
+    }
+  ],
+  "devices": [
+    {
+      "id": "dev_master",
+      "userId": "usr_admin",
+      "installationId": "master_admin_installation_id",
+      "deviceName": "Android 14.0 Official Master Client",
+      "status": "APPROVED",
+      "requestedAt": 1789679460177,
+      "approvedBy": "مدير النظام العام",
+      "approvedAt": 1789679460177
+    }
+  ],
+  "auditLogs": [
+    {
+      "id": "log_1",
+      "timestamp": 1790111460177,
+      "action": "SYSTEM_INIT",
+      "details": "إطلاق الخادم الخلفي الدائم للنظام المالي الحكومي الموحد (صندوق النظافة والتحسين م/إب)",
+      "username": "director",
+      "deviceId": "master_admin_installation_id"
+    }
+  ]
+}
