@@ -14,17 +14,22 @@ interface SplashLoginScreenProps {
 export const SplashLoginScreen: React.FC<SplashLoginScreenProps> = ({ onLoginSuccess }) => {
   const [usernameInput, setUsernameInput] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const [loading, setLoading] = useState(false);
   const [pendingUser, setPendingUser] = useState<GovernmentUser | null>(null);
   const [showDirectorModal, setShowDirectorModal] = useState(false);
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!usernameInput.trim()) {
       setErrorMsg('الرجاء إدخال اسم المستخدم أو الدور الوظيفي.');
       return;
     }
 
-    const result = attemptGovernmentLogin(usernameInput.trim());
+    setLoading(true);
+    setErrorMsg('');
+    const result = await attemptGovernmentLogin(usernameInput.trim());
+    setLoading(false);
+
     if (result.success && result.user) {
       if (result.user.role === 'SYSTEM_ADMIN') {
         setShowDirectorModal(true);
@@ -34,13 +39,17 @@ export const SplashLoginScreen: React.FC<SplashLoginScreenProps> = ({ onLoginSuc
     } else if (result.requiresApproval && result.user) {
       setPendingUser(result.user);
     } else {
-      setErrorMsg(result.message || 'فشل تسجيل الدخول.');
+      setErrorMsg(result.message || 'فشل تسجيل الدخول عبر الخادم الحكومي.');
     }
   };
 
-  const handleQuickLogin = (username: string) => {
+  const handleQuickLogin = async (username: string) => {
     setUsernameInput(username);
-    const result = attemptGovernmentLogin(username);
+    setLoading(true);
+    setErrorMsg('');
+    const result = await attemptGovernmentLogin(username);
+    setLoading(false);
+
     if (result.success && result.user) {
       if (result.user.role === 'SYSTEM_ADMIN') {
         setShowDirectorModal(true);
@@ -50,7 +59,7 @@ export const SplashLoginScreen: React.FC<SplashLoginScreenProps> = ({ onLoginSuc
     } else if (result.requiresApproval && result.user) {
       setPendingUser(result.user);
     } else {
-      setErrorMsg(result.message || 'فشل تسجيل الدخول.');
+      setErrorMsg(result.message || 'فشل تسجيل الدخول عبر الخادم الحكومي.');
     }
   };
 
@@ -72,7 +81,7 @@ export const SplashLoginScreen: React.FC<SplashLoginScreenProps> = ({ onLoginSuc
           </div>
           <div>
             <h1 className="text-xl font-black text-slate-900 tracking-tight font-serif">
-              النظام المالي الحكومي الموحد (APK Secure)
+              النظام المالي الحكومي الموحد (Backend + APK API)
             </h1>
             <p className="text-xs font-bold text-amber-700 mt-1">
               صندوق النظافة والتحسين م/إب - بوابة الأمان واعتماد الأجهزة
@@ -107,19 +116,21 @@ export const SplashLoginScreen: React.FC<SplashLoginScreenProps> = ({ onLoginSuc
 
             <button
               type="submit"
-              className="w-full py-3.5 bg-gradient-to-r from-emerald-700 to-teal-700 hover:from-emerald-800 hover:to-teal-800 text-white rounded-2xl text-sm font-bold shadow-lg transition flex items-center justify-center gap-2 cursor-pointer"
+              disabled={loading}
+              className="w-full py-3.5 bg-gradient-to-r from-emerald-700 to-teal-700 hover:from-emerald-800 hover:to-teal-800 text-white rounded-2xl text-sm font-bold shadow-lg transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
             >
-              <span>تسجيل الدخول والتحقق من الجهاز</span>
+              <span>{loading ? 'جاري الاتصال بالخادم والتحقق...' : 'تسجيل الدخول والتحقق من الجهاز'}</span>
               <ArrowLeft className="w-4 h-4" />
             </button>
           </form>
 
           {/* Quick Role Shortcuts */}
           <div className="space-y-2.5 pt-3 border-t border-slate-200">
-            <span className="text-xs font-bold text-slate-500 block">اختصارات الدخول السريع للحسابات الرسمية (APK):</span>
+            <span className="text-xs font-bold text-slate-500 block">اختصارات الدخول السريع للحسابات الرسمية (Backend API):</span>
             <div className="grid grid-cols-2 gap-2.5">
               <button
                 onClick={() => handleQuickLogin('director')}
+                disabled={loading}
                 className="bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200 p-3 rounded-2xl text-xs font-bold text-right transition flex items-center justify-between cursor-pointer"
               >
                 <span>مدير النظام العام</span>
@@ -128,6 +139,7 @@ export const SplashLoginScreen: React.FC<SplashLoginScreenProps> = ({ onLoginSuc
 
               <button
                 onClick={() => handleQuickLogin('finance')}
+                disabled={loading}
                 className="bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-200 p-3 rounded-2xl text-xs font-bold text-right transition flex items-center justify-between cursor-pointer"
               >
                 <span>المدير المالي</span>
@@ -136,6 +148,7 @@ export const SplashLoginScreen: React.FC<SplashLoginScreenProps> = ({ onLoginSuc
 
               <button
                 onClick={() => handleQuickLogin('accountant')}
+                disabled={loading}
                 className="bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 p-3 rounded-2xl text-xs font-bold text-right transition flex items-center justify-between cursor-pointer"
               >
                 <span>المحاسب الرئيسي</span>
@@ -144,6 +157,7 @@ export const SplashLoginScreen: React.FC<SplashLoginScreenProps> = ({ onLoginSuc
 
               <button
                 onClick={() => handleQuickLogin('staff')}
+                disabled={loading}
                 className="bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 p-3 rounded-2xl text-xs font-bold text-right transition flex items-center justify-between cursor-pointer"
               >
                 <span>موظف إداري</span>
@@ -155,7 +169,7 @@ export const SplashLoginScreen: React.FC<SplashLoginScreenProps> = ({ onLoginSuc
 
         <div className="bg-slate-900 text-slate-300 py-3.5 px-6 text-center border-t border-slate-800 space-y-1">
           <p className="text-[11px] font-bold text-amber-400">
-            تصميم وتطوير المطور محمد الحزمي © 2026 (نسخة أندرويد APK الرسمية)
+            تصميم وتطوير المطور محمد الحزمي © 2026 (Backend API + Android APK)
           </p>
           <p className="text-[10px] text-slate-400">
             جميع الحقوق محفوظة لصندوق النظافة والتحسين م/إب
@@ -167,13 +181,13 @@ export const SplashLoginScreen: React.FC<SplashLoginScreenProps> = ({ onLoginSuc
       {pendingUser && (
         <DeviceApprovalPendingModal
           user={pendingUser}
-          onRefreshStatus={() => {
-            const res = attemptGovernmentLogin(pendingUser.username);
+          onRefreshStatus={async () => {
+            const res = await attemptGovernmentLogin(pendingUser.username);
             if (res.success) {
               setPendingUser(null);
               onLoginSuccess();
             } else {
-              alert(res.message || 'الجهاز لا يزال قيد الانتظار لموافقة المدير.');
+              alert(res.message || 'الجهاز لا يزال قيد الانتظار لموافقة المدير العام عبر الخادم.');
             }
           }}
           onLogout={() => setPendingUser(null)}
@@ -183,7 +197,15 @@ export const SplashLoginScreen: React.FC<SplashLoginScreenProps> = ({ onLoginSuc
       {/* Director Approval Dashboard Modal */}
       {showDirectorModal && (
         <DirectorApprovalDashboard
-          currentUser={getAllUsers().find(u => u.username === 'director')!}
+          currentUser={{
+            id: 'usr_admin',
+            username: 'director',
+            fullName: 'المهندس / مدير النظام العام (السلطة العليا)',
+            role: 'SYSTEM_ADMIN',
+            active: true,
+            approvalRequired: false,
+            createdAt: Date.now()
+          }}
           onLogout={() => {
             setShowDirectorModal(false);
             logoutGovernmentUser();

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ShieldCheck, ShieldAlert, Users, Smartphone, CheckCircle2, 
   XCircle, AlertTriangle, RefreshCw, LogOut, Trash2, History 
@@ -18,37 +18,49 @@ interface Props {
 
 export const DirectorApprovalDashboard: React.FC<Props> = ({ currentUser, onLogout, onClose }) => {
   const [activeTab, setActiveTab] = useState<'requests' | 'devices' | 'users' | 'audit'>('requests');
-  const [requests, setRequests] = useState<AccessRequest[]>(getAllAccessRequests());
-  const [devices, setDevices] = useState<DeviceRegistration[]>(getAllDevices());
-  const [users, setUsers] = useState<GovernmentUser[]>(getAllUsers());
-  const [auditLogs, setAuditLogs] = useState<GovernmentAuditLog[]>(getAllAuditLogs());
+  const [requests, setRequests] = useState<AccessRequest[]>([]);
+  const [devices, setDevices] = useState<DeviceRegistration[]>([]);
+  const [users, setUsers] = useState<GovernmentUser[]>([]);
+  const [auditLogs, setAuditLogs] = useState<GovernmentAuditLog[]>([]);
   const [rejectModalReqId, setRejectModalReqId] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
 
-  const refreshData = () => {
-    setRequests(getAllAccessRequests());
-    setDevices(getAllDevices());
-    setUsers(getAllUsers());
-    setAuditLogs(getAllAuditLogs());
+  const refreshData = async () => {
+    const [reqs, devs, usrs, logs] = await Promise.all([
+      getAllAccessRequests(),
+      getAllDevices(),
+      getAllUsers(),
+      getAllAuditLogs()
+    ]);
+    setRequests(reqs);
+    setDevices(devs);
+    setUsers(usrs);
+    setAuditLogs(logs);
   };
 
-  const handleApprove = (reqId: string) => {
-    directorApproveDevice(reqId, currentUser.username);
+  useEffect(() => {
     refreshData();
+    const interval = setInterval(refreshData, 5000); // Poll backend every 5s for new device requests
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleApprove = async (reqId: string) => {
+    await directorApproveDevice(reqId, currentUser.username);
+    await refreshData();
   };
 
-  const handleRejectSubmit = (reqId: string) => {
+  const handleRejectSubmit = async (reqId: string) => {
     if (!rejectionReason.trim()) return;
-    directorRejectDevice(reqId, currentUser.username, rejectionReason);
+    await directorRejectDevice(reqId, currentUser.username, rejectionReason);
     setRejectModalReqId(null);
     setRejectionReason('');
-    refreshData();
+    await refreshData();
   };
 
-  const handleRevoke = (deviceId: string) => {
+  const handleRevoke = async (deviceId: string) => {
     if (confirm('هل أنت متأكد من إلغاء وتجميد صلاحية هذا الجهاز نهائياً عن بعد؟')) {
-      directorRevokeDevice(deviceId, currentUser.username);
-      refreshData();
+      await directorRevokeDevice(deviceId, currentUser.username);
+      await refreshData();
     }
   };
 
@@ -63,7 +75,7 @@ export const DirectorApprovalDashboard: React.FC<Props> = ({ currentUser, onLogo
             <ShieldCheck className="w-7 h-7 text-emerald-200" />
           </div>
           <div>
-            <h1 className="text-lg font-black">لوحة تحكم المدير العام والأمن الرقمي (APK Command Center)</h1>
+            <h1 className="text-lg font-black">لوحة تحكم المدير العام والأمن الرقمي (Backend API + APK)</h1>
             <p className="text-xs text-emerald-300">صندوق النظافة والتحسين م/إب - نظام الاعتماد والرقابة المركزية للأجهزة</p>
           </div>
         </div>
@@ -143,7 +155,7 @@ export const DirectorApprovalDashboard: React.FC<Props> = ({ currentUser, onLogo
           }`}
         >
           <History className="w-4 h-4" />
-          <span>سجل التدقيق الأمني (Audit Logs)</span>
+          <span>سجل التدقيق الأمني (Audit Trail)</span>
         </button>
       </nav>
 
@@ -156,7 +168,7 @@ export const DirectorApprovalDashboard: React.FC<Props> = ({ currentUser, onLogo
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-xl font-black text-slate-900">طلبات اعتماد الأجهزة الجديدة (FCM Push)</h2>
+                  <h2 className="text-xl font-black text-slate-900">طلبات اعتماد الأجهزة الجديدة (Backend Real-Time Sync)</h2>
                   <p className="text-sm text-slate-500">مراجعة واعتماد دخول الإداريين من أجهزة Android جديدة أو بعد إعادة تثبيت التطبيق.</p>
                 </div>
                 <button
@@ -173,7 +185,7 @@ export const DirectorApprovalDashboard: React.FC<Props> = ({ currentUser, onLogo
                   <CheckCircle2 className="w-16 h-16 text-emerald-600 mx-auto" />
                   <h3 className="text-lg font-bold text-slate-800">لا توجد طلبات اعتماد معلقة حالياً</h3>
                   <p className="text-slate-500 text-sm max-w-md mx-auto">
-                    جميع الأجهزة الحالية معتمدة ومصرح لها بالعمل. ستظهر هنا فوراً أي محاولة تسجيل دخول جديدة من أي جهاز APK.
+                    جميع الأجهزة الحالية معتمدة ومصرح لها بالعمل. ستظهر هنا فوراً أي محاولة تسجيل دخول جديدة من أي جهاز APK عبر الخادم.
                   </p>
                 </div>
               ) : (
@@ -207,14 +219,14 @@ export const DirectorApprovalDashboard: React.FC<Props> = ({ currentUser, onLogo
 
                       <div className="flex items-center gap-3 pt-2">
                         <button
-                          onClick={() => handleApprove(req.id)}
+                          onClick={() => handleApprove(req.deviceId)}
                           className="flex-1 bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-3 px-4 rounded-2xl transition flex items-center justify-center gap-2 shadow cursor-pointer"
                         >
                           <CheckCircle2 className="w-5 h-5" />
                           <span>موافقة واعتماد الجهاز</span>
                         </button>
                         <button
-                          onClick={() => setRejectModalReqId(req.id)}
+                          onClick={() => setRejectModalReqId(req.deviceId)}
                           className="bg-red-50 hover:bg-red-100 text-red-700 font-bold py-3 px-4 rounded-2xl transition flex items-center justify-center gap-2 border border-red-200 cursor-pointer"
                         >
                           <XCircle className="w-5 h-5" />
@@ -233,7 +245,7 @@ export const DirectorApprovalDashboard: React.FC<Props> = ({ currentUser, onLogo
             <div className="space-y-4">
               <div>
                 <h2 className="text-xl font-black text-slate-900">إدارة الأجهزة المسجلة والمصرحة</h2>
-                <p className="text-sm text-slate-500">قائمة كاملة بالأجهزة المرتبطة بالنظام مع صلاحية إلغاء أو تجميد أي جهاز مفقود أو غير موثوق.</p>
+                <p className="text-sm text-slate-500">قائمة كاملة بالأجهزة المرتبطة بالنظام عبر الخادم مع صلاحية إلغاء أو تجميد أي جهاز.</p>
               </div>
 
               <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
@@ -321,8 +333,7 @@ export const DirectorApprovalDashboard: React.FC<Props> = ({ currentUser, onLogo
                       <p className="text-sm text-slate-500 font-mono">اسم المستخدم: @{u.username}</p>
                     </div>
                     <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-                      <span>الحالة: نشط ومصرح أمنياً</span>
-                      <span>تاريخ الانشاء: {new Date(u.createdAt).toLocaleDateString('ar-SA')}</span>
+                      <span>الحالة: نشط ومصرح أمنياً عبر الخادم</span>
                     </div>
                   </div>
                 ))}
@@ -335,7 +346,7 @@ export const DirectorApprovalDashboard: React.FC<Props> = ({ currentUser, onLogo
             <div className="space-y-4">
               <div>
                 <h2 className="text-xl font-black text-slate-900">سجل التدقيق الأمني والحكومي (Audit Trail)</h2>
-                <p className="text-sm text-slate-500">سجل مشفر غير قابل للتلاعب يوثق كافة عمليات الدخول واعتماد الأجهزة والعمليات المالية.</p>
+                <p className="text-sm text-slate-500">سجل مشفر في الخادم يوثق كافة عمليات الدخول واعتماد الأجهزة.</p>
               </div>
 
               <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
@@ -393,7 +404,13 @@ export const DirectorApprovalDashboard: React.FC<Props> = ({ currentUser, onLogo
             ></textarea>
             <div className="flex gap-3 pt-2">
               <button
-                onClick={() => handleRejectSubmit(rejectModalReqId)}
+                onClick={async () => {
+                  if (!rejectionReason.trim()) return;
+                  await directorRejectDevice(rejectModalReqId, currentUser.username, rejectionReason);
+                  setRejectModalReqId(null);
+                  setRejectionReason('');
+                  await refreshData();
+                }}
                 className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-2xl transition shadow cursor-pointer"
               >
                 تأكيد الرفض وتجميد الجهاز
