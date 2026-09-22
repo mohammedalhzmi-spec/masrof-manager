@@ -1,8 +1,8 @@
 package com.mohammedalhzmi.masrofmanager.ui
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -40,9 +40,9 @@ fun DashboardScreen(viewModel: MasrofViewModel, onAddDocument: () -> Unit, onPri
     var showDeveloperNotice by remember { mutableStateOf(true) }
     LaunchedEffect(Unit) { delay(4500); showDeveloperNotice = false }
 
-    Column(modifier = Modifier.padding(16.dp)) {
+    Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Column { Text("نظام المالية لصندوق النظافة الحزم", style = MaterialTheme.typography.headlineMedium); Text("الدور الحالي: ${role.title}", style = MaterialTheme.typography.bodySmall) }
+            Column(modifier = Modifier.weight(1f)) { Text("نظام المالية لصندوق النظافة الحزم", style = MaterialTheme.typography.headlineMedium, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis); Text("الدور الحالي: ${role.title}", style = MaterialTheme.typography.bodySmall) }
             if (canSettings) IconButton(onClick = onSettings) { Icon(Icons.Default.Settings, contentDescription = "الإعدادات") }
         }
         Spacer(modifier = Modifier.height(12.dp))
@@ -85,8 +85,8 @@ fun DashboardScreen(viewModel: MasrofViewModel, onAddDocument: () -> Unit, onPri
             (selectedTag == null || doc.tags.split(",").map(String::trim).contains(selectedTag)) &&
             (normalizedQuery.isBlank() || listOf(doc.documentNumber, doc.dateHijri, doc.dateGregorian, doc.beneficiaryName.orEmpty(), documentTitle(doc.type), doc.tags).any { it.lowercase().contains(normalizedQuery) })
         }
-        LazyColumn(modifier = Modifier.weight(1f)) {
-            items(visibleDocuments, key = { it.id }) { doc ->
+        Column(modifier = Modifier.fillMaxWidth()) {
+            visibleDocuments.forEach { doc ->
                 Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                     Row(modifier = Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(selectedIds.contains(doc.id), { checked -> selectedIds = if (checked) selectedIds + doc.id else selectedIds - doc.id })
@@ -101,6 +101,7 @@ fun DashboardScreen(viewModel: MasrofViewModel, onAddDocument: () -> Unit, onPri
             Button(onClick = { viewModel.recordAudit("PRINT_EXPORT", "عدد المستندات: ${selectedIds.size}"); onPrint(selectedIds.joinToString(",")) }, modifier = Modifier.fillMaxWidth()) { Text("تصدير / طباعة المحدد (${selectedIds.size})") }
             if (selectedIds.size == 1 && canDelete) TextButton(onClick = { visibleDocuments.find { it.id in selectedIds }?.let { if (showArchive) viewModel.restoreDocument(it) else viewModel.archiveDocument(it); selectedIds = emptySet() } }, modifier = Modifier.fillMaxWidth()) { Text(if (showArchive) "استعادة المستند المحدد" else "أرشفة المستند المحدد") }
         }
+        Spacer(modifier = Modifier.height(24.dp))
     }
 }
 
