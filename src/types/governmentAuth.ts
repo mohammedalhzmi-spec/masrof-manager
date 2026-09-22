@@ -5,6 +5,7 @@ export type DeviceStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'REVOKED';
 export interface GovernmentUser {
   id: string;
   username: string;
+  email?: string;
   fullName: string;
   role: UserRole;
   active: boolean;

@@ -17,6 +17,8 @@ import { SplashLoginScreen } from './components/SplashLoginScreen';
 import { Document, DocumentType, OrganizationProfile } from './types';
 import { sampleDocuments, initialOrganizationProfile } from './utils/initialData';
 import { GitBranch, ShieldCheck, Sparkles, Building2, CheckCircle2, Smartphone, Download } from 'lucide-react';
+import { fbSaveDocument } from './utils/firebaseService';
+import { getCurrentLoggedInUser } from './utils/governmentAuthService';
 
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
@@ -140,6 +142,25 @@ export default function App() {
       setDocuments((prev) => [docToSave, ...prev]);
     }
     setDocModalOpen(false);
+
+    // Sync to Firebase & FCM notification to Director alhzmim57@gmail.com
+    try {
+      const user = getCurrentLoggedInUser();
+      fbSaveDocument({
+        id: docToSave.id,
+        serialNumber: docToSave.documentNumber,
+        type: docToSave.type === 'ORDER' ? 'أمر صرف' : docToSave.type === 'RECEIPT' ? 'سند قبض' : 'طلب مالي',
+        title: docToSave.purpose || 'مستند مالي',
+        amount: docToSave.amount,
+        beneficiary: docToSave.beneficiaryName || 'مستفيد',
+        createdBy: user?.username || 'admin',
+        dayName: new Date(docToSave.createdAt || Date.now()).toLocaleDateString('ar-SA', { weekday: 'long' }),
+        dateString: docToSave.dateGregorian || new Date(docToSave.createdAt || Date.now()).toLocaleDateString('ar-SA'),
+        status: docToSave.status
+      });
+    } catch (e) {
+      console.error('Failed to sync document to Firebase:', e);
+    }
 
     if (andPrint) {
       setPrintState({

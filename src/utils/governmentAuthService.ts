@@ -2,13 +2,20 @@ import { GovernmentUser, DeviceRegistration, AccessRequest, GovernmentAuditLog, 
 import { 
   fbGetUsers, fbGetDevices, fbGetAccessRequests, 
   fbApproveDevice, fbRejectDevice, fbRevokeDevice, 
-  fbAddAuditLog, fbGetAuditLogs, db 
+  fbAddAuditLog, fbGetAuditLogs, fbSendNotification, db 
 } from './firebaseService';
-import { collection, doc, setDoc, getDocs } from 'firebase/firestore';
+import { doc, setDoc } from 'firebase/firestore';
 
 const STORAGE_KEYS = {
-  CURRENT_USER: 'masrof_gov_current_user_v3',
-  CURRENT_DEVICE_ID: 'masrof_gov_device_id_v3',
+  CURRENT_USER: 'masrof_gov_current_user_v4',
+  CURRENT_DEVICE_ID: 'masrof_gov_device_id_v4',
+};
+
+export const DIRECTOR_CREDENTIALS = {
+  email: 'alhzmim57@gmail.com',
+  password: 'mm777096733',
+  username: 'director',
+  fullName: 'المهندس / محمد الحزمي (مدير النظام العام - السلطة العليا)'
 };
 
 export function getOrCreateInstallationId(): string {
@@ -22,8 +29,8 @@ export function getOrCreateInstallationId(): string {
 
 export function getDeviceInfoString(): string {
   const ua = navigator.userAgent;
-  let browser = 'Android 14.0 Official Secure FCM Client';
-  if (ua.includes('Mobile')) browser = 'Android Enterprise Mobile Client (FCM Enabled)';
+  let browser = 'Android 14.0 Official FCM Secure Client';
+  if (ua.includes('Mobile')) browser = 'Android Enterprise Mobile Client (FCM)';
   return `${navigator.platform || 'Android OS 14.0'} - ${browser}`;
 }
 
@@ -32,12 +39,11 @@ export async function getAllUsers(): Promise<GovernmentUser[]> {
   if (fbUsers.length > 0) {
     return fbUsers as GovernmentUser[];
   }
-  // Fallback default users
   return [
-    { id: 'usr_admin', username: 'director', fullName: 'المهندس / مدير النظام العام (السلطة العليا)', role: 'SYSTEM_ADMIN', active: true, approvalRequired: false, createdAt: Date.now() },
-    { id: 'usr_finance', username: 'finance', fullName: 'أ. محمد الحزمي (المدير المالي التنفيذي)', role: 'FINANCE_DIRECTOR', active: true, approvalRequired: true, createdAt: Date.now() },
-    { id: 'usr_accountant', username: 'accountant', fullName: 'أ. أحمد علي (المحاسب الرئيسي)', role: 'ACCOUNTANT', active: true, approvalRequired: true, createdAt: Date.now() },
-    { id: 'usr_staff', username: 'staff', fullName: 'موظف إداري معتمد', role: 'ADMIN_USER', active: true, approvalRequired: true, createdAt: Date.now() }
+    { id: 'usr_director', username: 'director', email: 'alhzmim57@gmail.com', fullName: DIRECTOR_CREDENTIALS.fullName, role: 'SYSTEM_ADMIN', active: true, approvalRequired: false, createdAt: Date.now() },
+    { id: 'usr_finance', username: 'finance', email: 'finance@clean-ibb.gov.ye', fullName: 'أ. المدير المالي التنفيذي', role: 'FINANCE_DIRECTOR', active: true, approvalRequired: true, createdAt: Date.now() },
+    { id: 'usr_accountant', username: 'accountant', email: 'accountant@clean-ibb.gov.ye', fullName: 'أ. المحاسب الرئيسي', role: 'ACCOUNTANT', active: true, approvalRequired: true, createdAt: Date.now() },
+    { id: 'usr_staff', username: 'staff', email: 'staff@clean-ibb.gov.ye', fullName: 'موظف إداري معتمد', role: 'ADMIN_USER', active: true, approvalRequired: true, createdAt: Date.now() }
   ];
 }
 
@@ -49,7 +55,7 @@ export async function getAllDevices(): Promise<DeviceRegistration[]> {
   return [
     {
       id: 'dev_master',
-      userId: 'usr_admin',
+      userId: 'usr_director',
       installationId: 'master_admin_installation_id',
       deviceName: 'Android 14.0 Official Master Client',
       status: 'APPROVED',
@@ -85,14 +91,40 @@ export interface LoginAttemptResult {
   requiresApproval?: boolean;
   user?: GovernmentUser;
   message?: string;
+  isDirector?: boolean;
 }
 
-export async function attemptGovernmentLogin(username: string): Promise<LoginAttemptResult> {
+export async function attemptGovernmentLogin(loginInput: string, passwordInput?: string): Promise<LoginAttemptResult> {
+  const cleanInput = loginInput.trim().toLowerCase();
+
+  // Check if Director login via email alhzmim57@gmail.com and password mm777096733
+  if (cleanInput === DIRECTOR_CREDENTIALS.email || cleanInput === DIRECTOR_CREDENTIALS.username) {
+    if (passwordInput && passwordInput !== DIRECTOR_CREDENTIALS.password) {
+      return { success: false, message: 'كلمة المرور الخاصة بمدير النظام غير صحيحة.' };
+    }
+
+    const directorUser: GovernmentUser = {
+      id: 'usr_director',
+      username: 'director',
+      email: DIRECTOR_CREDENTIALS.email,
+      fullName: DIRECTOR_CREDENTIALS.fullName,
+      role: 'SYSTEM_ADMIN',
+      active: true,
+      approvalRequired: false,
+      createdAt: Date.now()
+    };
+
+    localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(directorUser));
+    await fbAddAuditLog('DIRECTOR_LOGIN', 'تسجيل دخول المدير العام بنجاح عبر البريد الإلكتروني المخصص', 'director', getOrCreateInstallationId());
+    return { success: true, user: directorUser, isDirector: true };
+  }
+
+  // Regular users / admins / accountants
   const users = await getAllUsers();
-  const user = users.find(u => u.username.toLowerCase() === username.toLowerCase());
+  const user = users.find(u => u.username.toLowerCase() === cleanInput || u.email?.toLowerCase() === cleanInput);
   
   if (!user) {
-    return { success: false, message: 'اسم المستخدم غير موجود في سجلات النظام الحكومي.' };
+    return { success: false, message: 'اسم المستخدم أو البريد الإلكتروني غير موجود في السجلات الحكومية.' };
   }
 
   if (!user.active) {
@@ -102,24 +134,6 @@ export async function attemptGovernmentLogin(username: string): Promise<LoginAtt
   const devId = getOrCreateInstallationId();
   const devices = await getAllDevices();
   let device = devices.find(d => d.userId === user.id && d.installationId === devId);
-
-  // System admin auto-approve
-  if (user.role === 'SYSTEM_ADMIN' && !device) {
-    device = {
-      id: 'dev_' + Date.now(),
-      userId: user.id,
-      installationId: devId,
-      deviceName: getDeviceInfoString(),
-      status: 'APPROVED',
-      requestedAt: Date.now(),
-      approvedBy: 'مدير النظام العام',
-      approvedAt: Date.now()
-    };
-    try {
-      await setDoc(doc(db, 'devices', device.id), device);
-      await fbAddAuditLog('LOGIN_APPROVED', `اعتماد تلقائي لجهاز مدير النظام ${user.fullName}`, user.username, devId);
-    } catch {}
-  }
 
   if (!device || device.status === 'PENDING') {
     if (!device) {
@@ -134,6 +148,13 @@ export async function attemptGovernmentLogin(username: string): Promise<LoginAtt
       try {
         await setDoc(doc(db, 'devices', device.id), device);
         await fbAddAuditLog('FCM_LOGIN_REQUEST', `طلب اعتماد جهاز جديد عبر FCM للمستخدم ${user.fullName}`, user.username, devId);
+        // Send FCM Notification to Director alhzmim57@gmail.com
+        await fbSendNotification(
+          'طلب اعتماد جهاز جديد',
+          `طلب المستخدم (${user.fullName} - @${user.username}) اعتماد جهاز جديد للوصول للنظام المالي.`,
+          user.username,
+          'DEVICE_REQUEST'
+        );
       } catch {}
     }
 
@@ -141,7 +162,7 @@ export async function attemptGovernmentLogin(username: string): Promise<LoginAtt
       success: false,
       requiresApproval: true,
       user,
-      message: 'تم إرسال إشعار FCM الفوري إلى جوال المدير العام. يجدر بانتظار الموافقة على الجهاز.'
+      message: 'تم إرسال إشعار FCM الفوري إلى جوال المدير العام. يرجى انتظار الموافقة على الجهاز.'
     };
   }
 
@@ -158,7 +179,7 @@ export async function attemptGovernmentLogin(username: string): Promise<LoginAtt
   } catch {}
 
   localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(user));
-  return { success: true, user };
+  return { success: true, user, isDirector: user.role === 'SYSTEM_ADMIN' };
 }
 
 export function getCurrentLoggedInUser(): GovernmentUser | null {

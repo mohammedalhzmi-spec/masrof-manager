@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { 
   ShieldCheck, ShieldAlert, Users, Smartphone, CheckCircle2, 
-  XCircle, AlertTriangle, RefreshCw, LogOut, Trash2, History 
+  XCircle, AlertTriangle, RefreshCw, LogOut, Trash2, History, Bell, FileText, Layers, Calendar 
 } from 'lucide-react';
 import { 
   getAllAccessRequests, getAllDevices, getAllUsers, getAllAuditLogs, 
   directorApproveDevice, directorRejectDevice, directorRevokeDevice, 
   logoutGovernmentUser 
 } from '../utils/governmentAuthService';
+import { fbGetNotifications, fbGetDocuments } from '../utils/firebaseService';
 import { GovernmentUser, AccessRequest, DeviceRegistration, GovernmentAuditLog } from '../types/governmentAuth';
 
 interface Props {
@@ -17,30 +18,37 @@ interface Props {
 }
 
 export const DirectorApprovalDashboard: React.FC<Props> = ({ currentUser, onLogout, onClose }) => {
-  const [activeTab, setActiveTab] = useState<'requests' | 'devices' | 'users' | 'audit'>('requests');
+  const [activeTab, setActiveTab] = useState<'requests' | 'devices' | 'users' | 'audit' | 'notifications' | 'documents'>('requests');
   const [requests, setRequests] = useState<AccessRequest[]>([]);
   const [devices, setDevices] = useState<DeviceRegistration[]>([]);
   const [users, setUsers] = useState<GovernmentUser[]>([]);
   const [auditLogs, setAuditLogs] = useState<GovernmentAuditLog[]>([]);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [documents, setDocuments] = useState<any[]>([]);
+  
   const [rejectModalReqId, setRejectModalReqId] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
 
   const refreshData = async () => {
-    const [reqs, devs, usrs, logs] = await Promise.all([
+    const [reqs, devs, usrs, logs, notifs, docs] = await Promise.all([
       getAllAccessRequests(),
       getAllDevices(),
       getAllUsers(),
-      getAllAuditLogs()
+      getAllAuditLogs(),
+      fbGetNotifications(),
+      fbGetDocuments()
     ]);
     setRequests(reqs);
     setDevices(devs);
     setUsers(usrs);
     setAuditLogs(logs);
+    setNotifications(notifs);
+    setDocuments(docs);
   };
 
   useEffect(() => {
     refreshData();
-    const interval = setInterval(refreshData, 5000); // Poll backend every 5s for new device requests
+    const interval = setInterval(refreshData, 5000); // Poll Firebase every 5s for FCM updates & new docs
     return () => clearInterval(interval);
   }, []);
 
@@ -65,6 +73,7 @@ export const DirectorApprovalDashboard: React.FC<Props> = ({ currentUser, onLogo
   };
 
   const pendingRequests = requests.filter(r => r.status === 'PENDING');
+  const unreadNotifsCount = notifications.filter(n => !n.read).length;
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex flex-col overflow-hidden text-right rtl animate-fadeIn">
@@ -75,8 +84,8 @@ export const DirectorApprovalDashboard: React.FC<Props> = ({ currentUser, onLogo
             <ShieldCheck className="w-7 h-7 text-emerald-200" />
           </div>
           <div>
-            <h1 className="text-lg font-black">لوحة تحكم المدير العام والأمن الرقمي (Backend API + APK)</h1>
-            <p className="text-xs text-emerald-300">صندوق النظافة والتحسين م/إب - نظام الاعتماد والرقابة المركزية للأجهزة</p>
+            <h1 className="text-lg font-black">لوحة تحكم المدير العام والأمن الرقمي (Firebase FCM)</h1>
+            <p className="text-xs text-emerald-300">صندوق النظافة والتحسين م/إب - البريد المعتمد: {currentUser.email || 'alhzmim57@gmail.com'}</p>
           </div>
         </div>
 
@@ -107,14 +116,14 @@ export const DirectorApprovalDashboard: React.FC<Props> = ({ currentUser, onLogo
       <nav className="bg-white border-b border-slate-200 px-6 flex gap-2 overflow-x-auto shadow-sm">
         <button
           onClick={() => setActiveTab('requests')}
-          className={`py-3.5 px-6 font-bold text-sm border-b-2 transition flex items-center gap-2 relative ${
+          className={`py-3.5 px-5 font-bold text-sm border-b-2 transition flex items-center gap-2 relative ${
             activeTab === 'requests' 
               ? 'border-emerald-600 text-emerald-800 bg-emerald-50/70' 
               : 'border-transparent text-slate-600 hover:text-slate-900'
           }`}
         >
           <ShieldAlert className="w-4 h-4" />
-          <span>طلبات اعتماد الأجهزة المعلقة</span>
+          <span>طلبات اعتماد الأجهزة</span>
           {pendingRequests.length > 0 && (
             <span className="bg-red-600 text-white text-xs font-black px-2 py-0.5 rounded-full animate-bounce shadow">
               {pendingRequests.length}
@@ -123,39 +132,68 @@ export const DirectorApprovalDashboard: React.FC<Props> = ({ currentUser, onLogo
         </button>
 
         <button
+          onClick={() => setActiveTab('notifications')}
+          className={`py-3.5 px-5 font-bold text-sm border-b-2 transition flex items-center gap-2 relative ${
+            activeTab === 'notifications' 
+              ? 'border-emerald-600 text-emerald-800 bg-emerald-50/70' 
+              : 'border-transparent text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <Bell className="w-4 h-4" />
+          <span>إشعارات FCM الفورية</span>
+          {notifications.length > 0 && (
+            <span className="bg-emerald-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+              {notifications.length}
+            </span>
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveTab('documents')}
+          className={`py-3.5 px-5 font-bold text-sm border-b-2 transition flex items-center gap-2 ${
+            activeTab === 'documents' 
+              ? 'border-emerald-600 text-emerald-800 bg-emerald-50/70' 
+              : 'border-transparent text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <FileText className="w-4 h-4" />
+          <span>إجمالي المستندات والسيريال ({documents.length})</span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('devices')}
-          className={`py-3.5 px-6 font-bold text-sm border-b-2 transition flex items-center gap-2 ${
+          className={`py-3.5 px-5 font-bold text-sm border-b-2 transition flex items-center gap-2 ${
             activeTab === 'devices' 
               ? 'border-emerald-600 text-emerald-800 bg-emerald-50/70' 
               : 'border-transparent text-slate-600 hover:text-slate-900'
           }`}
         >
           <Smartphone className="w-4 h-4" />
-          <span>الأجهزة المصرحة والنشطة ({devices.length})</span>
+          <span>الأجهزة النشطة ({devices.length})</span>
         </button>
 
         <button
           onClick={() => setActiveTab('users')}
-          className={`py-3.5 px-6 font-bold text-sm border-b-2 transition flex items-center gap-2 ${
+          className={`py-3.5 px-5 font-bold text-sm border-b-2 transition flex items-center gap-2 ${
             activeTab === 'users' 
               ? 'border-emerald-600 text-emerald-800 bg-emerald-50/70' 
               : 'border-transparent text-slate-600 hover:text-slate-900'
           }`}
         >
           <Users className="w-4 h-4" />
-          <span>إدارة حسابات الإداريين ({users.length})</span>
+          <span>حسابات الإداريين ({users.length})</span>
         </button>
 
         <button
           onClick={() => setActiveTab('audit')}
-          className={`py-3.5 px-6 font-bold text-sm border-b-2 transition flex items-center gap-2 ${
+          className={`py-3.5 px-5 font-bold text-sm border-b-2 transition flex items-center gap-2 ${
             activeTab === 'audit' 
               ? 'border-emerald-600 text-emerald-800 bg-emerald-50/70' 
               : 'border-transparent text-slate-600 hover:text-slate-900'
           }`}
         >
           <History className="w-4 h-4" />
-          <span>سجل التدقيق الأمني (Audit Trail)</span>
+          <span>سجل التدقيق</span>
         </button>
       </nav>
 
@@ -163,13 +201,130 @@ export const DirectorApprovalDashboard: React.FC<Props> = ({ currentUser, onLogo
       <main className="flex-1 overflow-y-auto p-6 bg-slate-100">
         <div className="max-w-7xl mx-auto space-y-6">
 
+          {/* FCM NOTIFICATIONS TAB */}
+          {activeTab === 'notifications' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-black text-slate-900">سجل إشعارات Firebase Cloud Messaging (FCM) الفورية</h2>
+                  <p className="text-sm text-slate-500">تنبيهات فورية للمدير العام عند قيام الإداريين بإنشاء أوامر صرف، دفاتر صرف، أو طلبات اعتماد أجهزة.</p>
+                </div>
+                <button
+                  onClick={refreshData}
+                  className="bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-4 py-2.5 rounded-2xl text-sm font-bold flex items-center gap-2 shadow-sm cursor-pointer"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  <span>تحديث الإشعارات</span>
+                </button>
+              </div>
+
+              {notifications.length === 0 ? (
+                <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 shadow-sm space-y-3">
+                  <Bell className="w-16 h-16 text-slate-400 mx-auto" />
+                  <h3 className="text-lg font-bold text-slate-800">لا توجد إشعارات FCM جديدة</h3>
+                  <p className="text-slate-500 text-sm">ستظهر هنا الإشعارات فوراً عند إنشاء الإداريين لأي مستند مالي جديد.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {notifications.map(notif => (
+                    <div key={notif.id} className="bg-white rounded-2xl p-5 border border-emerald-200 shadow-sm flex items-start gap-4">
+                      <div className="w-12 h-12 bg-emerald-100 text-emerald-800 rounded-2xl flex items-center justify-center font-black flex-shrink-0">
+                        <Bell className="w-6 h-6" />
+                      </div>
+                      <div className="flex-1 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-black text-slate-900">{notif.title}</h4>
+                          <span className="text-xs bg-emerald-50 text-emerald-800 font-mono px-3 py-1 rounded-full border border-emerald-200">
+                            {notif.dayName} - {notif.dateString}
+                          </span>
+                        </div>
+                        <p className="text-sm text-slate-600">{notif.body}</p>
+                        <div className="text-xs text-slate-400 font-mono pt-1">
+                          المُرسل: @{notif.sender} | النوع: {notif.docType}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* DOCUMENTS & SERIAL NUMBERS TAB */}
+          {activeTab === 'documents' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-black text-slate-900">إجمالي المستندات المنشأة والسيريال والأيام والتواريخ</h2>
+                  <p className="text-sm text-slate-500">حصر كامل ومجلد لكل المستندات وأوامر الصرف ودفاتر الصرف الصادرة من الإداريين.</p>
+                </div>
+                <button
+                  onClick={refreshData}
+                  className="bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-4 py-2.5 rounded-2xl text-sm font-bold flex items-center gap-2 shadow-sm cursor-pointer"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  <span>تحديث البيانات</span>
+                </button>
+              </div>
+
+              {documents.length === 0 ? (
+                <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 shadow-sm space-y-3">
+                  <FileText className="w-16 h-16 text-slate-400 mx-auto" />
+                  <h3 className="text-lg font-bold text-slate-800">لا توجد مستندات مسجلة في قاعدة البيانات حالياً</h3>
+                  <p className="text-slate-500 text-sm">سيتم عرض جميع المستندات وأوامر الصرف هنا فور إنشائها من قِبل الإداريين والمحاسبين.</p>
+                </div>
+              ) : (
+                <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-right border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 text-xs font-black">
+                          <th className="p-4">نوع المستند</th>
+                          <th className="p-4">الرقم التسلسلي (Serial)</th>
+                          <th className="p-4">عنوان المستند / المستفيد</th>
+                          <th className="p-4">المبلغ (ريال)</th>
+                          <th className="p-4">اليوم والتاريخ</th>
+                          <th className="p-4">بواسطة الإداري</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-sm">
+                        {documents.map((docItem: any) => (
+                          <tr key={docItem.id} className="hover:bg-slate-50/50">
+                            <td className="p-4">
+                              <span className="bg-emerald-100 text-emerald-900 text-xs font-black px-3 py-1 rounded-full">
+                                {docItem.type}
+                              </span>
+                            </td>
+                            <td className="p-4 font-mono font-bold text-slate-900">{docItem.serialNumber}</td>
+                            <td className="p-4">
+                              <div className="font-bold text-slate-800">{docItem.title}</div>
+                              <div className="text-xs text-slate-500">المستفيد: {docItem.beneficiary}</div>
+                            </td>
+                            <td className="p-4 font-black text-emerald-700">
+                              {Number(docItem.amount || 0).toLocaleString()} ر.ي
+                            </td>
+                            <td className="p-4 text-xs font-mono text-slate-600">
+                              <div>{docItem.dayName}</div>
+                              <div className="text-slate-400">{docItem.dateString}</div>
+                            </td>
+                            <td className="p-4 text-xs font-bold text-slate-700">@{docItem.createdBy}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* PENDING REQUESTS */}
           {activeTab === 'requests' && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-xl font-black text-slate-900">طلبات اعتماد الأجهزة الجديدة (Backend Real-Time Sync)</h2>
-                  <p className="text-sm text-slate-500">مراجعة واعتماد دخول الإداريين من أجهزة Android جديدة أو بعد إعادة تثبيت التطبيق.</p>
+                  <h2 className="text-xl font-black text-slate-900">طلبات اعتماد الأجهزة المعلقة (FCM Sync)</h2>
+                  <p className="text-sm text-slate-500">مراجعة واعتماد دخول الإداريين والمحاسبين من أجهزة أندرويد جديدة.</p>
                 </div>
                 <button
                   onClick={refreshData}
@@ -185,7 +340,7 @@ export const DirectorApprovalDashboard: React.FC<Props> = ({ currentUser, onLogo
                   <CheckCircle2 className="w-16 h-16 text-emerald-600 mx-auto" />
                   <h3 className="text-lg font-bold text-slate-800">لا توجد طلبات اعتماد معلقة حالياً</h3>
                   <p className="text-slate-500 text-sm max-w-md mx-auto">
-                    جميع الأجهزة الحالية معتمدة ومصرح لها بالعمل. ستظهر هنا فوراً أي محاولة تسجيل دخول جديدة من أي جهاز APK عبر الخادم.
+                    جميع الأجهزة الحالية معتمدة. ستصلك إشعارات FCM فورية هنا عند محاولة أي موظف تسجيل الدخول من جهاز جديد.
                   </p>
                 </div>
               ) : (
@@ -197,7 +352,7 @@ export const DirectorApprovalDashboard: React.FC<Props> = ({ currentUser, onLogo
                       <div className="flex items-start justify-between">
                         <div>
                           <span className="text-xs bg-amber-100 text-amber-800 font-bold px-3 py-1 rounded-full border border-amber-200">
-                            طلب جهاز جديد بانتظار الموافقة
+                            طلب جهاز جديد عبر FCM
                           </span>
                           <h3 className="text-lg font-black text-slate-900 mt-2">{req.fullName}</h3>
                           <p className="text-xs text-slate-500 font-mono">اسم المستخدم: @{req.username} | الدور: {req.role}</p>
@@ -244,69 +399,48 @@ export const DirectorApprovalDashboard: React.FC<Props> = ({ currentUser, onLogo
           {activeTab === 'devices' && (
             <div className="space-y-4">
               <div>
-                <h2 className="text-xl font-black text-slate-900">إدارة الأجهزة المسجلة والمصرحة</h2>
-                <p className="text-sm text-slate-500">قائمة كاملة بالأجهزة المرتبطة بالنظام عبر الخادم مع صلاحية إلغاء أو تجميد أي جهاز.</p>
+                <h2 className="text-xl font-black text-slate-900">الأجهزة المسجلة والمصرحة</h2>
               </div>
-
               <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-right border-collapse">
-                    <thead>
-                      <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 text-xs font-black">
-                        <th className="p-4">الجهاز والتعريف</th>
-                        <th className="p-4">المستخدم المرتبط</th>
-                        <th className="p-4">حالة الجهاز</th>
-                        <th className="p-4">تاريخ الاعتماد</th>
-                        <th className="p-4">الإجراءات الأمنية</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 text-sm">
-                      {devices.map(d => {
-                        const usr = users.find(u => u.id === d.userId);
-                        return (
-                          <tr key={d.id} className="hover:bg-slate-50/50">
-                            <td className="p-4">
-                              <div className="font-bold text-slate-900">{d.deviceName}</div>
-                              <div className="text-xs font-mono text-slate-400">{d.installationId}</div>
-                            </td>
-                            <td className="p-4">
-                              <div className="font-bold text-slate-800">{usr?.fullName || 'مستخدم غير معروف'}</div>
-                              <div className="text-xs text-slate-500 font-mono">@{usr?.username} ({usr?.role})</div>
-                            </td>
-                            <td className="p-4">
-                              {d.status === 'APPROVED' && (
-                                <span className="bg-emerald-100 text-emerald-800 text-xs font-bold px-3 py-1 rounded-full">معتمد ونشط</span>
-                              )}
-                              {d.status === 'PENDING' && (
-                                <span className="bg-amber-100 text-amber-800 text-xs font-bold px-3 py-1 rounded-full">قيد الانتظار</span>
-                              )}
-                              {d.status === 'REJECTED' && (
-                                <span className="bg-red-100 text-red-800 text-xs font-bold px-3 py-1 rounded-full">مرفوض</span>
-                              )}
-                              {d.status === 'REVOKED' && (
-                                <span className="bg-slate-200 text-slate-700 text-xs font-bold px-3 py-1 rounded-full">ملغي الصلاحية</span>
-                              )}
-                            </td>
-                            <td className="p-4 text-xs font-mono text-slate-500">
-                              {d.approvedAt ? new Date(d.approvedAt).toLocaleString('ar-SA') : 'غير معتمد'}
-                            </td>
-                            <td className="p-4">
-                              {d.status === 'APPROVED' && (
-                                <button
-                                  onClick={() => handleRevoke(d.id)}
-                                  className="bg-red-50 hover:bg-red-100 text-red-700 px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1 border border-red-200 cursor-pointer"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                  <span>إلغاء الصلاحية عن بعد</span>
-                                </button>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                <table className="w-full text-right border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 text-xs font-black">
+                      <th className="p-4">الجهاز والتعريف</th>
+                      <th className="p-4">المستخدم المرتبط</th>
+                      <th className="p-4">الحالة</th>
+                      <th className="p-4">الإجراء</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-sm">
+                    {devices.map(d => {
+                      const usr = users.find(u => u.id === d.userId);
+                      return (
+                        <tr key={d.id} className="hover:bg-slate-50/50">
+                          <td className="p-4">
+                            <div className="font-bold text-slate-900">{d.deviceName}</div>
+                            <div className="text-xs font-mono text-slate-400">{d.installationId}</div>
+                          </td>
+                          <td className="p-4">
+                            <div className="font-bold text-slate-800">{usr?.fullName || 'مستخدم'}</div>
+                            <div className="text-xs text-slate-500 font-mono">@{usr?.username}</div>
+                          </td>
+                          <td className="p-4">
+                            <span className="bg-emerald-100 text-emerald-800 text-xs font-bold px-3 py-1 rounded-full">معتمد</span>
+                          </td>
+                          <td className="p-4">
+                            <button
+                              onClick={() => handleRevoke(d.id)}
+                              className="bg-red-50 hover:bg-red-100 text-red-700 px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1 border border-red-200 cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>إلغاء الصلاحية</span>
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
@@ -315,10 +449,8 @@ export const DirectorApprovalDashboard: React.FC<Props> = ({ currentUser, onLogo
           {activeTab === 'users' && (
             <div className="space-y-4">
               <div>
-                <h2 className="text-xl font-black text-slate-900">حسابات الإداريين والأدوار الوظيفية الرسمية</h2>
-                <p className="text-sm text-slate-500">الصلاحيات المعتمدة في النظام المالي الحكومي الموحد.</p>
+                <h2 className="text-xl font-black text-slate-900">حسابات الإداريين والمحاسبين</h2>
               </div>
-
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {users.map(u => (
                   <div key={u.id} className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-3">
@@ -326,14 +458,11 @@ export const DirectorApprovalDashboard: React.FC<Props> = ({ currentUser, onLogo
                       <span className="text-xs bg-emerald-100 text-emerald-800 font-bold px-3 py-1 rounded-full font-mono">
                         {u.role}
                       </span>
-                      <span className="text-xs text-slate-400 font-mono">ID: {u.id}</span>
+                      <span className="text-xs text-slate-400 font-mono">@{u.username}</span>
                     </div>
                     <div>
                       <h3 className="text-lg font-black text-slate-900">{u.fullName}</h3>
-                      <p className="text-sm text-slate-500 font-mono">اسم المستخدم: @{u.username}</p>
-                    </div>
-                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-                      <span>الحالة: نشط ومصرح أمنياً عبر الخادم</span>
+                      <p className="text-sm text-slate-500 font-mono">{u.email || 'بدون بريد'}</p>
                     </div>
                   </div>
                 ))}
@@ -341,43 +470,35 @@ export const DirectorApprovalDashboard: React.FC<Props> = ({ currentUser, onLogo
             </div>
           )}
 
-          {/* AUDIT LOGS TAB */}
+          {/* AUDIT TAB */}
           {activeTab === 'audit' && (
             <div className="space-y-4">
               <div>
-                <h2 className="text-xl font-black text-slate-900">سجل التدقيق الأمني والحكومي (Audit Trail)</h2>
-                <p className="text-sm text-slate-500">سجل مشفر في الخادم يوثق كافة عمليات الدخول واعتماد الأجهزة.</p>
+                <h2 className="text-xl font-black text-slate-900">سجل التدقيق الأمني</h2>
               </div>
-
               <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-right border-collapse">
-                    <thead>
-                      <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 text-xs font-black">
-                        <th className="p-4">التوقيت والتاريخ</th>
-                        <th className="p-4">نوع الحدث</th>
-                        <th className="p-4">المستخدم</th>
-                        <th className="p-4">التفاصيل التقنية والأمنية</th>
+                <table className="w-full text-right border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 text-xs font-black">
+                      <th className="p-4">التوقيت</th>
+                      <th className="p-4">الحدث</th>
+                      <th className="p-4">المستخدم</th>
+                      <th className="p-4">التفاصيل</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-sm">
+                    {auditLogs.map(log => (
+                      <tr key={log.id} className="hover:bg-slate-50/50">
+                        <td className="p-4 text-xs font-mono text-slate-500">
+                          {new Date(log.timestamp).toLocaleString('ar-SA')}
+                        </td>
+                        <td className="p-4 font-mono text-xs font-bold">{log.action}</td>
+                        <td className="p-4 font-bold text-slate-800">@{log.username}</td>
+                        <td className="p-4 text-slate-600">{log.details}</td>
                       </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 text-sm">
-                      {auditLogs.map(log => (
-                        <tr key={log.id} className="hover:bg-slate-50/50">
-                          <td className="p-4 text-xs font-mono text-slate-500">
-                            {new Date(log.timestamp).toLocaleString('ar-SA')}
-                          </td>
-                          <td className="p-4">
-                            <span className="bg-slate-100 text-slate-800 font-mono text-xs font-bold px-2.5 py-1 rounded-lg">
-                              {log.action}
-                            </span>
-                          </td>
-                          <td className="p-4 font-bold text-slate-800">@{log.username}</td>
-                          <td className="p-4 text-slate-600">{log.details}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
@@ -393,13 +514,10 @@ export const DirectorApprovalDashboard: React.FC<Props> = ({ currentUser, onLogo
               <AlertTriangle className="w-6 h-6 text-red-600" />
               <span>سبب رفض اعتماد الجهاز</span>
             </h3>
-            <p className="text-sm text-slate-600">
-              يرجى كتابة سبب رفض اعتماد هذا الجهاز لكي يظهر للمستخدم في شاشة التطبيق:
-            </p>
             <textarea
               value={rejectionReason}
               onChange={e => setRejectionReason(e.target.value)}
-              placeholder="مثال: الجهاز غير مصرح به أو تم الاشتباه في محاولة دخول غير مرخصة..."
+              placeholder="اكتب سبب الرفض..."
               className="w-full p-3.5 border border-slate-300 rounded-2xl text-sm focus:ring-2 focus:ring-red-600 outline-none h-32"
             ></textarea>
             <div className="flex gap-3 pt-2">
@@ -413,7 +531,7 @@ export const DirectorApprovalDashboard: React.FC<Props> = ({ currentUser, onLogo
                 }}
                 className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-2xl transition shadow cursor-pointer"
               >
-                تأكيد الرفض وتجميد الجهاز
+                تأكيد الرفض
               </button>
               <button
                 onClick={() => setRejectModalReqId(null)}
