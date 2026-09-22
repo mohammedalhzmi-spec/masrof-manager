@@ -16,6 +16,7 @@ import kotlinx.coroutines.delay
 import com.mohammedalhzmi.masrofmanager.util.AppBackupManager
 import com.mohammedalhzmi.masrofmanager.util.RolePreferences
 import com.mohammedalhzmi.masrofmanager.util.AppPermission
+import com.mohammedalhzmi.masrofmanager.data.DocumentStatus
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 
@@ -33,6 +34,7 @@ fun DashboardScreen(viewModel: MasrofViewModel, onAddDocument: () -> Unit, onCre
     val canBackup = RolePreferences.can(context, AppPermission.BACKUP)
     val canEdit = RolePreferences.can(context, AppPermission.EDIT)
     val canDelete = RolePreferences.can(context, AppPermission.DELETE)
+    val canApprove = RolePreferences.can(context, AppPermission.APPROVE)
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/x-sqlite3")) { uri -> uri?.let { viewModel.exportDatabase(context, it); viewModel.recordAudit("EXPORT_DATABASE", "نسخة DB") } }
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let { viewModel.importDatabase(context, it); viewModel.recordAudit("IMPORT_DATABASE", "استعادة DB") } }
     val zipExportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri -> uri?.let { viewModel.exportFullBackup(context, it); viewModel.recordAudit("EXPORT_BACKUP", "نسخة ZIP كاملة") } }
@@ -91,7 +93,10 @@ fun DashboardScreen(viewModel: MasrofViewModel, onAddDocument: () -> Unit, onCre
                 Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                     Row(modifier = Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(selectedIds.contains(doc.id), { checked -> selectedIds = if (checked) selectedIds + doc.id else selectedIds - doc.id })
-                        Column(modifier = Modifier.weight(1f)) { Text("${documentTitle(doc.type)} — ${doc.documentNumber}", style = MaterialTheme.typography.titleMedium); Text(doc.beneficiaryName.orEmpty()); if (doc.amount != null) Text("${doc.amount} ريال"); if (doc.tags.isNotBlank()) Text("وسوم: ${doc.tags}", style = MaterialTheme.typography.labelSmall) }
+                        Column(modifier = Modifier.weight(1f)) { Text("${documentTitle(doc.type)} — ${doc.documentNumber}", style = MaterialTheme.typography.titleMedium); Text("الحالة: ${statusTitle(doc.status)}", style = MaterialTheme.typography.labelMedium, color = statusColor(doc.status)); Text(doc.beneficiaryName.orEmpty()); if (doc.amount != null) Text("${doc.amount} ريال"); if (doc.financialCategory.isNotBlank()) Text("البند: ${doc.financialCategory} — مركز التكلفة: ${doc.costCenter}", style = MaterialTheme.typography.labelSmall); if (doc.tags.isNotBlank()) Text("وسوم: ${doc.tags}", style = MaterialTheme.typography.labelSmall) }
+                        if (canApprove && !showArchive && doc.status == DocumentStatus.SUBMITTED) TextButton(onClick = { viewModel.transitionDocument(doc, DocumentStatus.APPROVED) }) { Text("اعتماد") }
+                        if (canApprove && !showArchive && doc.status == DocumentStatus.APPROVED) TextButton(onClick = { viewModel.transitionDocument(doc, DocumentStatus.PAID) }) { Text("تم الصرف") }
+                        if (canApprove && !showArchive && (doc.status == DocumentStatus.SUBMITTED || doc.status == DocumentStatus.APPROVED)) TextButton(onClick = { viewModel.transitionDocument(doc, DocumentStatus.CANCELLED) }) { Text("إلغاء") }
                         if (showArchive) TextButton(onClick = { viewModel.restoreDocument(doc) }) { Text("استعادة") }
                         else if (canEdit) TextButton(onClick = { onEdit("${doc.type.name.lowercase()}:${doc.id}") }) { Text("تعديل") }
                     }
@@ -104,6 +109,22 @@ fun DashboardScreen(viewModel: MasrofViewModel, onAddDocument: () -> Unit, onCre
         }
         Spacer(modifier = Modifier.height(24.dp))
     }
+}
+
+private fun statusTitle(status: DocumentStatus) = when (status) {
+    DocumentStatus.DRAFT -> "مسودة"
+    DocumentStatus.SUBMITTED -> "قيد المراجعة"
+    DocumentStatus.APPROVED -> "معتمد"
+    DocumentStatus.PAID -> "تم الصرف"
+    DocumentStatus.RECEIVED -> "تم الاستلام"
+    DocumentStatus.CANCELLED -> "ملغى"
+}
+
+private fun statusColor(status: DocumentStatus) = when (status) {
+    DocumentStatus.APPROVED -> androidx.compose.ui.graphics.Color(0xff18794e)
+    DocumentStatus.PAID, DocumentStatus.RECEIVED -> androidx.compose.ui.graphics.Color(0xff145da0)
+    DocumentStatus.CANCELLED -> androidx.compose.ui.graphics.Color(0xffb42318)
+    else -> androidx.compose.ui.graphics.Color(0xff8a651d)
 }
 
 private fun documentTitle(type: com.mohammedalhzmi.masrofmanager.data.DocumentType) = when (type) {

@@ -19,6 +19,8 @@ import com.mohammedalhzmi.masrofmanager.util.AppBackupManager
 import com.mohammedalhzmi.masrofmanager.data.UserEntity
 import com.mohammedalhzmi.masrofmanager.data.AuditLogEntity
 import com.mohammedalhzmi.masrofmanager.data.DocumentType
+import com.mohammedalhzmi.masrofmanager.data.DocumentStatus
+import com.mohammedalhzmi.masrofmanager.util.AppRole
 import com.mohammedalhzmi.masrofmanager.data.DocumentDesignEntity
 import com.mohammedalhzmi.masrofmanager.data.DesignElementEntity
 import com.mohammedalhzmi.masrofmanager.util.AuthSecurity
@@ -132,8 +134,36 @@ class MasrofViewModel(
 
     fun addDocument(document: Document) {
         viewModelScope.launch {
-            repository.insert(document)
-            audit("CREATE_DOCUMENT", document.documentNumber)
+            val submittedBy = document.submittedBy.ifBlank { UserSession.current?.fullName.orEmpty() }
+            repository.insert(document.copy(submittedBy = submittedBy))
+            audit("CREATE_DOCUMENT", "${document.documentNumber} — الحالة: ${document.status.name}")
+        }
+    }
+
+    fun transitionDocument(document: Document, target: DocumentStatus) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val role = UserSession.current?.role ?: AppRole.ADMIN
+            val canApprove = role == AppRole.ADMIN || role == AppRole.FINANCE_MANAGER
+            val canReceive = canApprove || role == AppRole.ACCOUNTANT
+            val allowed = when (target) {
+                DocumentStatus.APPROVED, DocumentStatus.PAID, DocumentStatus.CANCELLED -> canApprove
+                DocumentStatus.RECEIVED -> canReceive
+                else -> false
+            }
+            if (!allowed) { audit("WORKFLOW_DENIED", "${document.documentNumber} → ${target.name}"); return@launch }
+            val now = System.currentTimeMillis()
+            val actor = UserSession.current?.fullName.orEmpty()
+            val updated = document.copy(
+                status = target,
+                reviewedBy = if (target == DocumentStatus.APPROVED) actor else document.reviewedBy,
+                approvedBy = if (target == DocumentStatus.APPROVED || target == DocumentStatus.PAID) actor else document.approvedBy,
+                approvedAt = if (target == DocumentStatus.APPROVED && document.approvedAt == null) now else document.approvedAt,
+                paidAt = if (target == DocumentStatus.PAID) now else document.paidAt,
+                rejectionReason = if (target == DocumentStatus.CANCELLED) "تم الإلغاء بواسطة $actor" else document.rejectionReason,
+                updatedAt = now
+            )
+            repository.update(updated)
+            audit("WORKFLOW_${target.name}", "${document.documentNumber} — بواسطة $actor")
         }
     }
 

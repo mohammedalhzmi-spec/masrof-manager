@@ -10,7 +10,11 @@ data class Document(
     val amount: Double?, val amountWords: String?, val beneficiaryName: String?, val purpose: String?,
     val details: String?, val notes: String?, val status: DocumentStatus, val attachmentsCount: Int = 0,
     val createdAt: Long = System.currentTimeMillis(), val isArchived: Boolean = false, val archivedAt: Long? = null,
-    val updatedAt: Long = createdAt, val tags: String = ""
+    val updatedAt: Long = createdAt, val tags: String = "",
+    val financialCategory: String = "", val costCenter: String = "", val fundingSource: String = "",
+    val beneficiaryId: String = "", val submittedBy: String = "", val reviewedBy: String = "",
+    val approvedBy: String = "", val approvedAt: Long? = null, val paidAt: Long? = null,
+    val rejectionReason: String = ""
 )
 
 @Entity(tableName = "organization_profile")

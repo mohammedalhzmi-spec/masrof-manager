@@ -64,7 +64,7 @@ class OfficialDocumentPrintAdapter(private val documents: List<Document>, privat
 
 object OfficialDocumentRenderer {
     private const val navy = 0xff123b5d.toInt()
-    private val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = navy; textSize = 25f; typeface = Typeface.DEFAULT_BOLD; textAlign = Paint.Align.CENTER }
+    private val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = navy; textSize = 22f; typeface = Typeface.DEFAULT_BOLD; textAlign = Paint.Align.CENTER }
     private val bodyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.BLACK; textSize = 14f; typeface = Typeface.DEFAULT }
     private val boldPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.BLACK; textSize = 15f; typeface = Typeface.DEFAULT_BOLD }
     private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = navy; style = Paint.Style.STROKE; strokeWidth = 2f }
@@ -127,6 +127,17 @@ object OfficialDocumentRenderer {
         drawLeft(c, "NO: ${document.documentNumber.ifBlank { "...." }}", leftX, 151f, headerBold)
         drawCentered(c, title(type), center, 157f, titlePaint)
         c.drawRect(center - 112f, 134f, center + 112f, 170f, linePaint)
+        drawRight(c, "الحالة: ${statusTitle(document.status)}", w - 42f, 193f, headerBody)
+        if (document.financialCategory.isNotBlank()) drawLeft(c, "البند: ${document.financialCategory}", leftX, 193f, headerBody)
+    }
+
+    private fun statusTitle(status: com.mohammedalhzmi.masrofmanager.data.DocumentStatus) = when (status) {
+        com.mohammedalhzmi.masrofmanager.data.DocumentStatus.DRAFT -> "مسودة"
+        com.mohammedalhzmi.masrofmanager.data.DocumentStatus.SUBMITTED -> "قيد المراجعة"
+        com.mohammedalhzmi.masrofmanager.data.DocumentStatus.APPROVED -> "معتمد"
+        com.mohammedalhzmi.masrofmanager.data.DocumentStatus.PAID -> "تم الصرف"
+        com.mohammedalhzmi.masrofmanager.data.DocumentStatus.RECEIVED -> "تم الاستلام"
+        com.mohammedalhzmi.masrofmanager.data.DocumentStatus.CANCELLED -> "ملغى"
     }
 
     private fun drawFittedRight(c: Canvas, text: String, x: Float, y: Float, paint: Paint, maxWidth: Float, minSize: Float) {

@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
 
-@Database(entities = [Document::class, OrganizationProfile::class, ContactEntity::class, UserEntity::class, AuditLogEntity::class, DocumentDesignEntity::class, DesignElementEntity::class], version = 9, exportSchema = false)
+@Database(entities = [Document::class, OrganizationProfile::class, ContactEntity::class, UserEntity::class, AuditLogEntity::class, DocumentDesignEntity::class, DesignElementEntity::class], version = 10, exportSchema = false)
 @TypeConverters(Converters::class)
 abstract class MasrofDatabase : RoomDatabase() {
     abstract fun documentDao(): DocumentDao
@@ -62,6 +62,20 @@ abstract class MasrofDatabase : RoomDatabase() {
         val MIGRATION_8_9 = object : Migration(8, 9) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE documents ADD COLUMN tags TEXT NOT NULL DEFAULT ''")
+            }
+        }
+        val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE documents ADD COLUMN financialCategory TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE documents ADD COLUMN costCenter TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE documents ADD COLUMN fundingSource TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE documents ADD COLUMN beneficiaryId TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE documents ADD COLUMN submittedBy TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE documents ADD COLUMN reviewedBy TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE documents ADD COLUMN approvedBy TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE documents ADD COLUMN approvedAt INTEGER")
+                db.execSQL("ALTER TABLE documents ADD COLUMN paidAt INTEGER")
+                db.execSQL("ALTER TABLE documents ADD COLUMN rejectionReason TEXT NOT NULL DEFAULT ''")
             }
         }
     }
