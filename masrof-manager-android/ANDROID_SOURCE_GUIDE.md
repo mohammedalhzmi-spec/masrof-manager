@@ -26,6 +26,8 @@ Synchronization first reads a server snapshot, then merges into Room by `cloudId
 
 The integration is **not production-ready until the correct Firebase project configuration and reviewed Firestore rules are installed**. `google-services.json` must match the existing Firebase project and application ID and must remain untracked. The selected sharing behavior is that active, approved accounts can read the shared document collection; writes should remain restricted by owner/finance/admin rules. Do not enable production sync based only on the decompiled client or the local draft rules. No production sync or rules deployment has been performed from this workspace.
 
+For local verification, the Firebase client metadata was reconstructed from the original APK resources into an ignored `app/google-services.json`; the Google Services Gradle task and Kotlin compilation succeeded. This file is not in Git. Before production release, compare it with the current project export in Firebase Console, especially if the Firebase project or Android app registration has changed.
+
 ## Release signing
 
 Release signing must use the original private keystore outside the Git repository, with passwords passed only as environment variables. Before generating an update APK, verify that the keystore certificate matches the certificate of the user's currently installed release. Never commit the keystore, `google-services.json`, passwords, or local SDK configuration.
