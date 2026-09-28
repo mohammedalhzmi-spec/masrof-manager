@@ -18,7 +18,7 @@ import com.mohammedalhzmi.masrofmanager.util.RolePreferences
 import com.mohammedalhzmi.masrofmanager.util.DocumentNumbering
 
 @Composable
-fun SettingsScreen(onBack: () -> Unit, onManageUsers: () -> Unit, onUpdates: () -> Unit) {
+fun SettingsScreen(onBack: () -> Unit, onManageUsers: () -> Unit, onUpdates: () -> Unit, onCloudSync: () -> Unit) {
     val context = LocalContext.current
     var ministry by remember { mutableStateOf(AppPreferences.ministry(context)) }
     var administration by remember { mutableStateOf(AppPreferences.administration(context)) }
@@ -48,6 +48,7 @@ fun SettingsScreen(onBack: () -> Unit, onManageUsers: () -> Unit, onUpdates: () 
         Text("يتم حفظ البيانات والشعارات محليًا وتطبيقها على النوع المحدد فقط.", style = MaterialTheme.typography.bodySmall)
         Text("المستخدم والصلاحيات", style = MaterialTheme.typography.titleLarge)
         Button(onClick = onManageUsers, modifier = Modifier.fillMaxWidth()) { Text("إدارة المستخدمين وسجل العمليات") }
+        OutlinedButton(onClick = onCloudSync, modifier = Modifier.fillMaxWidth()) { Text("حساب Firebase والمزامنة السحابية") }
         OutlinedButton(onClick = onUpdates, modifier = Modifier.fillMaxWidth()) { Text("مركز التحديثات") }
         SettingField("اسم المستخدم الحالي", userName) { userName = it }
         Text("الدور الحالي: ${RolePreferences.currentRole(context).title}", style = MaterialTheme.typography.bodyMedium)

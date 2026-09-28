@@ -65,7 +65,8 @@ fun AppNavigation(viewModel: MasrofViewModel) {
                 else -> GenericDocumentFormScreen(viewModel, type, { navController.popBackStack() }, existing = document)
             }
         }
-        composable("settings") { SettingsScreen({ navController.popBackStack() }, { navController.navigate("users") }, { navController.navigate("updates") }) }
+        composable("settings") { SettingsScreen({ navController.popBackStack() }, { navController.navigate("users") }, { navController.navigate("updates") }, { navController.navigate("cloud_sync") }) }
+        composable("cloud_sync") { CloudSyncScreen(viewModel) { navController.popBackStack() } }
         composable("users") { if (RolePreferences.can(context, AppPermission.SETTINGS)) UserManagementScreen(viewModel) { navController.popBackStack() } else navController.popBackStack() }
         composable("updates") { UpdateCenterScreen { navController.popBackStack() } }
         composable("print_preview/{documentIds}") { entry ->

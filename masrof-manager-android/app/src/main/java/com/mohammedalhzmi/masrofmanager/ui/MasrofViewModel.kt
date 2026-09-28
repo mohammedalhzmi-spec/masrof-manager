@@ -2,6 +2,8 @@ package com.mohammedalhzmi.masrofmanager.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.auth.FirebaseAuthException
+import com.google.firebase.firestore.FirebaseFirestoreException
 import com.mohammedalhzmi.masrofmanager.data.Document
 import com.mohammedalhzmi.masrofmanager.data.MasrofDatabase
 import com.mohammedalhzmi.masrofmanager.data.MasrofRepository
@@ -15,6 +17,7 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import android.content.Context
 import android.net.Uri
+import kotlinx.coroutines.CancellationException
 import com.mohammedalhzmi.masrofmanager.util.AppBackupManager
 import com.mohammedalhzmi.masrofmanager.data.UserEntity
 import com.mohammedalhzmi.masrofmanager.data.AuditLogEntity
@@ -29,10 +32,14 @@ import com.mohammedalhzmi.masrofmanager.util.UserSession
 import com.mohammedalhzmi.masrofmanager.util.RememberedLogin
 import com.mohammedalhzmi.masrofmanager.util.AiLayoutAssistant
 import kotlinx.coroutines.flow.MutableStateFlow
+import com.mohammedalhzmi.masrofmanager.cloud.CloudAccessState
+import com.mohammedalhzmi.masrofmanager.cloud.CloudDeviceRequest
+import com.mohammedalhzmi.masrofmanager.cloud.FirebaseCloudSyncService
 
 class MasrofViewModel(
     private val repository: MasrofRepository,
-    private val database: MasrofDatabase
+    private val database: MasrofDatabase,
+    private val cloudSyncService: FirebaseCloudSyncService
 ) : ViewModel() {
     val allDocuments = repository.allDocuments
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -43,6 +50,10 @@ class MasrofViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
     val allUsers = repository.allUsers.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val auditLogs = repository.auditLogs.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val cloudAccessState = MutableStateFlow(CloudAccessState())
+    val cloudBusy = MutableStateFlow(false)
+    val cloudOperationMessage = MutableStateFlow("")
+    val pendingCloudDevices = MutableStateFlow<List<CloudDeviceRequest>>(emptyList())
     val designElements = MutableStateFlow<List<DesignElementEntity>>(emptyList())
     val activeDesign = MutableStateFlow<DocumentDesignEntity?>(null)
     private var activeDesignId: Long = 0
@@ -132,10 +143,132 @@ class MasrofViewModel(
     fun recordAudit(action: String, details: String) { viewModelScope.launch(Dispatchers.IO) { audit(action, details) } }
     private suspend fun audit(action: String, details: String) { UserSession.current?.let { repository.addAudit(AuditLogEntity(userId = it.id, username = it.username, action = action, details = details)) } }
 
+    fun refreshCloudAccess() {
+        viewModelScope.launch(Dispatchers.IO) {
+            cloudBusy.value = true
+            try {
+                cloudAccessState.value = cloudSyncService.currentAccessState()
+            } catch (error: Throwable) {
+                cloudOperationMessage.value = cloudErrorMessage(error)
+            } finally {
+                cloudBusy.value = false
+            }
+        }
+    }
+
+    fun signInToCloud(identifier: String, password: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            cloudBusy.value = true
+            cloudOperationMessage.value = ""
+            try {
+                cloudAccessState.value = cloudSyncService.signIn(identifier, password)
+            } catch (error: Throwable) {
+                cloudOperationMessage.value = cloudErrorMessage(error)
+            } finally {
+                cloudBusy.value = false
+            }
+        }
+    }
+
+    fun requestCloudDeviceApproval() {
+        viewModelScope.launch(Dispatchers.IO) {
+            cloudBusy.value = true
+            cloudOperationMessage.value = ""
+            try {
+                cloudAccessState.value = cloudSyncService.requestDeviceApproval()
+            } catch (error: Throwable) {
+                cloudOperationMessage.value = cloudErrorMessage(error)
+            } finally {
+                cloudBusy.value = false
+            }
+        }
+    }
+
+    fun signOutFromCloud() {
+        cloudSyncService.signOut()
+        cloudAccessState.value = CloudAccessState()
+        pendingCloudDevices.value = emptyList()
+        cloudOperationMessage.value = "تم تسجيل الخروج من حساب السحابة."
+    }
+
+    fun syncCloudDocuments() {
+        viewModelScope.launch(Dispatchers.IO) {
+            cloudBusy.value = true
+            cloudOperationMessage.value = ""
+            try {
+                val report = cloudSyncService.syncDocuments(repository)
+                cloudOperationMessage.value = "اكتمل الدمج الآمن: تنزيل ${report.downloaded}، رفع ${report.uploaded}، تخطي ${report.skipped}، تعارضات ${report.conflicts}. لم تُحذف مستندات محلية."
+                cloudAccessState.value = cloudSyncService.currentAccessState()
+            } catch (error: Throwable) {
+                cloudOperationMessage.value = cloudErrorMessage(error)
+            } finally {
+                cloudBusy.value = false
+            }
+        }
+    }
+
+    fun loadPendingCloudDevices() {
+        viewModelScope.launch(Dispatchers.IO) {
+            cloudBusy.value = true
+            cloudOperationMessage.value = ""
+            try {
+                pendingCloudDevices.value = cloudSyncService.pendingDeviceRequests()
+            } catch (error: Throwable) {
+                cloudOperationMessage.value = cloudErrorMessage(error)
+            } finally {
+                cloudBusy.value = false
+            }
+        }
+    }
+
+    fun approveCloudDevice(request: CloudDeviceRequest) {
+        viewModelScope.launch(Dispatchers.IO) {
+            cloudBusy.value = true
+            cloudOperationMessage.value = ""
+            try {
+                cloudSyncService.approveDevice(request)
+                pendingCloudDevices.value = cloudSyncService.pendingDeviceRequests()
+                cloudOperationMessage.value = "تم اعتماد الجهاز."
+            } catch (error: Throwable) {
+                cloudOperationMessage.value = cloudErrorMessage(error)
+            } finally {
+                cloudBusy.value = false
+            }
+        }
+    }
+
+    private fun cloudErrorMessage(error: Throwable): String {
+        if (error is CancellationException) throw error
+        val authCode = (error as? FirebaseAuthException)?.errorCode
+        if (authCode != null) return when (authCode) {
+            "ERROR_INVALID_EMAIL" -> "صيغة البريد الإلكتروني غير صحيحة."
+            "ERROR_USER_DISABLED" -> "حساب Firebase معطّل؛ تواصل مع مسؤول النظام."
+            "ERROR_WRONG_PASSWORD", "ERROR_USER_NOT_FOUND", "ERROR_INVALID_CREDENTIAL" -> "تعذر تسجيل الدخول؛ تحقق من البريد أو اسم المستخدم وكلمة المرور."
+            "ERROR_TOO_MANY_REQUESTS" -> "محاولات كثيرة. انتظر قليلًا ثم حاول مرة أخرى."
+            "ERROR_NETWORK_REQUEST_FAILED" -> "تعذر الاتصال بـ Firebase. تحقق من الإنترنت وحاول مرة أخرى."
+            else -> "تعذر تسجيل الدخول إلى حساب Firebase."
+        }
+        val firestoreCode = (error as? FirebaseFirestoreException)?.code
+        if (firestoreCode != null) return when (firestoreCode) {
+            FirebaseFirestoreException.Code.PERMISSION_DENIED -> "رفضت قواعد Firebase العملية؛ راجع صلاحيات الحساب وقواعد Firestore المنشورة."
+            FirebaseFirestoreException.Code.UNAVAILABLE -> "خدمة Firebase غير متاحة الآن؛ تحقق من الإنترنت وحاول لاحقًا."
+            else -> "تعذر إكمال طلب Firebase."
+        }
+        if (error.message?.contains("google-services.json", ignoreCase = true) == true) {
+            return "إعداد Firebase غير موجود؛ أضف ملف google-services.json الصحيح ثم أعد البناء."
+        }
+        if (error is IllegalArgumentException && !error.message.isNullOrBlank()) return error.message.orEmpty()
+        if (error.message?.contains("network", ignoreCase = true) == true) {
+            return "تعذر الاتصال بـ Firebase. تحقق من الإنترنت وحاول مرة أخرى."
+        }
+        return "تعذر إكمال عملية السحابة. تحقق من إعداد Firebase وصلاحيات الحساب."
+    }
+
     fun addDocument(document: Document) {
         viewModelScope.launch {
             val submittedBy = document.submittedBy.ifBlank { UserSession.current?.fullName.orEmpty() }
-            repository.insert(document.copy(submittedBy = submittedBy))
+            val now = System.currentTimeMillis()
+            repository.insert(document.copy(submittedBy = submittedBy, updatedAt = now))
             audit("CREATE_DOCUMENT", "${document.documentNumber} — الحالة: ${document.status.name}")
         }
     }
@@ -168,7 +301,7 @@ class MasrofViewModel(
     }
 
     fun updateDocument(document: Document) {
-        viewModelScope.launch { repository.update(document); audit("UPDATE_DOCUMENT", document.documentNumber) }
+        viewModelScope.launch { repository.update(document.copy(updatedAt = System.currentTimeMillis())); audit("UPDATE_DOCUMENT", document.documentNumber) }
     }
 
     fun deleteDocument(document: Document) {

@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import com.example.ui.theme.MyApplicationTheme
 import com.mohammedalhzmi.masrofmanager.data.MasrofDatabase
 import com.mohammedalhzmi.masrofmanager.data.MasrofRepository
+import com.mohammedalhzmi.masrofmanager.cloud.FirebaseCloudSyncService
 import com.mohammedalhzmi.masrofmanager.ui.AppLockScreen
 import com.mohammedalhzmi.masrofmanager.ui.AppNavigation
 import com.mohammedalhzmi.masrofmanager.ui.MasrofViewModel
@@ -39,10 +40,11 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         locked = AppLockPreferences.enabled(this) && AppLockPreferences.shouldRelock(this)
-        val db = Room.databaseBuilder(applicationContext, MasrofDatabase::class.java, "masrof-db").addMigrations(MasrofDatabase.MIGRATION_3_4, MasrofDatabase.MIGRATION_4_5, MasrofDatabase.MIGRATION_5_6, MasrofDatabase.MIGRATION_6_7, MasrofDatabase.MIGRATION_7_8, MasrofDatabase.MIGRATION_8_9, MasrofDatabase.MIGRATION_9_10, MasrofDatabase.MIGRATION_10_11, MasrofDatabase.MIGRATION_11_12).build()
+        val db = Room.databaseBuilder(applicationContext, MasrofDatabase::class.java, "masrof-db").addMigrations(MasrofDatabase.MIGRATION_3_4, MasrofDatabase.MIGRATION_4_5, MasrofDatabase.MIGRATION_5_6, MasrofDatabase.MIGRATION_6_7, MasrofDatabase.MIGRATION_7_8, MasrofDatabase.MIGRATION_8_9, MasrofDatabase.MIGRATION_9_10, MasrofDatabase.MIGRATION_10_11, MasrofDatabase.MIGRATION_11_12, MasrofDatabase.MIGRATION_12_13).build()
         val repository = MasrofRepository(db.documentDao(), db.settingsDao(), db.contactDao(), db.userDao(), db.auditDao(), db.designDao())
+        val cloudSyncService = FirebaseCloudSyncService(applicationContext)
         val viewModel = ViewModelProvider(this, object : ViewModelProvider.Factory {
-            override fun <T : ViewModel> create(modelClass: Class<T>): T = MasrofViewModel(repository, db) as T
+            override fun <T : ViewModel> create(modelClass: Class<T>): T = MasrofViewModel(repository, db, cloudSyncService) as T
         })[MasrofViewModel::class.java]
         setContent {
             MyApplicationTheme {

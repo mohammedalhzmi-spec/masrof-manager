@@ -25,7 +25,8 @@ data class Document(
     val witnessTwo: String? = null,
     val regionName: String? = null,
     val regionOfficerName: String? = null,
-    val cloudId: String = ""
+    val cloudId: String = "",
+    val createdByUid: String = ""
 )
 
 @Entity(tableName = "organization_profile")

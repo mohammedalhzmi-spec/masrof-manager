@@ -31,4 +31,13 @@ interface DocumentDao {
 
     @Query("SELECT MAX(CAST(documentNumber AS INTEGER)) FROM documents")
     fun getLastDocumentNumber(): Flow<Int?>
+
+    @Query("SELECT * FROM documents ORDER BY createdAt DESC")
+    suspend fun getAllForSync(): List<Document>
+
+    @Query("SELECT * FROM documents WHERE cloudId = :cloudId LIMIT 1")
+    suspend fun findByCloudId(cloudId: String): Document?
+
+    @Query("SELECT * FROM documents WHERE id = :id LIMIT 1")
+    suspend fun findById(id: Long): Document?
 }
