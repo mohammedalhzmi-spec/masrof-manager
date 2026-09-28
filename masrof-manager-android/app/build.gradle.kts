@@ -24,12 +24,12 @@ android {
   }
 
   signingConfigs {
-    val releaseKeystore = file(System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks")
+    val releaseKeystore = file(System.getenv("KEYSTORE_PATH") ?: "${rootDir}/keystore/masrof-release.jks")
     if (releaseKeystore.exists()) {
       create("release") {
         storeFile = releaseKeystore
         storePassword = System.getenv("STORE_PASSWORD")
-        keyAlias = "upload"
+        keyAlias = System.getenv("KEY_ALIAS") ?: "masrof-release"
         keyPassword = System.getenv("KEY_PASSWORD")
       }
     }
