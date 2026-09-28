@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
 
-@Database(entities = [Document::class, OrganizationProfile::class, ContactEntity::class, UserEntity::class, AuditLogEntity::class, DocumentDesignEntity::class, DesignElementEntity::class], version = 10, exportSchema = false)
+@Database(entities = [Document::class, OrganizationProfile::class, ContactEntity::class, UserEntity::class, AuditLogEntity::class, DocumentDesignEntity::class, DesignElementEntity::class], version = 11, exportSchema = false)
 @TypeConverters(Converters::class)
 abstract class MasrofDatabase : RoomDatabase() {
     abstract fun documentDao(): DocumentDao
@@ -78,25 +78,39 @@ abstract class MasrofDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE documents ADD COLUMN rejectionReason TEXT NOT NULL DEFAULT ''")
             }
         }
+        val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE documents ADD COLUMN incidentTime TEXT")
+                db.execSQL("ALTER TABLE documents ADD COLUMN incidentDay TEXT")
+                db.execSQL("ALTER TABLE documents ADD COLUMN incidentLocation TEXT")
+                db.execSQL("ALTER TABLE documents ADD COLUMN violationType TEXT")
+                db.execSQL("ALTER TABLE documents ADD COLUMN responsibleAction TEXT")
+                db.execSQL("ALTER TABLE documents ADD COLUMN lawArticle TEXT")
+                db.execSQL("ALTER TABLE documents ADD COLUMN witnessOne TEXT")
+                db.execSQL("ALTER TABLE documents ADD COLUMN witnessTwo TEXT")
+                db.execSQL("ALTER TABLE documents ADD COLUMN regionName TEXT")
+                db.execSQL("ALTER TABLE documents ADD COLUMN regionOfficerName TEXT")
+            }
+        }
     }
 }
 
 class Converters {
     @TypeConverter
     fun fromDocumentType(value: DocumentType) = value.name
-    
+
     @TypeConverter
     fun toDocumentType(value: String) = enumValueOf<DocumentType>(value)
 
     @TypeConverter
     fun fromDocumentStatus(value: DocumentStatus) = value.name
-    
+
     @TypeConverter
     fun toDocumentStatus(value: String) = enumValueOf<DocumentStatus>(value)
 
     @TypeConverter
     fun fromContactType(value: ContactType) = value.name
-    
+
     @TypeConverter
     fun toContactType(value: String) = enumValueOf<ContactType>(value)
 }

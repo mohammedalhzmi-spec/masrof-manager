@@ -12,7 +12,7 @@ fun DocumentTypeSelectionScreen(allowedTypes: Set<DocumentType> = DocumentType.v
     Column(modifier = Modifier.padding(16.dp)) {
         Text(text = "اختر نوع المستند الجديد", style = MaterialTheme.typography.headlineMedium)
         Spacer(modifier = Modifier.height(24.dp))
-        
+
         if (DocumentType.REQUEST in allowedTypes) Button(onClick = { onTypeSelected(DocumentType.REQUEST) }, modifier = Modifier.fillMaxWidth()) {
             Text("ورقة تقديم طلب")
         }
@@ -23,6 +23,14 @@ fun DocumentTypeSelectionScreen(allowedTypes: Set<DocumentType> = DocumentType.v
         Spacer(modifier = Modifier.height(12.dp))
         if (DocumentType.RECEIPT in allowedTypes) Button(onClick = { onTypeSelected(DocumentType.RECEIPT) }, modifier = Modifier.fillMaxWidth()) {
             Text("ورقة استلام")
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        if (DocumentType.VIOLATION_REPORT in allowedTypes) Button(onClick = { onTypeSelected(DocumentType.VIOLATION_REPORT) }, modifier = Modifier.fillMaxWidth()) {
+            Text("محضر ضبط وقوع مخالفة")
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        if (DocumentType.EXPENSE_REPORT in allowedTypes) Button(onClick = { onTypeSelected(DocumentType.EXPENSE_REPORT) }, modifier = Modifier.fillMaxWidth()) {
+            Text("كشف المصروفات الشهرية (3 صفحات)")
         }
     }
 }

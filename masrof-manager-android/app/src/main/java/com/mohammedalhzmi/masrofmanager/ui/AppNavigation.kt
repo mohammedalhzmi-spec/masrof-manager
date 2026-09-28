@@ -26,6 +26,8 @@ fun AppNavigation(viewModel: MasrofViewModel) {
         composable("request_form") { RequestFormScreen(viewModel, onNavigateBack = { navController.popBackStack() }) }
         composable("order_form") { PaymentOrderFormScreen(viewModel, onNavigateBack = { navController.popBackStack() }) }
         composable("receipt_form") { ReceiptFormScreen(viewModel, onNavigateBack = { navController.popBackStack() }) }
+        composable("violation_report_form") { ViolationReportFormScreen(viewModel, onNavigateBack = { navController.popBackStack() }) }
+        composable("expense_report_form") { ExpenseReportFormScreen(viewModel, onNavigateBack = { navController.popBackStack() }) }
         composable("edit/{type}/{id}") { entry ->
             val type = entry.arguments?.getString("type").orEmpty()
             val id = entry.arguments?.getString("id")?.toLongOrNull()
@@ -34,6 +36,8 @@ fun AppNavigation(viewModel: MasrofViewModel) {
             when (type) {
                 DocumentType.REQUEST.name.lowercase() -> RequestFormScreen(viewModel, { navController.popBackStack() }, existing = document)
                 DocumentType.ORDER.name.lowercase() -> PaymentOrderFormScreen(viewModel, { navController.popBackStack() }, existing = document)
+                DocumentType.VIOLATION_REPORT.name.lowercase() -> ViolationReportFormScreen(viewModel, { navController.popBackStack() }, existing = document)
+                DocumentType.EXPENSE_REPORT.name.lowercase() -> ExpenseReportFormScreen(viewModel, { navController.popBackStack() }, existing = document)
                 else -> ReceiptFormScreen(viewModel, { navController.popBackStack() }, existing = document)
             }
         }

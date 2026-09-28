@@ -28,11 +28,12 @@ fun PrintPreviewScreen(viewModel: MasrofViewModel, documentIds: String, onOpenCa
     val documents by viewModel.allDocuments.collectAsState()
     val ids = remember(documentIds) { documentIds.split(",").mapNotNull { it.toLongOrNull() }.toSet() }
     val selectedDocs = documents.filter { it.id in ids }
+    val printedPageCount = selectedDocs.sumOf { if (it.type == DocumentType.EXPENSE_REPORT) 3 else 1 }
     val context = LocalContext.current
     var showEditor by remember { mutableStateOf(false) }
     Column(modifier = Modifier.padding(16.dp)) {
         Text("معاينة النماذج الرسمية", style = MaterialTheme.typography.headlineMedium)
-        Text("عدد الصفحات: ${selectedDocs.size} — كل مستند محفوظ محليًا ويمكن تصديره منفردًا أو كمجموعة", style = MaterialTheme.typography.bodySmall)
+        Text("عدد الصفحات: $printedPageCount — كل مستند محفوظ محليًا ويمكن تصديره منفردًا أو كمجموعة", style = MaterialTheme.typography.bodySmall)
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             OutlinedButton(onClick = { showEditor = true }, modifier = Modifier.weight(1f)) { Text("تحرير الصفحة") }
             OutlinedButton(enabled = selectedDocs.isNotEmpty(), onClick = { onOpenCanvas(selectedDocs.first().type) }, modifier = Modifier.weight(1f)) { Text("محرر حر") }
@@ -45,7 +46,7 @@ fun PrintPreviewScreen(viewModel: MasrofViewModel, documentIds: String, onOpenCa
         }
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(enabled = selectedDocs.isNotEmpty(), onClick = { sharePdf(context, selectedDocs) }, modifier = Modifier.weight(1f)) { Text("PDF ومشاركة") }
-            OutlinedButton(enabled = selectedDocs.size == 1, onClick = { shareImage(context, selectedDocs.first()) }, modifier = Modifier.weight(1f)) { Text("صورة PNG") }
+            OutlinedButton(enabled = selectedDocs.size == 1, onClick = { shareImage(context, selectedDocs.first()) }, modifier = Modifier.weight(1f)) { Text(if (selectedDocs.singleOrNull()?.type == DocumentType.EXPENSE_REPORT) "صورة الصفحة 3" else "صورة PNG") }
             OutlinedButton(enabled = selectedDocs.size == 1, onClick = { shareWord(context, selectedDocs.first()) }, modifier = Modifier.weight(1f)) { Text("Word") }
         }
         Button(
@@ -56,39 +57,45 @@ fun PrintPreviewScreen(viewModel: MasrofViewModel, documentIds: String, onOpenCa
                     mapOf(
                         DocumentType.ORDER to AppPreferences.loadLogo(context, DocumentType.ORDER),
                         DocumentType.REQUEST to AppPreferences.loadLogo(context, DocumentType.REQUEST),
-                        DocumentType.RECEIPT to AppPreferences.loadLogo(context, DocumentType.RECEIPT)
+                        DocumentType.RECEIPT to AppPreferences.loadLogo(context, DocumentType.RECEIPT),
+                        DocumentType.EXPENSE_REPORT to AppPreferences.loadLogo(context, DocumentType.EXPENSE_REPORT)
                     ), mapOf(
                         DocumentType.ORDER to AppPreferences.pageSize(context, DocumentType.ORDER),
                         DocumentType.REQUEST to AppPreferences.pageSize(context, DocumentType.REQUEST),
-                        DocumentType.RECEIPT to AppPreferences.pageSize(context, DocumentType.RECEIPT)
+                        DocumentType.RECEIPT to AppPreferences.pageSize(context, DocumentType.RECEIPT),
+                        DocumentType.EXPENSE_REPORT to "A4"
                     ), mapOf(
                         DocumentType.ORDER to runCatching { Color.parseColor(AppPreferences.backgroundColor(context, DocumentType.ORDER)) }.getOrDefault(Color.WHITE),
                         DocumentType.REQUEST to runCatching { Color.parseColor(AppPreferences.backgroundColor(context, DocumentType.REQUEST)) }.getOrDefault(Color.WHITE),
-                        DocumentType.RECEIPT to runCatching { Color.parseColor(AppPreferences.backgroundColor(context, DocumentType.RECEIPT)) }.getOrDefault(Color.WHITE)
+                        DocumentType.RECEIPT to runCatching { Color.parseColor(AppPreferences.backgroundColor(context, DocumentType.RECEIPT)) }.getOrDefault(Color.WHITE),
+                        DocumentType.EXPENSE_REPORT to Color.WHITE
                     ), mapOf(
                         DocumentType.ORDER to (AppPreferences.backgroundImageUri(context, DocumentType.ORDER)?.let { runCatching { context.contentResolver.openInputStream(Uri.parse(it)).use(BitmapFactory::decodeStream) }.getOrNull() } ?: BitmapFactory.decodeResource(context.resources, R.drawable.official_emblem)),
                         DocumentType.REQUEST to (AppPreferences.backgroundImageUri(context, DocumentType.REQUEST)?.let { runCatching { context.contentResolver.openInputStream(Uri.parse(it)).use(BitmapFactory::decodeStream) }.getOrNull() } ?: BitmapFactory.decodeResource(context.resources, R.drawable.official_emblem)),
-                        DocumentType.RECEIPT to (AppPreferences.backgroundImageUri(context, DocumentType.RECEIPT)?.let { runCatching { context.contentResolver.openInputStream(Uri.parse(it)).use(BitmapFactory::decodeStream) }.getOrNull() } ?: BitmapFactory.decodeResource(context.resources, R.drawable.official_emblem))
+                        DocumentType.RECEIPT to (AppPreferences.backgroundImageUri(context, DocumentType.RECEIPT)?.let { runCatching { context.contentResolver.openInputStream(Uri.parse(it)).use(BitmapFactory::decodeStream) }.getOrNull() } ?: BitmapFactory.decodeResource(context.resources, R.drawable.official_emblem)),
+                        DocumentType.EXPENSE_REPORT to (AppPreferences.backgroundImageUri(context, DocumentType.EXPENSE_REPORT)?.let { runCatching { context.contentResolver.openInputStream(Uri.parse(it)).use(BitmapFactory::decodeStream) }.getOrNull() } ?: BitmapFactory.decodeResource(context.resources, R.drawable.expense_report_logo))
                     ), mapOf(
                         DocumentType.ORDER to AppPreferences.backgroundOpacity(context, DocumentType.ORDER),
                         DocumentType.REQUEST to AppPreferences.backgroundOpacity(context, DocumentType.REQUEST),
-                        DocumentType.RECEIPT to AppPreferences.backgroundOpacity(context, DocumentType.RECEIPT)
+                        DocumentType.RECEIPT to AppPreferences.backgroundOpacity(context, DocumentType.RECEIPT),
+                        DocumentType.EXPENSE_REPORT to AppPreferences.backgroundOpacity(context, DocumentType.EXPENSE_REPORT)
                     ), mapOf(
                         DocumentType.ORDER to AppPreferences.backgroundScale(context, DocumentType.ORDER),
                         DocumentType.REQUEST to AppPreferences.backgroundScale(context, DocumentType.REQUEST),
-                        DocumentType.RECEIPT to AppPreferences.backgroundScale(context, DocumentType.RECEIPT)
+                        DocumentType.RECEIPT to AppPreferences.backgroundScale(context, DocumentType.RECEIPT),
+                        DocumentType.EXPENSE_REPORT to AppPreferences.backgroundScale(context, DocumentType.EXPENSE_REPORT)
                     ), mapOf(
-                        DocumentType.ORDER to (AppPreferences.backgroundOffsetX(context, DocumentType.ORDER) to AppPreferences.backgroundOffsetY(context, DocumentType.ORDER)), DocumentType.REQUEST to (AppPreferences.backgroundOffsetX(context, DocumentType.REQUEST) to AppPreferences.backgroundOffsetY(context, DocumentType.REQUEST)), DocumentType.RECEIPT to (AppPreferences.backgroundOffsetX(context, DocumentType.RECEIPT) to AppPreferences.backgroundOffsetY(context, DocumentType.RECEIPT))
+                        DocumentType.ORDER to (AppPreferences.backgroundOffsetX(context, DocumentType.ORDER) to AppPreferences.backgroundOffsetY(context, DocumentType.ORDER)), DocumentType.REQUEST to (AppPreferences.backgroundOffsetX(context, DocumentType.REQUEST) to AppPreferences.backgroundOffsetY(context, DocumentType.REQUEST)), DocumentType.RECEIPT to (AppPreferences.backgroundOffsetX(context, DocumentType.RECEIPT) to AppPreferences.backgroundOffsetY(context, DocumentType.RECEIPT)), DocumentType.EXPENSE_REPORT to (AppPreferences.backgroundOffsetX(context, DocumentType.EXPENSE_REPORT) to AppPreferences.backgroundOffsetY(context, DocumentType.EXPENSE_REPORT))
                     ), mapOf(
-                        DocumentType.ORDER to runCatching { Color.parseColor(AppPreferences.textColor(context, DocumentType.ORDER)) }.getOrDefault(Color.BLACK), DocumentType.REQUEST to runCatching { Color.parseColor(AppPreferences.textColor(context, DocumentType.REQUEST)) }.getOrDefault(Color.BLACK), DocumentType.RECEIPT to runCatching { Color.parseColor(AppPreferences.textColor(context, DocumentType.RECEIPT)) }.getOrDefault(Color.BLACK)
+                        DocumentType.ORDER to runCatching { Color.parseColor(AppPreferences.textColor(context, DocumentType.ORDER)) }.getOrDefault(Color.BLACK), DocumentType.REQUEST to runCatching { Color.parseColor(AppPreferences.textColor(context, DocumentType.REQUEST)) }.getOrDefault(Color.BLACK), DocumentType.RECEIPT to runCatching { Color.parseColor(AppPreferences.textColor(context, DocumentType.RECEIPT)) }.getOrDefault(Color.BLACK), DocumentType.EXPENSE_REPORT to Color.BLACK
                     ), mapOf(
-                        DocumentType.ORDER to AppPreferences.fontFamily(context, DocumentType.ORDER), DocumentType.REQUEST to AppPreferences.fontFamily(context, DocumentType.REQUEST), DocumentType.RECEIPT to AppPreferences.fontFamily(context, DocumentType.RECEIPT)
+                        DocumentType.ORDER to AppPreferences.fontFamily(context, DocumentType.ORDER), DocumentType.REQUEST to AppPreferences.fontFamily(context, DocumentType.REQUEST), DocumentType.RECEIPT to AppPreferences.fontFamily(context, DocumentType.RECEIPT), DocumentType.EXPENSE_REPORT to "SANS"
                     ), mapOf(
-                        DocumentType.ORDER to AppPreferences.textBold(context, DocumentType.ORDER), DocumentType.REQUEST to AppPreferences.textBold(context, DocumentType.REQUEST), DocumentType.RECEIPT to AppPreferences.textBold(context, DocumentType.RECEIPT)
+                        DocumentType.ORDER to AppPreferences.textBold(context, DocumentType.ORDER), DocumentType.REQUEST to AppPreferences.textBold(context, DocumentType.REQUEST), DocumentType.RECEIPT to AppPreferences.textBold(context, DocumentType.RECEIPT), DocumentType.EXPENSE_REPORT to false
                     ), mapOf(
-                        DocumentType.ORDER to AppPreferences.textItalic(context, DocumentType.ORDER), DocumentType.REQUEST to AppPreferences.textItalic(context, DocumentType.REQUEST), DocumentType.RECEIPT to AppPreferences.textItalic(context, DocumentType.RECEIPT)
+                        DocumentType.ORDER to AppPreferences.textItalic(context, DocumentType.ORDER), DocumentType.REQUEST to AppPreferences.textItalic(context, DocumentType.REQUEST), DocumentType.RECEIPT to AppPreferences.textItalic(context, DocumentType.RECEIPT), DocumentType.EXPENSE_REPORT to false
                     ), mapOf(
-                        DocumentType.ORDER to AppPreferences.textUnderline(context, DocumentType.ORDER), DocumentType.REQUEST to AppPreferences.textUnderline(context, DocumentType.REQUEST), DocumentType.RECEIPT to AppPreferences.textUnderline(context, DocumentType.RECEIPT)
+                        DocumentType.ORDER to AppPreferences.textUnderline(context, DocumentType.ORDER), DocumentType.REQUEST to AppPreferences.textUnderline(context, DocumentType.REQUEST), DocumentType.RECEIPT to AppPreferences.textUnderline(context, DocumentType.RECEIPT), DocumentType.EXPENSE_REPORT to false
                     )
                 )
                 printManager.print("مستندات مالية رسمية", OfficialDocumentPrintAdapter(selectedDocs, header, context), PrintAttributes.Builder().setMediaSize(PrintAttributes.MediaSize.ISO_A4).setMinMargins(PrintAttributes.Margins.NO_MARGINS).build())
@@ -154,13 +161,13 @@ private fun DocumentPageEditor(documents: List<Document>, context: Context, onCl
     }, confirmButton = { Button(onClick = { if (runCatching { Color.parseColor(color) }.isSuccess) AppPreferences.setBackgroundColor(context, selectedType, color); if (runCatching { Color.parseColor(textColor) }.isSuccess) AppPreferences.setTextColor(context, selectedType, textColor); AppPreferences.setBackgroundOpacity(context, selectedType, opacity); AppPreferences.setBackgroundScale(context, selectedType, scale); AppPreferences.setBackgroundOffset(context, selectedType, offsetX, offsetY); AppPreferences.setFontFamily(context, selectedType, fontFamily); AppPreferences.setTextBold(context, selectedType, bold); AppPreferences.setTextItalic(context, selectedType, italic); AppPreferences.setTextUnderline(context, selectedType, underline); onClose() }) { Text("حفظ التعديلات") } }, dismissButton = { TextButton(onClick = onClose) { Text("إلغاء") } })
 }
 
-private fun typeLabel(type: DocumentType) = when (type) { DocumentType.ORDER -> "أمر صرف"; DocumentType.REQUEST -> "تقديم"; DocumentType.RECEIPT -> "استلام" }
+private fun typeLabel(type: DocumentType) = when (type) { DocumentType.ORDER -> "أمر صرف"; DocumentType.REQUEST -> "تقديم"; DocumentType.RECEIPT -> "استلام"; DocumentType.VIOLATION_REPORT -> "محضر مخالفة"; DocumentType.EXPENSE_REPORT -> "كشف المصروفات" }
 
 @Composable
 private fun OfficialDocumentCard(doc: Document) {
     Card(modifier = Modifier.padding(vertical = 8.dp).fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(when (doc.type) { DocumentType.REQUEST -> "ورقة تقديم طلب"; DocumentType.ORDER -> "أمر صرف"; DocumentType.RECEIPT -> "ورقة استلام" }, style = MaterialTheme.typography.titleMedium)
+            Text(when (doc.type) { DocumentType.REQUEST -> "ورقة تقديم طلب"; DocumentType.ORDER -> "أمر صرف"; DocumentType.RECEIPT -> "ورقة استلام"; DocumentType.VIOLATION_REPORT -> "محضر ضبط وقوع مخالفة"; DocumentType.EXPENSE_REPORT -> "كشف المصروفات الشهرية" }, style = MaterialTheme.typography.titleMedium)
             Text("رقم المستند: ${doc.documentNumber}")
             Text("الاسم: ${doc.beneficiaryName.orEmpty()}")
             if (doc.amount != null) Text("المبلغ: ${doc.amount} ريال — ${doc.amountWords.orEmpty()}")

@@ -75,4 +75,6 @@ private fun typeTitle(type: DocumentType) = when (type) {
     DocumentType.ORDER -> "أمر صرف"
     DocumentType.REQUEST -> "ورقة تقديم طلب"
     DocumentType.RECEIPT -> "ورقة استلام"
+    DocumentType.VIOLATION_REPORT -> "محضر ضبط وقوع مخالفة"
+    DocumentType.EXPENSE_REPORT -> "كشف المصروفات الشهرية"
 }

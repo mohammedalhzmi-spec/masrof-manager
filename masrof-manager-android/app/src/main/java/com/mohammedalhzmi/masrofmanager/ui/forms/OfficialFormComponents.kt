@@ -42,12 +42,15 @@ fun OfficialFormShell(title: String, content: @Composable () -> Unit) {
                 Column(modifier = Modifier.fillMaxWidth().background(Color.White).border(1.dp, Color(0xffe5e7eb)).padding(10.dp)) {
                     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("NO: ....")
+                            Text("الرقم : ............")
                             Text("التاريخ :   /   /   144 هـ")
                             Text("الموافق :   /   /   2026 م")
                             Text("المرفقات : (         )")
                         }
-                        Image(painterResource(R.drawable.official_emblem), "الشعار الرسمي", modifier = Modifier.size(52.dp), contentScale = ContentScale.Fit)
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("بِسْمِ اللهِ الرَّحْمَنِ الرَّحِيمِ", style = MaterialTheme.typography.labelSmall, maxLines = 1, softWrap = false)
+                            Image(painterResource(R.drawable.official_emblem), "الشعار الرسمي", modifier = Modifier.size(width = 82.dp, height = 46.dp), contentScale = ContentScale.Fit)
+                        }
                         Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
                             Text("الجمهورية اليمنية", style = MaterialTheme.typography.labelSmall)
                             Text("وزارة الإدارة والتنمية المحلية والريفية", style = MaterialTheme.typography.labelSmall, maxLines = 1, softWrap = false)

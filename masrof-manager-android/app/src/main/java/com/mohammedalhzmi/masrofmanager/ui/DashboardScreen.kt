@@ -131,4 +131,6 @@ private fun documentTitle(type: com.mohammedalhzmi.masrofmanager.data.DocumentTy
     com.mohammedalhzmi.masrofmanager.data.DocumentType.REQUEST -> "ورقة تقديم طلب"
     com.mohammedalhzmi.masrofmanager.data.DocumentType.ORDER -> "أمر صرف"
     com.mohammedalhzmi.masrofmanager.data.DocumentType.RECEIPT -> "ورقة استلام"
+    com.mohammedalhzmi.masrofmanager.data.DocumentType.VIOLATION_REPORT -> "محضر ضبط وقوع مخالفة"
+    com.mohammedalhzmi.masrofmanager.data.DocumentType.EXPENSE_REPORT -> "كشف المصروفات الشهرية"
 }

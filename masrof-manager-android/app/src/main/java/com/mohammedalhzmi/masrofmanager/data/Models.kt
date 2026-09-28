@@ -14,7 +14,17 @@ data class Document(
     val financialCategory: String = "", val costCenter: String = "", val fundingSource: String = "",
     val beneficiaryId: String = "", val submittedBy: String = "", val reviewedBy: String = "",
     val approvedBy: String = "", val approvedAt: Long? = null, val paidAt: Long? = null,
-    val rejectionReason: String = ""
+    val rejectionReason: String = "",
+    val incidentTime: String? = null,
+    val incidentDay: String? = null,
+    val incidentLocation: String? = null,
+    val violationType: String? = null,
+    val responsibleAction: String? = null,
+    val lawArticle: String? = null,
+    val witnessOne: String? = null,
+    val witnessTwo: String? = null,
+    val regionName: String? = null,
+    val regionOfficerName: String? = null
 )
 
 @Entity(tableName = "organization_profile")
@@ -46,5 +56,5 @@ data class AuditLogEntity(
 )
 
 enum class ContactType { BENEFICIARY, OFFICIAL }
-enum class DocumentType { REQUEST, ORDER, RECEIPT }
+enum class DocumentType { REQUEST, ORDER, RECEIPT, VIOLATION_REPORT, EXPENSE_REPORT }
 enum class DocumentStatus { DRAFT, SUBMITTED, APPROVED, PAID, RECEIVED, CANCELLED }

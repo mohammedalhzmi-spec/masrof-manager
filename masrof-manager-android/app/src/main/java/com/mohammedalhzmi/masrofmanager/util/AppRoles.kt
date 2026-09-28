@@ -7,7 +7,7 @@ enum class AppRole(val title: String) {
     ADMIN("مدير النظام"), FINANCE_MANAGER("المدير المالي"), ACCOUNTANT("المحاسب"), USER("مستخدم")
 }
 
-enum class AppPermission { CREATE_REQUEST, CREATE_ORDER, CREATE_RECEIPT, EDIT, DELETE, PRINT, BACKUP, SETTINGS, APPROVE, REPORTS }
+enum class AppPermission { CREATE_REQUEST, CREATE_ORDER, CREATE_RECEIPT, CREATE_VIOLATION_REPORT, CREATE_EXPENSE_REPORT, EDIT, DELETE, PRINT, BACKUP, SETTINGS, APPROVE, REPORTS }
 
 object RolePreferences {
     private const val FILE = "masrof_preferences"
@@ -19,12 +19,12 @@ object RolePreferences {
     fun userName(context: Context) = UserSession.current?.fullName ?: prefs(context).getString(USER_NAME, "المستخدم الرئيسي").orEmpty()
     fun setUserName(context: Context, value: String) = prefs(context).edit().putString(USER_NAME, value).apply()
     fun can(context: Context, permission: AppPermission) = currentRole(context).allows(permission)
-    fun canCreate(context: Context, type: DocumentType) = can(context, when (type) { DocumentType.REQUEST -> AppPermission.CREATE_REQUEST; DocumentType.ORDER -> AppPermission.CREATE_ORDER; DocumentType.RECEIPT -> AppPermission.CREATE_RECEIPT })
+    fun canCreate(context: Context, type: DocumentType) = can(context, when (type) { DocumentType.REQUEST -> AppPermission.CREATE_REQUEST; DocumentType.ORDER -> AppPermission.CREATE_ORDER; DocumentType.RECEIPT -> AppPermission.CREATE_RECEIPT; DocumentType.VIOLATION_REPORT -> AppPermission.CREATE_VIOLATION_REPORT; DocumentType.EXPENSE_REPORT -> AppPermission.CREATE_EXPENSE_REPORT })
 }
 
 private fun AppRole.allows(permission: AppPermission): Boolean = when (this) {
     AppRole.ADMIN -> true
-    AppRole.FINANCE_MANAGER -> permission in setOf(AppPermission.CREATE_REQUEST, AppPermission.CREATE_ORDER, AppPermission.CREATE_RECEIPT, AppPermission.EDIT, AppPermission.PRINT, AppPermission.BACKUP, AppPermission.APPROVE, AppPermission.REPORTS)
-    AppRole.ACCOUNTANT -> permission in setOf(AppPermission.CREATE_REQUEST, AppPermission.CREATE_ORDER, AppPermission.CREATE_RECEIPT, AppPermission.EDIT, AppPermission.PRINT, AppPermission.REPORTS)
+    AppRole.FINANCE_MANAGER -> permission in setOf(AppPermission.CREATE_REQUEST, AppPermission.CREATE_ORDER, AppPermission.CREATE_RECEIPT, AppPermission.CREATE_VIOLATION_REPORT, AppPermission.CREATE_EXPENSE_REPORT, AppPermission.EDIT, AppPermission.PRINT, AppPermission.BACKUP, AppPermission.APPROVE, AppPermission.REPORTS)
+    AppRole.ACCOUNTANT -> permission in setOf(AppPermission.CREATE_REQUEST, AppPermission.CREATE_ORDER, AppPermission.CREATE_RECEIPT, AppPermission.CREATE_VIOLATION_REPORT, AppPermission.CREATE_EXPENSE_REPORT, AppPermission.EDIT, AppPermission.PRINT, AppPermission.REPORTS)
     AppRole.USER -> permission in setOf(AppPermission.CREATE_REQUEST, AppPermission.PRINT)
 }
