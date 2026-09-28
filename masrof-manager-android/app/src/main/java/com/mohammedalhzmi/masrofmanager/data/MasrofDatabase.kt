@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
 
-@Database(entities = [Document::class, OrganizationProfile::class, ContactEntity::class, UserEntity::class, AuditLogEntity::class, DocumentDesignEntity::class, DesignElementEntity::class], version = 11, exportSchema = false)
+@Database(entities = [Document::class, OrganizationProfile::class, ContactEntity::class, UserEntity::class, AuditLogEntity::class, DocumentDesignEntity::class, DesignElementEntity::class], version = 12, exportSchema = false)
 @TypeConverters(Converters::class)
 abstract class MasrofDatabase : RoomDatabase() {
     abstract fun documentDao(): DocumentDao
@@ -92,7 +92,38 @@ abstract class MasrofDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE documents ADD COLUMN regionOfficerName TEXT")
             }
         }
+        val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.ensureDocumentColumn("cloudId", "TEXT NOT NULL DEFAULT ''")
+                listOf(
+                    "incidentTime" to "TEXT",
+                    "incidentDay" to "TEXT",
+                    "incidentLocation" to "TEXT",
+                    "violationType" to "TEXT",
+                    "responsibleAction" to "TEXT",
+                    "lawArticle" to "TEXT",
+                    "witnessOne" to "TEXT",
+                    "witnessTwo" to "TEXT",
+                    "regionName" to "TEXT",
+                    "regionOfficerName" to "TEXT"
+                ).forEach { (column, declaration) -> db.ensureDocumentColumn(column, declaration) }
+            }
+        }
     }
+}
+
+private fun SupportSQLiteDatabase.ensureDocumentColumn(column: String, declaration: String) {
+    var exists = false
+    query("PRAGMA table_info(documents)").use { cursor ->
+        val nameIndex = cursor.getColumnIndex("name")
+        while (nameIndex >= 0 && cursor.moveToNext()) {
+            if (cursor.getString(nameIndex) == column) {
+                exists = true
+                break
+            }
+        }
+    }
+    if (!exists) execSQL("ALTER TABLE documents ADD COLUMN $column $declaration")
 }
 
 class Converters {

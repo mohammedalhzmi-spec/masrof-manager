@@ -24,7 +24,7 @@ fun ExpenseReportFormScreen(
     var month by remember(existing?.id) { mutableStateOf(existing?.purpose.orEmpty()) }
     var hijriYear by remember(existing?.id) { mutableStateOf(existing?.dateHijri.orEmpty()) }
     var gregorianYear by remember(existing?.id) { mutableStateOf(existing?.dateGregorian.orEmpty()) }
-    val generatedNumber = DocumentNumbering.next(context, DocumentType.EXPENSE_REPORT).toString().padStart(4, '0')
+    val generatedNumber = DocumentNumbering.next(context, DocumentType.EXPENSE_STATEMENT).toString().padStart(4, '0')
     val displayNumber = existing?.documentNumber ?: generatedNumber
 
     OfficialFormShell(
@@ -41,7 +41,7 @@ fun ExpenseReportFormScreen(
         SaveOfficialButton(if (existing == null) "حفظ كشف المصروفات" else "حفظ التعديلات") {
             val report = Document(
                 id = existing?.id ?: 0,
-                type = DocumentType.EXPENSE_REPORT,
+                type = if (existing?.type == DocumentType.EXPENSE_REPORT) DocumentType.EXPENSE_REPORT else DocumentType.EXPENSE_STATEMENT,
                 documentNumber = existing?.documentNumber ?: generatedNumber,
                 dateHijri = hijriYear,
                 dateGregorian = gregorianYear,
@@ -67,11 +67,12 @@ fun ExpenseReportFormScreen(
                 approvedBy = existing?.approvedBy.orEmpty(),
                 approvedAt = existing?.approvedAt,
                 paidAt = existing?.paidAt,
-                rejectionReason = existing?.rejectionReason.orEmpty()
+                rejectionReason = existing?.rejectionReason.orEmpty(),
+                cloudId = existing?.cloudId.orEmpty()
             )
             if (existing == null) {
                 viewModel.addDocument(report)
-                DocumentNumbering.consume(context, DocumentType.EXPENSE_REPORT)
+                DocumentNumbering.consume(context, DocumentType.EXPENSE_STATEMENT)
             } else {
                 viewModel.updateDocument(report)
             }

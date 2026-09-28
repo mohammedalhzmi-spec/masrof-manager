@@ -11,6 +11,8 @@ import com.mohammedalhzmi.masrofmanager.data.DesignElementEntity
 import android.print.*
 import com.mohammedalhzmi.masrofmanager.data.Document
 import com.mohammedalhzmi.masrofmanager.data.DocumentType
+import com.mohammedalhzmi.masrofmanager.data.displayName
+import com.mohammedalhzmi.masrofmanager.data.isExpenseStatement
 import com.mohammedalhzmi.masrofmanager.data.DocumentDesignEntity
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
@@ -40,20 +42,20 @@ class OfficialDocumentPrintAdapter(private val documents: List<Document>, privat
     override fun onLayout(oldAttributes: PrintAttributes?, newAttributes: PrintAttributes, cancellationSignal: CancellationSignal, callback: LayoutResultCallback, extras: Bundle?) {
         attributes = newAttributes
         if (cancellationSignal.isCanceled) return
-        val pageCount = documents.sumOf { if (it.type == DocumentType.EXPENSE_REPORT) 3 else 1 }
+        val pageCount = documents.sumOf { if (it.type.isExpenseStatement()) 3 else 1 }
         callback.onLayoutFinished(PrintDocumentInfo.Builder("masrof-official-documents.pdf").setContentType(PrintDocumentInfo.CONTENT_TYPE_DOCUMENT).setPageCount(pageCount.coerceAtLeast(1)).build(), oldAttributes == null || oldAttributes != newAttributes)
     }
     override fun onWrite(pages: Array<PageRange>, destination: android.os.ParcelFileDescriptor, cancellationSignal: CancellationSignal, callback: WriteResultCallback) {
         val pdf = PdfDocument()
         try {
             val outputPages = documents.flatMap { document ->
-                val count = if (document.type == DocumentType.EXPENSE_REPORT) 3 else 1
+                val count = if (document.type.isExpenseStatement()) 3 else 1
                 (0 until count).map { pageIndex -> document to pageIndex }
             }
             outputPages.forEachIndexed { index, (document, reportPageIndex) ->
                 if (cancellationSignal.isCanceled) return
                 if (pages.isNotEmpty() && pages.none { index in it.start..it.end }) return@forEachIndexed
-                val fixedA4 = document.type == DocumentType.VIOLATION_REPORT || document.type == DocumentType.EXPENSE_REPORT
+                val fixedA4 = document.type == DocumentType.VIOLATION_REPORT || document.type.isExpenseStatement()
                 val half = !fixedA4 && (header.pageSizes[document.type] == "HALF_A4" || (document.type == DocumentType.ORDER && !header.pageSizes.containsKey(document.type)))
                 val design = if (context != null) DesignRenderLoader.design(context, document.type) else null
                 val landscape = !fixedA4 && design?.orientation == "LANDSCAPE"
@@ -87,7 +89,7 @@ object OfficialDocumentRenderer {
         val w = baseW
         val h = baseH
         val half = landscape
-        val pageBackground = if (document.type == DocumentType.EXPENSE_REPORT) Color.WHITE else design?.let { runCatching { Color.parseColor(it.backgroundColor) }.getOrDefault(Color.WHITE) } ?: (header.backgroundColors[document.type] ?: Color.WHITE)
+        val pageBackground = if (document.type.isExpenseStatement()) Color.WHITE else design?.let { runCatching { Color.parseColor(it.backgroundColor) }.getOrDefault(Color.WHITE) } ?: (header.backgroundColors[document.type] ?: Color.WHITE)
         canvas.drawColor(pageBackground)
         header.backgroundImages[document.type]?.let { bitmap ->
             val scale = header.backgroundScale[document.type] ?: 1f
@@ -103,7 +105,7 @@ object OfficialDocumentRenderer {
         val style = if (header.textBold[document.type] == true && header.textItalic[document.type] == true) Typeface.BOLD_ITALIC else if (header.textBold[document.type] == true) Typeface.BOLD else if (header.textItalic[document.type] == true) Typeface.ITALIC else Typeface.NORMAL
         bodyPaint.color = textColor; bodyPaint.typeface = Typeface.create(family, style); bodyPaint.isUnderlineText = header.textUnderline[document.type] == true
         boldPaint.color = textColor; boldPaint.typeface = Typeface.create(family, Typeface.BOLD)
-        if (document.type == DocumentType.EXPENSE_REPORT) {
+        if (document.type.isExpenseStatement()) {
             ExpenseReportTemplateRenderer.draw(canvas, document, pageIndex, header, context)
         } else {
             val framePaint = if (document.type == DocumentType.VIOLATION_REPORT) Paint(linePaint).apply { color = 0xff087fb5.toInt(); strokeWidth = 3f } else linePaint
@@ -111,7 +113,14 @@ object OfficialDocumentRenderer {
             val innerFramePaint = if (document.type == DocumentType.VIOLATION_REPORT) Paint(framePaint).apply { strokeWidth = 1.5f } else linePaint
             canvas.drawRect(25f, 25f, w - 25f, h - 25f, innerFramePaint)
             drawHeader(canvas, header, document, context)
-            if (half) renderOrder(canvas, document) else when (document.type) { DocumentType.REQUEST -> renderRequest(canvas, document); DocumentType.RECEIPT -> renderReceipt(canvas, document); DocumentType.ORDER -> renderOrderPortrait(canvas, document); DocumentType.VIOLATION_REPORT -> renderViolationReport(canvas, document); DocumentType.EXPENSE_REPORT -> Unit }
+            if (half) renderOrder(canvas, document) else when (document.type) {
+                DocumentType.REQUEST -> renderRequest(canvas, document)
+                DocumentType.RECEIPT -> renderReceipt(canvas, document)
+                DocumentType.ORDER -> renderOrderPortrait(canvas, document)
+                DocumentType.VIOLATION_REPORT -> renderViolationReport(canvas, document)
+                DocumentType.EXPENSE_STATEMENT, DocumentType.EXPENSE_REPORT -> Unit
+                else -> renderOrderPortrait(canvas, document)
+            }
             renderElements(canvas, document, elements, context)
             design?.let { canvas.drawRect(it.marginLeft, it.marginTop, w - it.marginRight, h - it.marginBottom, Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = 0x55333333.toInt(); this.style = Paint.Style.STROKE; this.strokeWidth = 1f }) }
             drawCentered(canvas, "طبع بواسطة نظام مالية فرع صندوق النظافةوالتحسين مديرية الحزم", w / 2f, h - 28f, bodyPaint)
@@ -256,7 +265,7 @@ object OfficialDocumentRenderer {
         drawLeft(c, "التوقيع: ........................", left, 730f, bodyPaint)
     }
 
-    private fun title(type: DocumentType) = when (type) { DocumentType.REQUEST -> "ورقة تقديم طلب"; DocumentType.ORDER -> "أمر صرف"; DocumentType.RECEIPT -> "ورقة استلام"; DocumentType.VIOLATION_REPORT -> "محضر ضبط وقوع مخالفة"; DocumentType.EXPENSE_REPORT -> "كشف المصروفات الشهرية" }
+    private fun title(type: DocumentType) = type.displayName()
     private fun renderElements(c: Canvas, d: Document, elements: List<DesignElementEntity>, context: Context?) {
         elements.filter { it.visible }.sortedBy { it.zIndex }.forEach { e ->
             val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { alpha = (e.opacity.coerceIn(0f, 1f) * 255).toInt() }

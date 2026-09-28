@@ -17,6 +17,8 @@ import com.mohammedalhzmi.masrofmanager.util.AppBackupManager
 import com.mohammedalhzmi.masrofmanager.util.RolePreferences
 import com.mohammedalhzmi.masrofmanager.util.AppPermission
 import com.mohammedalhzmi.masrofmanager.data.DocumentStatus
+import com.mohammedalhzmi.masrofmanager.data.DocumentType
+import com.mohammedalhzmi.masrofmanager.data.displayName
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 
@@ -114,6 +116,8 @@ fun DashboardScreen(viewModel: MasrofViewModel, onAddDocument: () -> Unit, onCre
 private fun statusTitle(status: DocumentStatus) = when (status) {
     DocumentStatus.DRAFT -> "مسودة"
     DocumentStatus.SUBMITTED -> "قيد المراجعة"
+    DocumentStatus.APPROVED_FINANCE -> "اعتماد المدير المالي"
+    DocumentStatus.APPROVED_BRANCH -> "اعتماد مدير الفرع"
     DocumentStatus.APPROVED -> "معتمد"
     DocumentStatus.PAID -> "تم الصرف"
     DocumentStatus.RECEIVED -> "تم الاستلام"
@@ -121,16 +125,10 @@ private fun statusTitle(status: DocumentStatus) = when (status) {
 }
 
 private fun statusColor(status: DocumentStatus) = when (status) {
-    DocumentStatus.APPROVED -> androidx.compose.ui.graphics.Color(0xff18794e)
+    DocumentStatus.APPROVED_FINANCE, DocumentStatus.APPROVED_BRANCH, DocumentStatus.APPROVED -> androidx.compose.ui.graphics.Color(0xff18794e)
     DocumentStatus.PAID, DocumentStatus.RECEIVED -> androidx.compose.ui.graphics.Color(0xff145da0)
     DocumentStatus.CANCELLED -> androidx.compose.ui.graphics.Color(0xffb42318)
     else -> androidx.compose.ui.graphics.Color(0xff8a651d)
 }
 
-private fun documentTitle(type: com.mohammedalhzmi.masrofmanager.data.DocumentType) = when (type) {
-    com.mohammedalhzmi.masrofmanager.data.DocumentType.REQUEST -> "ورقة تقديم طلب"
-    com.mohammedalhzmi.masrofmanager.data.DocumentType.ORDER -> "أمر صرف"
-    com.mohammedalhzmi.masrofmanager.data.DocumentType.RECEIPT -> "ورقة استلام"
-    com.mohammedalhzmi.masrofmanager.data.DocumentType.VIOLATION_REPORT -> "محضر ضبط وقوع مخالفة"
-    com.mohammedalhzmi.masrofmanager.data.DocumentType.EXPENSE_REPORT -> "كشف المصروفات الشهرية"
-}
+private fun documentTitle(type: DocumentType) = type.displayName()

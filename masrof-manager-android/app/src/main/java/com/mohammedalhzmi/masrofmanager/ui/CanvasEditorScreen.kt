@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mohammedalhzmi.masrofmanager.data.*
+import com.mohammedalhzmi.masrofmanager.data.displayName
 import com.example.R
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
@@ -208,4 +209,4 @@ private fun AiLayoutDialog(onDismiss: () -> Unit, onRun: (String, String, String
     } }, confirmButton = { Button(enabled = instruction.isNotBlank(), onClick = { onRun(key, endpoint, instruction) { status = it } }) { Text("تحليل وتطبيق") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("إغلاق") } })
 }
 
-private fun typeName(type: DocumentType) = when (type) { DocumentType.ORDER -> "أمر الصرف"; DocumentType.REQUEST -> "ورقة التقديم"; DocumentType.RECEIPT -> "ورقة الاستلام"; DocumentType.VIOLATION_REPORT -> "محضر المخالفة"; DocumentType.EXPENSE_REPORT -> "كشف المصروفات الشهرية" }
+private fun typeName(type: DocumentType) = type.displayName()

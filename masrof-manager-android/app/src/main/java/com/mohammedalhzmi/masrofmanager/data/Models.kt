@@ -24,7 +24,8 @@ data class Document(
     val witnessOne: String? = null,
     val witnessTwo: String? = null,
     val regionName: String? = null,
-    val regionOfficerName: String? = null
+    val regionOfficerName: String? = null,
+    val cloudId: String = ""
 )
 
 @Entity(tableName = "organization_profile")
@@ -56,5 +57,40 @@ data class AuditLogEntity(
 )
 
 enum class ContactType { BENEFICIARY, OFFICIAL }
-enum class DocumentType { REQUEST, ORDER, RECEIPT, VIOLATION_REPORT, EXPENSE_REPORT }
-enum class DocumentStatus { DRAFT, SUBMITTED, APPROVED, PAID, RECEIVED, CANCELLED }
+enum class DocumentType {
+    REQUEST, ORDER, RECEIPT, RECEIPT_PAPER, FINANCIAL_MEMO, PURCHASE_ORDER,
+    SUPPLY_PERMIT, RECEIPT_MINUTES, FINANCIAL_CLAIM, CUSTODY_SETTLEMENT,
+    ADVANCE_PERMIT, EXPENSE_STATEMENT, OFFICIAL_FINANCIAL_LETTER, BOOK,
+    VIOLATION_REPORT,
+    // Retained for records created by the earlier debug build; new records use EXPENSE_STATEMENT.
+    EXPENSE_REPORT
+}
+
+enum class DocumentStatus {
+    DRAFT, SUBMITTED, APPROVED_FINANCE, APPROVED_BRANCH, APPROVED, PAID, RECEIVED, CANCELLED
+}
+
+fun DocumentType.displayName(): String = when (this) {
+    DocumentType.REQUEST -> "طلب صرف"
+    DocumentType.ORDER -> "أمر صرف"
+    DocumentType.RECEIPT -> "ورقة استلام"
+    DocumentType.RECEIPT_PAPER -> "سند قبض"
+    DocumentType.FINANCIAL_MEMO -> "مذكرة مالية"
+    DocumentType.PURCHASE_ORDER -> "طلب شراء"
+    DocumentType.SUPPLY_PERMIT -> "إذن توريد أو استلام"
+    DocumentType.RECEIPT_MINUTES -> "محضر استلام"
+    DocumentType.FINANCIAL_CLAIM -> "مطالبة مالية"
+    DocumentType.CUSTODY_SETTLEMENT -> "تسوية عهدة"
+    DocumentType.ADVANCE_PERMIT -> "إذن سلفة"
+    DocumentType.EXPENSE_STATEMENT, DocumentType.EXPENSE_REPORT -> "كشف مصروفات"
+    DocumentType.OFFICIAL_FINANCIAL_LETTER -> "خطاب رسمي مالي"
+    DocumentType.BOOK -> "دفتر مستندات"
+    DocumentType.VIOLATION_REPORT -> "محضر ضبط وقوع مخالفة"
+}
+
+fun DocumentType.isExpenseStatement(): Boolean =
+    this == DocumentType.EXPENSE_STATEMENT || this == DocumentType.EXPENSE_REPORT
+
+fun userSelectableDocumentTypes(): List<DocumentType> = DocumentType.values().filter {
+    it != DocumentType.BOOK && it != DocumentType.EXPENSE_REPORT
+}

@@ -9,6 +9,8 @@ import android.net.Uri
 import androidx.core.content.FileProvider
 import com.mohammedalhzmi.masrofmanager.data.Document
 import com.mohammedalhzmi.masrofmanager.data.DocumentType
+import com.mohammedalhzmi.masrofmanager.data.displayName
+import com.mohammedalhzmi.masrofmanager.data.isExpenseStatement
 import java.io.File
 import java.io.FileOutputStream
 import java.io.ByteArrayOutputStream
@@ -26,16 +28,16 @@ object OfficialDocumentExporter {
         documents.forEach { document ->
             val design = DesignRenderLoader.design(context, document.type)
             val selectedPageSize = AppPreferences.pageSize(context, document.type)
-            val fixedA4 = document.type == DocumentType.VIOLATION_REPORT || document.type == DocumentType.EXPENSE_REPORT
+            val fixedA4 = document.type == DocumentType.VIOLATION_REPORT || document.type.isExpenseStatement()
             val half = !fixedA4 && (selectedPageSize == "HALF_A4" || (document.type == DocumentType.ORDER && selectedPageSize.isBlank()))
             val landscape = !fixedA4 && design?.orientation == "LANDSCAPE"
             val width = if (fixedA4) 595 else if (half) 842 else (design?.pageWidth?.toInt() ?: if (landscape) 842 else 595)
             val height = if (fixedA4) 842 else if (half) 595 else (design?.pageHeight?.toInt() ?: if (landscape) 595 else 842)
-            val reportPages = if (document.type == DocumentType.EXPENSE_REPORT) 3 else 1
+            val reportPages = if (document.type.isExpenseStatement()) 3 else 1
             repeat(reportPages) { reportPageIndex ->
                 pageNumber += 1
                 val page = pdf.startPage(PdfDocument.PageInfo.Builder(width, height, pageNumber).create())
-                OfficialDocumentRenderer.render(page.canvas, document, header(context), DesignRenderLoader.elements(context, document.type), context, design, reportPageIndex)
+                OfficialDocumentRenderer.render(page.canvas, document, DocumentHeaderFactory.create(context), DesignRenderLoader.elements(context, document.type), context, design, reportPageIndex)
                 pdf.finishPage(page)
             }
         }
@@ -48,7 +50,7 @@ object OfficialDocumentExporter {
         val file = File(context.filesDir, "masrof-${document.documentNumber}.png")
         val design = DesignRenderLoader.design(context, document.type)
         val selectedPageSize = AppPreferences.pageSize(context, document.type)
-        val fixedA4 = document.type == DocumentType.VIOLATION_REPORT || document.type == DocumentType.EXPENSE_REPORT
+        val fixedA4 = document.type == DocumentType.VIOLATION_REPORT || document.type.isExpenseStatement()
         val half = !fixedA4 && (selectedPageSize == "HALF_A4" || (document.type == DocumentType.ORDER && selectedPageSize.isBlank()))
         val landscape = !fixedA4 && design?.orientation == "LANDSCAPE"
         val baseWidth = if (fixedA4) 595 else if (half) 842 else (design?.pageWidth?.toInt() ?: if (landscape) 842 else 595)
@@ -56,7 +58,7 @@ object OfficialDocumentExporter {
         val bitmap = Bitmap.createBitmap(baseWidth * 2, baseHeight * 2, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         canvas.scale(2f, 2f)
-        OfficialDocumentRenderer.render(canvas, document, header(context), DesignRenderLoader.elements(context, document.type), context, design)
+        OfficialDocumentRenderer.render(canvas, document, DocumentHeaderFactory.create(context), DesignRenderLoader.elements(context, document.type), context, design)
         FileOutputStream(file).use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         bitmap.recycle()
         return shareUri(context, file)
@@ -69,7 +71,7 @@ object OfficialDocumentExporter {
             fun entry(name: String, value: String) {
                 zip.putNextEntry(ZipEntry(name)); zip.write(value.toByteArray(Charsets.UTF_8)); zip.closeEntry()
             }
-        val fallbackLogo = if (document.type == DocumentType.EXPENSE_REPORT) R.drawable.expense_report_logo else R.drawable.official_emblem
+        val fallbackLogo = if (document.type.isExpenseStatement()) R.drawable.expense_report_logo else R.drawable.official_emblem
             val logo = ((AppPreferences.loadLogo(context, document.type) ?: BitmapFactory.decodeResource(context.resources, fallbackLogo))).let { bitmap -> ByteArrayOutputStream().also { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray() }
             fun bytesEntry(name: String, value: ByteArray) { zip.putNextEntry(ZipEntry(name)); zip.write(value); zip.closeEntry() }
             entry("[Content_Types].xml", """<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>""")
@@ -92,7 +94,7 @@ object OfficialDocumentExporter {
     private fun shareUri(context: Context, file: File): Uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
 
     private fun docxXml(d: Document, hasLogo: Boolean): String {
-        if (d.type == DocumentType.EXPENSE_REPORT) return expenseReportDocxXml(d, hasLogo)
+        if (d.type.isExpenseStatement()) return expenseReportDocxXml(d, hasLogo)
         fun esc(s: String) = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&apos;")
         fun p(label: String, value: String): String {
             if (label == "الحالة: ") return ""
@@ -108,7 +110,7 @@ object OfficialDocumentExporter {
             val systemLabel = if (label == "الرقم: ") "الرقم: ............    NO: $value" else label + renderedValue
             return "<w:p><w:pPr><w:jc w:val=\"right\"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii=\"Amiri\" w:hAnsi=\"Amiri\"/></w:rPr><w:t>${esc(systemLabel)}</w:t></w:r></w:p>"
         }
-        val title = when (d.type) { DocumentType.ORDER -> "أمر صرف"; DocumentType.REQUEST -> "ورقة تقديم طلب"; DocumentType.RECEIPT -> "سند قبض"; DocumentType.VIOLATION_REPORT -> "محضر ضبط وقوع مخالفة"; DocumentType.EXPENSE_REPORT -> "كشف المصروفات الشهرية" }
+        val title = d.type.displayName()
         val logoXml = if (hasLogo) "<w:p><w:pPr><w:jc w:val=\"center\"/></w:pPr><w:r><w:drawing><wp:inline xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\" xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" xmlns:pic=\"http://schemas.openxmlformats.org/drawingml/2006/picture\"><wp:extent cx=\"900000\" cy=\"510000\"/><wp:docPr id=\"1\" name=\"Official logo\"/><a:graphic><a:graphicData uri=\"http://schemas.openxmlformats.org/drawingml/2006/picture\"><pic:pic><pic:blipFill><a:blip r:embed=\"rId2\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>" else ""
         val basmalaXml = "<w:p><w:pPr><w:jc w:val=\"center\"/></w:pPr><w:r><w:t>بِسْمِ اللهِ الرَّحْمَنِ الرَّحِيمِ</w:t></w:r></w:p>"
         return """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>$basmalaXml$logoXml<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:b/><w:rFonts w:ascii="Amiri" w:hAnsi="Amiri"/></w:rPr><w:t>الجمهورية اليمنية - وزارة الإدارة والتنمية المحلية والريفية - صندوق النظافة والتحسين م/إب - فرع مديرية الحزم</w:t></w:r></w:p><w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:b/></w:rPr><w:t>${esc(title)}</w:t></w:r></w:p>${p("الرقم: ", d.documentNumber)}${p("التاريخ: ", d.dateHijri)}${p("الموافق: ", d.dateGregorian)}${p("المرفقات: ", d.attachmentsCount.toString())}${p("الحالة: ", d.status.name)}${p("البند المالي: ", d.financialCategory)}${p("مركز التكلفة: ", d.costCenter)}${p("مصدر التمويل: ", d.fundingSource)}${p("اسم المستفيد: ", d.beneficiaryName.orEmpty())}${p("المبلغ: ", d.amount?.toString().orEmpty())}${p("المبلغ كتابة: ", d.amountWords.orEmpty())}${p("الغرض: ", d.purpose.orEmpty())}${p("التفاصيل: ", d.details.orEmpty())}<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:t>مدير الفرع: رياض أحمد محمد — طبع بواسطة نظام مالية فرع صندوق النظافةوالتحسين مديرية الحزم</w:t></w:r></w:p><w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720"/></w:sectPr></w:body></w:document>"""
@@ -186,61 +188,4 @@ object OfficialDocumentExporter {
         return """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>$pageThree$pageBreak$pageFour$pageBreak$pageFive<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="480" w:right="600" w:bottom="480" w:left="600"/></w:sectPr></w:body></w:document>"""
     }
 
-    private fun header(context: Context) = DocumentHeader(
-        AppPreferences.ministry(context),
-        AppPreferences.administration(context),
-        AppPreferences.branch(context),
-        mapOf(
-            com.mohammedalhzmi.masrofmanager.data.DocumentType.ORDER to AppPreferences.loadLogo(context, com.mohammedalhzmi.masrofmanager.data.DocumentType.ORDER),
-            com.mohammedalhzmi.masrofmanager.data.DocumentType.REQUEST to AppPreferences.loadLogo(context, com.mohammedalhzmi.masrofmanager.data.DocumentType.REQUEST),
-            com.mohammedalhzmi.masrofmanager.data.DocumentType.RECEIPT to AppPreferences.loadLogo(context, com.mohammedalhzmi.masrofmanager.data.DocumentType.RECEIPT),
-            DocumentType.EXPENSE_REPORT to AppPreferences.loadLogo(context, DocumentType.EXPENSE_REPORT)
-        ), mapOf(
-            com.mohammedalhzmi.masrofmanager.data.DocumentType.ORDER to AppPreferences.pageSize(context, com.mohammedalhzmi.masrofmanager.data.DocumentType.ORDER),
-            com.mohammedalhzmi.masrofmanager.data.DocumentType.REQUEST to AppPreferences.pageSize(context, com.mohammedalhzmi.masrofmanager.data.DocumentType.REQUEST),
-            com.mohammedalhzmi.masrofmanager.data.DocumentType.RECEIPT to AppPreferences.pageSize(context, com.mohammedalhzmi.masrofmanager.data.DocumentType.RECEIPT),
-            DocumentType.EXPENSE_REPORT to "A4"
-        ), mapOf(
-            com.mohammedalhzmi.masrofmanager.data.DocumentType.ORDER to runCatching { Color.parseColor(AppPreferences.backgroundColor(context, com.mohammedalhzmi.masrofmanager.data.DocumentType.ORDER)) }.getOrDefault(Color.WHITE),
-            com.mohammedalhzmi.masrofmanager.data.DocumentType.REQUEST to runCatching { Color.parseColor(AppPreferences.backgroundColor(context, com.mohammedalhzmi.masrofmanager.data.DocumentType.REQUEST)) }.getOrDefault(Color.WHITE),
-            com.mohammedalhzmi.masrofmanager.data.DocumentType.RECEIPT to runCatching { Color.parseColor(AppPreferences.backgroundColor(context, com.mohammedalhzmi.masrofmanager.data.DocumentType.RECEIPT)) }.getOrDefault(Color.WHITE),
-            DocumentType.EXPENSE_REPORT to Color.WHITE
-        ), mapOf(
-            DocumentType.ORDER to loadBackground(context, DocumentType.ORDER),
-            DocumentType.REQUEST to loadBackground(context, DocumentType.REQUEST),
-            DocumentType.RECEIPT to loadBackground(context, DocumentType.RECEIPT),
-            DocumentType.EXPENSE_REPORT to (AppPreferences.backgroundImageUri(context, DocumentType.EXPENSE_REPORT)?.let { runCatching { context.contentResolver.openInputStream(Uri.parse(it)).use(BitmapFactory::decodeStream) }.getOrNull() } ?: BitmapFactory.decodeResource(context.resources, R.drawable.expense_report_logo))
-        ), mapOf(
-            DocumentType.ORDER to AppPreferences.backgroundOpacity(context, DocumentType.ORDER),
-            DocumentType.REQUEST to AppPreferences.backgroundOpacity(context, DocumentType.REQUEST),
-            DocumentType.RECEIPT to AppPreferences.backgroundOpacity(context, DocumentType.RECEIPT),
-            DocumentType.EXPENSE_REPORT to AppPreferences.backgroundOpacity(context, DocumentType.EXPENSE_REPORT)
-        ), mapOf(
-            DocumentType.ORDER to AppPreferences.backgroundScale(context, DocumentType.ORDER),
-            DocumentType.REQUEST to AppPreferences.backgroundScale(context, DocumentType.REQUEST),
-            DocumentType.RECEIPT to AppPreferences.backgroundScale(context, DocumentType.RECEIPT),
-            DocumentType.EXPENSE_REPORT to AppPreferences.backgroundScale(context, DocumentType.EXPENSE_REPORT)
-        ), mapOf(
-            DocumentType.ORDER to (AppPreferences.backgroundOffsetX(context, DocumentType.ORDER) to AppPreferences.backgroundOffsetY(context, DocumentType.ORDER)),
-            DocumentType.REQUEST to (AppPreferences.backgroundOffsetX(context, DocumentType.REQUEST) to AppPreferences.backgroundOffsetY(context, DocumentType.REQUEST)),
-            DocumentType.RECEIPT to (AppPreferences.backgroundOffsetX(context, DocumentType.RECEIPT) to AppPreferences.backgroundOffsetY(context, DocumentType.RECEIPT)),
-            DocumentType.EXPENSE_REPORT to (AppPreferences.backgroundOffsetX(context, DocumentType.EXPENSE_REPORT) to AppPreferences.backgroundOffsetY(context, DocumentType.EXPENSE_REPORT))
-        ), mapOf(
-            DocumentType.ORDER to runCatching { Color.parseColor(AppPreferences.textColor(context, DocumentType.ORDER)) }.getOrDefault(Color.BLACK),
-            DocumentType.REQUEST to runCatching { Color.parseColor(AppPreferences.textColor(context, DocumentType.REQUEST)) }.getOrDefault(Color.BLACK),
-            DocumentType.RECEIPT to runCatching { Color.parseColor(AppPreferences.textColor(context, DocumentType.RECEIPT)) }.getOrDefault(Color.BLACK),
-            DocumentType.EXPENSE_REPORT to Color.BLACK
-        ), mapOf(
-            DocumentType.ORDER to AppPreferences.fontFamily(context, DocumentType.ORDER), DocumentType.REQUEST to AppPreferences.fontFamily(context, DocumentType.REQUEST), DocumentType.RECEIPT to AppPreferences.fontFamily(context, DocumentType.RECEIPT)
-        ), mapOf(
-            DocumentType.ORDER to AppPreferences.textBold(context, DocumentType.ORDER), DocumentType.REQUEST to AppPreferences.textBold(context, DocumentType.REQUEST), DocumentType.RECEIPT to AppPreferences.textBold(context, DocumentType.RECEIPT)
-        ), mapOf(
-            DocumentType.ORDER to AppPreferences.textItalic(context, DocumentType.ORDER), DocumentType.REQUEST to AppPreferences.textItalic(context, DocumentType.REQUEST), DocumentType.RECEIPT to AppPreferences.textItalic(context, DocumentType.RECEIPT)
-        ), mapOf(
-            DocumentType.ORDER to AppPreferences.textUnderline(context, DocumentType.ORDER), DocumentType.REQUEST to AppPreferences.textUnderline(context, DocumentType.REQUEST), DocumentType.RECEIPT to AppPreferences.textUnderline(context, DocumentType.RECEIPT)
-        )
-    )
-
-    private fun loadBackground(context: Context, type: DocumentType) = AppPreferences.backgroundImageUri(context, type)?.let { runCatching { context.contentResolver.openInputStream(Uri.parse(it)).use(BitmapFactory::decodeStream) }.getOrNull() }
-        ?: BitmapFactory.decodeResource(context.resources, R.drawable.official_emblem)
 }

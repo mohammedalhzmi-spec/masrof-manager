@@ -92,7 +92,8 @@ fun ViolationReportFormScreen(
                 witnessOne = witnessOne,
                 witnessTwo = witnessTwo,
                 regionName = regionName,
-                regionOfficerName = regionOfficer
+                regionOfficerName = regionOfficer,
+                cloudId = existing?.cloudId.orEmpty()
             )
             if (existing == null) {
                 viewModel.addDocument(value)

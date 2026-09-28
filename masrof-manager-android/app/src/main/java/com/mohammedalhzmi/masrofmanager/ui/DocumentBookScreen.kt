@@ -25,6 +25,8 @@ import androidx.compose.ui.unit.dp
 import com.mohammedalhzmi.masrofmanager.data.Document
 import com.mohammedalhzmi.masrofmanager.data.DocumentStatus
 import com.mohammedalhzmi.masrofmanager.data.DocumentType
+import com.mohammedalhzmi.masrofmanager.data.displayName
+import com.mohammedalhzmi.masrofmanager.data.userSelectableDocumentTypes
 import com.mohammedalhzmi.masrofmanager.util.DocumentNumbering
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -45,7 +47,7 @@ fun DocumentBookScreen(viewModel: MasrofViewModel, onNavigateBack: () -> Unit) {
         ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
             OutlinedTextField(value = typeTitle(type), onValueChange = {}, readOnly = true, label = { Text("نوع الدفتر") }, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) }, modifier = Modifier.fillMaxWidth().menuAnchor())
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                DocumentType.values().forEach { option -> DropdownMenuItem(text = { Text(typeTitle(option)) }, onClick = { type = option; expanded = false }) }
+                userSelectableDocumentTypes().forEach { option -> DropdownMenuItem(text = { Text(typeTitle(option)) }, onClick = { type = option; expanded = false }) }
             }
         }
         OutlinedTextField(bookName, { bookName = it }, label = { Text("اسم الدفتر / المرجع") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
@@ -71,10 +73,4 @@ fun DocumentBookScreen(viewModel: MasrofViewModel, onNavigateBack: () -> Unit) {
     }
 }
 
-private fun typeTitle(type: DocumentType) = when (type) {
-    DocumentType.ORDER -> "أمر صرف"
-    DocumentType.REQUEST -> "ورقة تقديم طلب"
-    DocumentType.RECEIPT -> "ورقة استلام"
-    DocumentType.VIOLATION_REPORT -> "محضر ضبط وقوع مخالفة"
-    DocumentType.EXPENSE_REPORT -> "كشف المصروفات الشهرية"
-}
+private fun typeTitle(type: DocumentType) = type.displayName()
