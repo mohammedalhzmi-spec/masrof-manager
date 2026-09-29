@@ -42,14 +42,14 @@ class OfficialDocumentPrintAdapter(private val documents: List<Document>, privat
     override fun onLayout(oldAttributes: PrintAttributes?, newAttributes: PrintAttributes, cancellationSignal: CancellationSignal, callback: LayoutResultCallback, extras: Bundle?) {
         attributes = newAttributes
         if (cancellationSignal.isCanceled) return
-        val pageCount = documents.sumOf { if (it.type.isExpenseStatement()) 3 else 1 }
+        val pageCount = documents.sumOf { if (it.type.isExpenseStatement()) 4 else 1 }
         callback.onLayoutFinished(PrintDocumentInfo.Builder("masrof-official-documents.pdf").setContentType(PrintDocumentInfo.CONTENT_TYPE_DOCUMENT).setPageCount(pageCount.coerceAtLeast(1)).build(), oldAttributes == null || oldAttributes != newAttributes)
     }
     override fun onWrite(pages: Array<PageRange>, destination: android.os.ParcelFileDescriptor, cancellationSignal: CancellationSignal, callback: WriteResultCallback) {
         val pdf = PdfDocument()
         try {
             val outputPages = documents.flatMap { document ->
-                val count = if (document.type.isExpenseStatement()) 3 else 1
+                val count = if (document.type.isExpenseStatement()) 4 else 1
                 (0 until count).map { pageIndex -> document to pageIndex }
             }
             outputPages.forEachIndexed { index, (document, reportPageIndex) ->
@@ -91,7 +91,8 @@ object OfficialDocumentRenderer {
         val half = landscape
         val pageBackground = if (document.type.isExpenseStatement()) Color.WHITE else design?.let { runCatching { Color.parseColor(it.backgroundColor) }.getOrDefault(Color.WHITE) } ?: (header.backgroundColors[document.type] ?: Color.WHITE)
         canvas.drawColor(pageBackground)
-        header.backgroundImages[document.type]?.let { bitmap ->
+        val useBackgroundImage = !(document.type.isExpenseStatement() && pageIndex == 3)
+        if (useBackgroundImage) header.backgroundImages[document.type]?.let { bitmap ->
             val scale = header.backgroundScale[document.type] ?: 1f
             val watermarkSize = minOf(w, h) * 0.58f * scale
             val bw = watermarkSize; val bh = watermarkSize

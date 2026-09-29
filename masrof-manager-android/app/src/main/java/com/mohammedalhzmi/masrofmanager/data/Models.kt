@@ -83,7 +83,7 @@ fun DocumentType.displayName(): String = when (this) {
     DocumentType.FINANCIAL_CLAIM -> "مطالبة مالية"
     DocumentType.CUSTODY_SETTLEMENT -> "تسوية عهدة"
     DocumentType.ADVANCE_PERMIT -> "إذن سلفة"
-    DocumentType.EXPENSE_STATEMENT, DocumentType.EXPENSE_REPORT -> "كشف مصروفات"
+    DocumentType.EXPENSE_STATEMENT, DocumentType.EXPENSE_REPORT -> "دفتر مصروفات"
     DocumentType.OFFICIAL_FINANCIAL_LETTER -> "خطاب رسمي مالي"
     DocumentType.BOOK -> "دفتر مستندات"
     DocumentType.VIOLATION_REPORT -> "محضر ضبط وقوع مخالفة"

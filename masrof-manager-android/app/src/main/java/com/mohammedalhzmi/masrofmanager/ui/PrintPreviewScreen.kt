@@ -28,7 +28,7 @@ fun PrintPreviewScreen(viewModel: MasrofViewModel, documentIds: String, onOpenCa
     val documents by viewModel.allDocuments.collectAsState()
     val ids = remember(documentIds) { documentIds.split(",").mapNotNull { it.toLongOrNull() }.toSet() }
     val selectedDocs = documents.filter { it.id in ids }
-    val printedPageCount = selectedDocs.sumOf { if (it.type.isExpenseStatement()) 3 else 1 }
+    val printedPageCount = selectedDocs.sumOf { if (it.type.isExpenseStatement()) 4 else 1 }
     val context = LocalContext.current
     var showEditor by remember { mutableStateOf(false) }
     Column(modifier = Modifier.padding(16.dp)) {
@@ -46,7 +46,7 @@ fun PrintPreviewScreen(viewModel: MasrofViewModel, documentIds: String, onOpenCa
         }
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(enabled = selectedDocs.isNotEmpty(), onClick = { sharePdf(context, selectedDocs) }, modifier = Modifier.weight(1f)) { Text("PDF ومشاركة") }
-            OutlinedButton(enabled = selectedDocs.size == 1, onClick = { shareImage(context, selectedDocs.first()) }, modifier = Modifier.weight(1f)) { Text(if (selectedDocs.singleOrNull()?.type?.isExpenseStatement() == true) "صورة الصفحة 3" else "صورة PNG") }
+            OutlinedButton(enabled = selectedDocs.size == 1, onClick = { shareImage(context, selectedDocs.first()) }, modifier = Modifier.weight(1f)) { Text(if (selectedDocs.singleOrNull()?.type?.isExpenseStatement() == true) "صورة الصفحة الأولى (3)" else "صورة PNG") }
             OutlinedButton(enabled = selectedDocs.size == 1, onClick = { shareWord(context, selectedDocs.first()) }, modifier = Modifier.weight(1f)) { Text("Word") }
         }
         Button(

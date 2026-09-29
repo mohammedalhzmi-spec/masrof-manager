@@ -11,7 +11,7 @@ import com.example.R
 import com.mohammedalhzmi.masrofmanager.data.Document
 import com.mohammedalhzmi.masrofmanager.data.DocumentType
 
-/** Draws the three expense-statement pages supplied by the user (printed page numbers 3–5). */
+/** Draws the four expense-book pages supplied by the user (printed page numbers 3–6). */
 internal object ExpenseReportTemplateRenderer {
     private const val BLUE = 0xff1118dd.toInt()
     private const val GREEN = 0xff079858.toInt()
@@ -29,14 +29,16 @@ internal object ExpenseReportTemplateRenderer {
     private data class Column(val label: String, val fraction: Float)
 
     fun draw(canvas: Canvas, document: Document, pageIndex: Int, header: DocumentHeader, context: Context?) {
-        when (pageIndex.coerceIn(0, 2)) {
-            0 -> drawOperatingExpensesPage(canvas, document, header, context)
-            1 -> drawMonthlyEntitlementsPage(canvas, document)
-            else -> drawOtherExpensesPage(canvas, document)
+        val book = ExpenseBookData.decode(document.details)
+        when (pageIndex.coerceIn(0, 3)) {
+            0 -> drawOperatingExpensesPage(canvas, document, header, context, book)
+            1 -> drawMonthlyEntitlementsPage(canvas, document, book)
+            2 -> drawOtherExpensesPage(canvas, document, book)
+            else -> drawDebtPage(canvas, document, header, context, book)
         }
     }
 
-    private fun drawOperatingExpensesPage(c: Canvas, d: Document, header: DocumentHeader, context: Context?) {
+    private fun drawOperatingExpensesPage(c: Canvas, d: Document, header: DocumentHeader, context: Context?, book: ExpenseBookData) {
         drawInstitutionHeader(c, d, header, context)
         val month = d.purpose.orEmpty().ifBlank { "................" }
         val hijriYear = d.dateHijri.ifBlank { "144هـ" }
@@ -78,11 +80,12 @@ internal object ExpenseReportTemplateRenderer {
         listOf("مكاسن + خراشات", "ملابس + أحذية", "كفوف", "أكياس قمامة").forEach { label ->
             drawTableRow(c, x, y, width, supplies, listOf("", "", "", label), 27f); y += 27f
         }
-        drawTableRow(c, x, y, width, supplies, listOf("", "", "", "الإجمالي"), 27f, PALE_PINK, BLUE, true)
+        drawTableRow(c, x, y, width, supplies, listOf("", "", "", "الإجمالي"), 27f, PALE_PINK, BLUE, true); y += 27f
+        drawTableRow(c, x, y, width, supplies, listOf("", "", visibleAmount(book.chapterOneTotal), "إجمالي الباب الأول"), 27f, VIOLET, BLUE, true)
         drawFooter(c, 3)
     }
 
-    private fun drawMonthlyEntitlementsPage(c: Canvas, d: Document) {
+    private fun drawMonthlyEntitlementsPage(c: Canvas, d: Document, book: ExpenseBookData) {
         val month = d.purpose.orEmpty().ifBlank { "................" }
         val hijriYear = d.dateHijri.ifBlank { "144هـ" }
         val gregorianYear = d.dateGregorian.ifBlank { "202م" }
@@ -108,11 +111,11 @@ internal object ExpenseReportTemplateRenderer {
         listOf("بدل جلسات", "إضافي", "الحوافز والمكافآت", "إكرامية نقدية", "إكرامية عينية", "مياه وكهرباء", "مصروفات عهدة", "رسوم المقلب الشهرية", "خدمات الاستضافة والضيافة", "علاج وتداوي").forEach { label ->
             drawTableRow(c, x, y, width, columns, listOf("", "", "", "", label), 21f); y += 21f
         }
-        drawTableRow(c, x, y, width, columns, listOf("", "", "", "", "الإجمالي"), 27f, PALE_PINK, BLUE, true)
+        drawTableRow(c, x, y, width, columns, listOf("", "", visibleAmount(book.chapterTwoTotal), "", "إجمالي الباب الثاني"), 27f, PALE_PINK, BLUE, true)
         drawFooter(c, 4, "فاصل صفحات: -------------")
     }
 
-    private fun drawOtherExpensesPage(c: Canvas, d: Document) {
+    private fun drawOtherExpensesPage(c: Canvas, d: Document, book: ExpenseBookData) {
         val x = 40f
         val width = 515f
         drawBanner(c, 28f, 33f, listOf("الباب الثالث: مصروفات أخرى متنوعة وعهدة"), 13f)
@@ -131,10 +134,46 @@ internal object ExpenseReportTemplateRenderer {
             drawTableRow(c, x, y, width, columns, listOf("", "", label), 29f); y += 29f
         }
         drawMergedBand(c, x, y, width, 32f, "المصروفات المخصصة", GRAY, 0xff8b2424.toInt(), 13f, true); y += 32f
-        drawTableRow(c, x, y, width, columns, listOf("", "", "الإجمالي العام"), 38f, VIOLET, BLUE, true)
-        drawSignature(c, 35f, 250f, "مدير عام المديرية رئيس المجلس المحلي", "العميد / زكريا المساوي")
-        drawSignature(c, 310f, 250f, "مدير فرع صندوق النظافة بالمديرية", "رياض أحمد محمد ناصر")
+        drawTableRow(c, x, y, width, columns, listOf("", visibleAmount(book.chapterThreeTotal), "إجمالي الباب الثالث"), 25f, PALE_PINK, BLUE, true); y += 25f
+        drawTableRow(c, x, y, width, columns, listOf("", visibleAmount(book.generalTotal), "الإجمالي العام للأبواب الثلاثة"), 25f, VIOLET, BLUE, true); y += 25f
+        drawTableRow(c, x, y, width, columns, listOf("", ExpenseBookData.formatAmount(ExpenseBookData.FIXED_GENERAL_TOTAL), "حد المصروفات الثابت"), 25f, YELLOW, BLUE, true)
+        drawSignature(c, 35f, 250f, "مدير عام المديرية رئيس المجلس المحلي", "العميد / زكريا المساوي", 720f)
+        drawSignature(c, 310f, 250f, "مدير فرع صندوق النظافة بالمديرية", "رياض أحمد محمد ناصر", 720f)
         drawFooter(c, 5)
+    }
+
+    private fun drawDebtPage(c: Canvas, d: Document, header: DocumentHeader, context: Context?, book: ExpenseBookData) {
+        val month = d.purpose.orEmpty().ifBlank { "................" }
+        val titleX = 69f
+        val titleY = 11f
+        val titleWidth = 333f
+        val titleHeight = 24f
+        val border = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = BLUE; style = Paint.Style.STROKE; strokeWidth = 2f }
+        c.drawRect(titleX, titleY, titleX + titleWidth, titleY + titleHeight, border)
+        val titlePaint = paint(9f, INK, true)
+        drawFittedCentered(c, "الباب الرابع: مديونية فرع صندوق النظافة والتحسين مديرية الحزم", titleX + titleWidth / 2f, titleY + 10f, titlePaint, titleWidth - 12f, 6.5f)
+        drawFittedCentered(c, "لشهر: $month", titleX + titleWidth / 2f, titleY + 20f, titlePaint, titleWidth - 12f, 7f)
+
+        val x = 21f
+        val width = 387f
+        val columns = listOf(Column("التفاصيل", .34f), Column("المبلغ", .32f), Column("رواتب متأخرة للقوى العاملة", .34f))
+        var y = 50f
+        drawTableRow(c, x, y, width, columns, columns.map { it.label }, 20f, 0xff358df0.toInt(), Color.BLACK, true, true); y += 20f
+        drawTableRow(c, x, y, width, columns, listOf("", visibleAmount(book.debtFebruary), "شهر فبراير"), 20f); y += 20f
+        drawTableRow(c, x, y, width, columns, listOf("", visibleAmount(book.debtMarch), "شهر مارس"), 20f); y += 20f
+        drawTableRow(c, x, y, width, columns, listOf("", visibleAmount(book.debtPrevious), "أخرى ماضية"), 20f); y += 20f
+        if (book.excessDebt > 0) {
+            drawTableRow(c, x, y, width, columns, listOf("", ExpenseBookData.formatAmount(book.excessDebt), "زيادة المصروفات عن الثابت — $month"), 21f, Color.WHITE, INK, true); y += 21f
+        }
+        drawTableRow(c, x, y, width, columns, listOf("", visibleAmount(book.debtTotal), "الإجمالي"), 21f, PALE_PINK, BLUE, true)
+        val footer = paint(8.5f, 0xff2459ba.toInt(), false)
+        val footerRed = paint(8.5f, RED, false)
+        val prefix = "طبع بواسطة/"
+        val suffix = " نظام المالية التابع لفرع صندوق النظافة والتحسين مديرية الحزم"
+        val footerRight = 425f
+        drawRight(c, prefix, footerRight, 833f, footerRed)
+        drawRight(c, suffix, footerRight - footerRed.measureText(prefix) - 3f, 833f, footer)
+        drawLeft(c, "صفحة رقم: 6", 16f, 833f, footer)
     }
 
     private fun drawInstitutionHeader(c: Canvas, d: Document, header: DocumentHeader, context: Context?) {
@@ -153,7 +192,7 @@ internal object ExpenseReportTemplateRenderer {
         drawRight(c, "الموافق:      /      / $gregorian", 204f, 49f, body)
         drawRight(c, "المرفقات: ........................", 204f, 64f, body)
 
-        val logo = header.logos[DocumentType.EXPENSE_REPORT]
+        val logo = header.logos[DocumentType.EXPENSE_STATEMENT] ?: header.logos[DocumentType.EXPENSE_REPORT]
             ?: context?.let { BitmapFactory.decodeResource(it.resources, R.drawable.expense_report_logo) }
         logo?.let { c.drawBitmap(it, null, RectF(245f, 8f, 345f, 65f), Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)) }
     }
@@ -237,13 +276,13 @@ internal object ExpenseReportTemplateRenderer {
         p.textAlign = oldAlign
     }
 
-    private fun drawSignature(c: Canvas, x: Float, width: Float, title: String, name: String) {
+    private fun drawSignature(c: Canvas, x: Float, width: Float, title: String, name: String, topY: Float = 690f) {
         val right = x + width
         val p = paint(10f, INK, false)
         val bold = paint(10f, INK, true)
-        drawFittedRight(c, title, right, 690f, bold, width, 8f)
-        drawFittedRight(c, name, right, 716f, p, width, 8f)
-        drawRight(c, "التوقيع / ........................", right, 742f, p)
+        drawFittedRight(c, title, right, topY, bold, width, 8f)
+        drawFittedRight(c, name, right, topY + 26f, p, width, 8f)
+        drawRight(c, "التوقيع / ........................", right, topY + 52f, p)
     }
 
     private fun drawFooter(c: Canvas, pageNumber: Int, extraRight: String? = null) {
@@ -257,6 +296,8 @@ internal object ExpenseReportTemplateRenderer {
         drawLeft(c, "صفحة رقم: $pageNumber", 34f, 833f, p)
         extraRight?.let { drawRight(c, it, right, 811f, p) }
     }
+
+    private fun visibleAmount(value: Long): String = if (value == 0L) "" else ExpenseBookData.formatAmount(value)
 
     private fun paint(size: Float, color: Int, bold: Boolean) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         textSize = size

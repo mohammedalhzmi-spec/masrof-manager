@@ -33,7 +33,7 @@ object OfficialDocumentExporter {
             val landscape = !fixedA4 && design?.orientation == "LANDSCAPE"
             val width = if (fixedA4) 595 else if (half) 842 else (design?.pageWidth?.toInt() ?: if (landscape) 842 else 595)
             val height = if (fixedA4) 842 else if (half) 595 else (design?.pageHeight?.toInt() ?: if (landscape) 595 else 842)
-            val reportPages = if (document.type.isExpenseStatement()) 3 else 1
+            val reportPages = if (document.type.isExpenseStatement()) 4 else 1
             repeat(reportPages) { reportPageIndex ->
                 pageNumber += 1
                 val page = pdf.startPage(PdfDocument.PageInfo.Builder(width, height, pageNumber).create())
@@ -141,6 +141,8 @@ object OfficialDocumentExporter {
             return table(headers.size, body.toString())
         }
         fun boxedBanner(vararg lines: String): String = lines.joinToString("") { paragraph(it, "center", "079858", 20, true) }
+        val book = ExpenseBookData.decode(d.details)
+        fun shownAmount(value: Long): String = if (value == 0L) "" else ExpenseBookData.formatAmount(value)
         val logoXml = if (hasLogo) "<w:p><w:pPr><w:jc w:val=\"center\"/></w:pPr><w:r><w:drawing><wp:inline xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\" xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" xmlns:pic=\"http://schemas.openxmlformats.org/drawingml/2006/picture\"><wp:extent cx=\"720000\" cy=\"640000\"/><wp:docPr id=\"2\" name=\"Expense report logo\"/><a:graphic><a:graphicData uri=\"http://schemas.openxmlformats.org/drawingml/2006/picture\"><pic:pic><pic:blipFill><a:blip r:embed=\"rId2\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>" else ""
         val pageBreak = "<w:p><w:r><w:br w:type=\"page\"/></w:r></w:p>"
         val footer = { number: Int -> paragraph("طبع بواسطة/ نظام المالية التابع لفرع صندوق النظافة والتحسين مديرية الحزم     صفحة رقم: $number", "center", "2459BA", 16) }
@@ -159,6 +161,7 @@ object OfficialDocumentExporter {
             append(dataTable(listOf("ملاحظات", "متبقي آجل", "قيمتها مدفوع", "عدد", "البيان"), listOf("", "سروسه", "الإجمالي")))
             append(boxedBanner("المصروفات الشهرية المخصصة: بالمستلزمات الأساسية للنظافة"))
             append(dataTable(listOf("التفاصيل", "متبقي لم يصرف", "المبلغ المصروف", "البيان"), listOf("مكاسن + خراشات", "ملابس + أحذية", "كفوف", "أكياس قمامة", "الإجمالي")))
+            append(table(4, row(listOf("", "", shownAmount(book.chapterOneTotal), "إجمالي الباب الأول"), "A29CFF", "1118DD", true)))
             append(footer(3))
         }
         val wagesColumns = listOf("التفاصيل", "المبلغ المتبقي لم يصرف", "المبلغ المصروف", "العدد", "البيان")
@@ -168,7 +171,8 @@ object OfficialDocumentExporter {
         pageFourRows.append(band("مستحقات القوى العاملة الشهرية", 5, "C6C6C6", "8946C6"))
         listOf("مستحقات العمال", "مستحقات المشرفين", "مستحقات السائقين", "نسبة المحصلين").forEach { pageFourRows.append(row(listOf("", "", "", "", it))) }
         pageFourRows.append(band("مستحقات أخرى", 5, "C6C6C6", "8946C6"))
-        listOf("بدل جلسات", "إضافي", "الحوافز والمكافآت", "إكرامية نقدية", "إكرامية عينية", "مياه وكهرباء", "مصروفات عهدة", "رسوم المقلب الشهرية", "خدمات الاستضافة والضيافة", "علاج وتداوي", "الإجمالي").forEach { pageFourRows.append(row(listOf("", "", "", "", it), if (it == "الإجمالي") "FFE1E1" else "FFFFFF", if (it == "الإجمالي") "1118DD" else "171717", it == "الإجمالي")) }
+        listOf("بدل جلسات", "إضافي", "الحوافز والمكافآت", "إكرامية نقدية", "إكرامية عينية", "مياه وكهرباء", "مصروفات عهدة", "رسوم المقلب الشهرية", "خدمات الاستضافة والضيافة", "علاج وتداوي").forEach { pageFourRows.append(row(listOf("", "", "", "", it))) }
+        pageFourRows.append(row(listOf("", "", shownAmount(book.chapterTwoTotal), "", "إجمالي الباب الثاني"), "FFE1E1", "1118DD", true))
         val pageFour = boxedBanner("الباب الثاني: الأجور والمستحقات الشهرية وما في حكمها", "فرع صندوق النظافة والتحسين مديرية الحزم — لشهر: ${d.purpose.orEmpty().ifBlank { "................" }} ← ${d.dateHijri.ifBlank { "144هـ" }} / ${d.dateGregorian.ifBlank { "202م" }}") +
             paragraph("الرواتب والمستحقات الشهرية والإضافي والمكافأة", "center", size = 18, bold = true) + table(5, pageFourRows.toString()) + footer(4)
 
@@ -180,12 +184,25 @@ object OfficialDocumentExporter {
         pageFiveRows.append(band("المصاريف الجارية والتحويلية ومديونية", 3, "FF9DCF", "1118DD"))
         listOf("ديون محلية وسابقة", "ضرائب المرتبات والدخل والمبيعات").forEach { pageFiveRows.append(row(listOf("", "", it))) }
         pageFiveRows.append(band("المصروفات المخصصة", 3, "C6C6C6", "8B2424"))
-        pageFiveRows.append(row(listOf("", "", "الإجمالي العام"), "A29CFF", "1118DD", true))
+        pageFiveRows.append(row(listOf("", shownAmount(book.chapterThreeTotal), "إجمالي الباب الثالث"), "FFE1E1", "1118DD", true))
+        pageFiveRows.append(row(listOf("", shownAmount(book.generalTotal), "الإجمالي العام للأبواب الثلاثة"), "A29CFF", "1118DD", true))
+        pageFiveRows.append(row(listOf("", shownAmount(ExpenseBookData.FIXED_GENERAL_TOTAL), "حد المصروفات الثابت"), "FFC900", "1118DD", true))
         val pageFive = boxedBanner("الباب الثالث: مصروفات أخرى متنوعة وعهدة") + table(3, pageFiveRows.toString()) +
             paragraph("مدير عام المديرية رئيس المجلس المحلي                                      مدير فرع صندوق النظافة بالمديرية", "center", size = 18, bold = true) +
             paragraph("العميد / زكريا المساوي                                      رياض أحمد محمد ناصر", "center", size = 17) +
             paragraph("التوقيع / ..................................                                      التوقيع / ..................................", "center", size = 17) + footer(5)
-        return """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>$pageThree$pageBreak$pageFour$pageBreak$pageFive<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="480" w:right="600" w:bottom="480" w:left="600"/></w:sectPr></w:body></w:document>"""
+        val debtColumns = listOf("التفاصيل", "المبلغ", "رواتب متأخرة للقوى العاملة")
+        val pageSixRows = StringBuilder(row(debtColumns, "358DF0", "000000", true))
+            .append(row(listOf("", shownAmount(book.debtFebruary), "شهر فبراير")))
+            .append(row(listOf("", shownAmount(book.debtMarch), "شهر مارس")))
+            .append(row(listOf("", shownAmount(book.debtPrevious), "أخرى ماضية")))
+        if (book.excessDebt > 0) {
+            pageSixRows.append(row(listOf("", shownAmount(book.excessDebt), "زيادة المصروفات عن الثابت — شهر ${d.purpose.orEmpty().ifBlank { "التقرير" }}")))
+        }
+        pageSixRows.append(row(listOf("", shownAmount(book.debtTotal), "الإجمالي"), "FFE1E1", "1118DD", true))
+        val pageSix = boxedBanner("الباب الرابع: مديونية فرع صندوق النظافة والتحسين مديرية الحزم", "لشهر: ${d.purpose.orEmpty().ifBlank { "................" }}") +
+            table(3, pageSixRows.toString()) + footer(6)
+        return """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>$pageThree$pageBreak$pageFour$pageBreak$pageFive$pageBreak$pageSix<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="480" w:right="600" w:bottom="480" w:left="600"/></w:sectPr></w:body></w:document>"""
     }
 
 }

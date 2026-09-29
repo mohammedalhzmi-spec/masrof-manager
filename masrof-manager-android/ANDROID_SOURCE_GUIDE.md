@@ -14,6 +14,12 @@ The original persisted enum contains these 14 values:
 
 The Android chooser exposes the original createable types plus `VIOLATION_REPORT`. `BOOK` remains a separate document-book workflow. `EXPENSE_REPORT` is retained only as a compatibility alias for records created by an earlier feature build; new monthly statements use `EXPENSE_STATEMENT`.
 
+## Four-chapter monthly expense book
+
+`EXPENSE_STATEMENT` is presented to users as **دفتر مصروفات** and prints/export as four A4 pages (printed pages 3–6). Chapter totals are entered on the Android form; the general total is the sum of chapters 1–3. The fixed comparison amount is 952,000 YER, and only an excess above that amount is added as a separate debt row in chapter four, labelled with the report month. The fourth-page base debt rows begin with the reference values (230,000, 83,000, 617,000) and remain editable.
+
+The chapter totals and debt amounts are stored in a versioned payload inside the existing `Document.details` field, so no Room schema migration is needed and the existing Firestore mapper syncs them with the document. When an older expense statement has an amount but no chapter breakdown, that prior amount is preserved and is not reclassified as new debt; entering chapter totals replaces the legacy fallback.
+
 ## Local data
 
 The active local database is Room (`MasrofDatabase`, schema version 13). The v11-to-v12 migration adds `cloudId` and violation-report fields only when missing; v12-to-v13 adds `createdByUid` with an empty default. Both migrations are additive and preserve existing records. Before any future schema change, add and test a non-destructive migration; never use destructive fallback for user data.
@@ -38,7 +44,7 @@ Synchronization remains **manual and merge-only**: fetch a server snapshot, matc
 
 Validated locally:
 
-- Android Kotlin compilation, all 8 `:app:testDebugUnitTest` tests, and debug APK packaging succeeded after the final sync changes.
+- Android Kotlin compilation, all 14 `:app:testDebugUnitTest` tests (including native-graphics rendering of all four expense-book pages), and debug APK packaging succeeded after the four-chapter expense-book update.
 - Backend P-256 challenge/alias tests passed (4 tests); Node syntax and module-load checks passed. The production Functions dependency audit reported zero vulnerabilities after pinning the patched UUID transitive dependency.
 - Firestore Emulator rule authorization tests passed (6 tests): approved shared reads succeed; inactive, unapproved, and key-mismatched devices are denied; ordinary users cannot create approved/paid records or self-approve; finance/admin transitions, ownership, no-delete behavior, and private alias/approval collections are enforced.
 - The Firestore Emulator started with the Android-scoped config; no production project was contacted or modified.
