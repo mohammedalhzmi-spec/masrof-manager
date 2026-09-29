@@ -11,9 +11,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -32,6 +29,7 @@ import com.example.R
 private val GovNavy = Color(0xff123b5d)
 private val GovGreen = Color(0xff16834f)
 private val GovGold = Color(0xffb48a32)
+private val LoginBackground = Color(0xffeef3f5)
 private const val DeveloperCredit = "تم برمجة وتطوير هذا النظام بواسطة المطور محمد الحزمي 2026"
 
 @Composable
@@ -46,20 +44,23 @@ fun LoginScreen(onLogin: (String, String, Boolean) -> Unit, onRegister: () -> Un
         label = "emblem-scale"
     )
     val fieldColors = OutlinedTextFieldDefaults.colors(
-        focusedTextColor = MaterialTheme.colorScheme.onSurface,
-        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-        focusedBorderColor = GovNavy,
-        unfocusedBorderColor = Color(0xffc8d0d7)
+        focusedTextColor = GovNavy,
+        unfocusedTextColor = GovNavy,
+        focusedBorderColor = GovGreen,
+        unfocusedBorderColor = Color(0xffb9c6d0),
+        focusedLabelColor = GovGreen,
+        unfocusedLabelColor = Color(0xff607080)
     )
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xfff5f6f5))
+            .background(LoginBackground)
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 24.dp),
+            .padding(horizontal = 20.dp, vertical = 28.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        Spacer(Modifier.height(12.dp))
         Image(
             painter = painterResource(R.drawable.official_emblem),
             contentDescription = "شعار الجمهورية اليمنية",
@@ -70,15 +71,10 @@ fun LoginScreen(onLogin: (String, String, Boolean) -> Unit, onRegister: () -> Un
         Text("الجمهورية اليمنية", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = GovNavy)
         Text("صندوق النظافة والتحسين م/إب", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = GovNavy)
         Text("فرع مديرية الحزم", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = GovGreen)
-        Spacer(Modifier.height(16.dp))
-        Text("دخول المستخدمين", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = GovNavy)
-        Text(
-            "الدخول اللاحق يتم باسم المستخدم وكلمة المرور",
-            fontSize = 12.sp,
-            color = Color(0xff626d77),
-            textAlign = TextAlign.Center
-        )
-        Spacer(Modifier.height(16.dp))
+
+        Spacer(Modifier.height(18.dp))
+        HorizontalDivider(modifier = Modifier.fillMaxWidth(0.72f), thickness = 2.dp, color = GovGold)
+        Spacer(Modifier.height(18.dp))
 
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -86,53 +82,87 @@ fun LoginScreen(onLogin: (String, String, Boolean) -> Unit, onRegister: () -> Un
             colors = CardDefaults.cardColors(containerColor = Color.White),
             elevation = CardDefaults.cardElevation(defaultElevation = 5.dp)
         ) {
-            Column(Modifier.fillMaxWidth().padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(22.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalAlignment = Alignment.Start
+            ) {
+                Text(
+                    "دخول المستخدمين",
+                    modifier = Modifier.fillMaxWidth(),
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = GovNavy,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    "الدخول اللاحق يتم باسم المستخدم وكلمة المرور",
+                    modifier = Modifier.fillMaxWidth(),
+                    fontSize = 13.sp,
+                    color = Color(0xff607080),
+                    textAlign = TextAlign.Center
+                )
+                Spacer(Modifier.height(6.dp))
                 OutlinedTextField(
                     value = username,
                     onValueChange = { username = it },
                     label = { Text("اسم المستخدم") },
-                    leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) },
                     colors = fieldColors,
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
-                Spacer(Modifier.height(10.dp))
                 OutlinedTextField(
                     value = password,
                     onValueChange = { password = it },
                     label = { Text("كلمة المرور") },
-                    leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
                     colors = fieldColors,
                     visualTransformation = PasswordVisualTransformation(),
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = remember, onCheckedChange = { remember = it })
-                    Text("تذكر الحساب على هذا الجهاز", fontSize = 12.sp, color = Color(0xff374151))
+                    Checkbox(
+                        checked = remember,
+                        onCheckedChange = { remember = it },
+                        colors = CheckboxDefaults.colors(checkedColor = GovGreen)
+                    )
+                    Text("تذكر الحساب على هذا الجهاز", fontSize = 12.sp, color = GovNavy)
                 }
                 if (error != null) {
-                    Text(error, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(8.dp))
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xfffff1f0))
+                    ) {
+                        Text(
+                            error,
+                            modifier = Modifier.padding(10.dp),
+                            fontSize = 12.sp,
+                            color = Color(0xffa12a22)
+                        )
+                    }
                 }
                 Button(
                     onClick = { onLogin(username, password, remember) },
                     enabled = username.isNotBlank() && password.isNotBlank(),
                     colors = ButtonDefaults.buttonColors(containerColor = GovGreen),
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-                ) { Text("دخول آمن") }
-                OutlinedButton(onClick = onRegister, modifier = Modifier.fillMaxWidth()) {
+                    modifier = Modifier.fillMaxWidth().height(50.dp)
+                ) {
+                    Text("دخول آمن", fontWeight = FontWeight.Bold)
+                }
+                OutlinedButton(
+                    onClick = onRegister,
+                    modifier = Modifier.fillMaxWidth().height(48.dp)
+                ) {
                     Text("طلب إنشاء حساب مستخدم", color = GovNavy)
                 }
             }
         }
 
-        Spacer(Modifier.height(18.dp))
-        HorizontalDivider(modifier = Modifier.fillMaxWidth(0.72f), thickness = 2.dp, color = GovGold)
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(32.dp))
         Text(
             "منظومة داخلية لإدارة المستندات المالية وحركة الاعتماد",
             fontSize = 11.sp,
-            color = Color(0xff5b6570),
+            color = Color(0xff647482),
             textAlign = TextAlign.Center
         )
         Text(
