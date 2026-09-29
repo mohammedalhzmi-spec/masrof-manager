@@ -1,0 +1,12 @@
+{
+  "name": "masrof-manager-android-firestore-rules-tests",
+  "private": true,
+  "scripts": {
+    "test": "node --test rules.test.js",
+    "check": "node --check rules.test.js"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "5.0.2",
+    "firebase": "12.19.0"
+  }
+}

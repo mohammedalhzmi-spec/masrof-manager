@@ -1,8 +1,6 @@
 package com.mohammedalhzmi.masrofmanager.cloud
 
 import android.content.Context
-import android.os.Build
-import android.provider.Settings
 import com.google.android.gms.tasks.Task
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
@@ -13,9 +11,9 @@ import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.Source
+import com.google.firebase.functions.FirebaseFunctions
 import com.mohammedalhzmi.masrofmanager.data.Document
 import com.mohammedalhzmi.masrofmanager.data.MasrofRepository
-import java.util.Locale
 import java.util.UUID
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -51,9 +49,10 @@ data class CloudSyncReport(
     val conflicts: Int
 )
 
-/** Firebase bridge for the Android app. Local Room data remains authoritative and is never cleared. */
+/** Android Firebase bridge. Alias resolution and device approval are server-only; local Room data is never cleared. */
 class FirebaseCloudSyncService(context: Context) {
     private val appContext = context.applicationContext
+    private val deviceIdentity = AndroidCloudDeviceIdentity(appContext)
 
     private fun app(): FirebaseApp =
         FirebaseApp.getApps(appContext).firstOrNull()
@@ -62,26 +61,58 @@ class FirebaseCloudSyncService(context: Context) {
 
     private fun auth(): FirebaseAuth = FirebaseAuth.getInstance(app())
     private fun firestore(): FirebaseFirestore = FirebaseFirestore.getInstance(app())
+    private fun functions(): FirebaseFunctions = FirebaseFunctions.getInstance(app(), FUNCTIONS_REGION)
 
     suspend fun signIn(identifier: String, password: String): CloudAccessState {
         require(identifier.isNotBlank()) { "أدخل البريد الإلكتروني أو اسم المستخدم." }
         require(password.isNotEmpty()) { "أدخل كلمة المرور." }
-        val db = firestore()
-        val email = resolveEmail(identifier, db)
-        auth().signInWithEmailAndPassword(email, password).awaitResult()
-        return loadAccessState(createDeviceRequestIfMissing = true)
+        val identity = deviceIdentity.identity()
+        val begin = callFunction(
+            "beginCloudLogin",
+            mapOf(
+                "identifier" to identifier.trim(),
+                "password" to password,
+                "deviceId" to identity.deviceId,
+                "publicKey" to identity.publicKeyBase64,
+                "deviceName" to "Android ${android.os.Build.MODEL.orEmpty()}"
+            )
+        )
+        val challengeId = begin.string("challengeId")
+        val challenge = begin.string("challenge")
+        val signature = deviceIdentity.signChallenge(challenge)
+        val completed = callFunction(
+            "completeCloudLogin",
+            mapOf("challengeId" to challengeId, "signature" to signature)
+        )
+        auth().signInWithCustomToken(completed.string("customToken")).awaitResult()
+        return loadAccessState(createDeviceRequestIfMissing = false)
     }
 
     suspend fun currentAccessState(): CloudAccessState {
         if (FirebaseApp.getApps(appContext).isEmpty() && FirebaseApp.initializeApp(appContext) == null) {
             return CloudAccessState(message = "إعداد Firebase غير موجود. أضف google-services.json الخاص بالمشروع.")
         }
-        if (auth().currentUser == null) return CloudAccessState()
+        val user = auth().currentUser ?: return CloudAccessState()
+        val identity = deviceIdentity.identity()
+        val claims = user.getIdToken(false).awaitResult().claims
+        val tokenDeviceId = claims[CLAIM_DEVICE_ID] as? String
+        val tokenDeviceKey = claims[CLAIM_DEVICE_KEY] as? String
+        if (tokenDeviceId == null || tokenDeviceKey == null) {
+            auth().signOut()
+            return CloudAccessState(message = "يتطلب تحديث حماية السحابة تسجيل الدخول مجددًا.")
+        }
+        if (tokenDeviceId != identity.deviceId || tokenDeviceKey != identity.publicKeyHash) {
+            auth().signOut()
+            return CloudAccessState(message = "تغيّر مفتاح أمان هذا الجهاز. سجّل الدخول مجددًا لطلب اعتماده.")
+        }
         return loadAccessState(createDeviceRequestIfMissing = false)
     }
 
-    suspend fun requestDeviceApproval(): CloudAccessState =
-        loadAccessState(createDeviceRequestIfMissing = true)
+    suspend fun requestDeviceApproval(): CloudAccessState {
+        requireNotNull(auth().currentUser) { "سجّل الدخول إلى السحابة أولاً." }
+        callFunction("requestCloudDeviceApproval", emptyMap())
+        return loadAccessState(createDeviceRequestIfMissing = false)
+    }
 
     fun signOut() {
         if (FirebaseApp.getApps(appContext).isNotEmpty()) auth().signOut()
@@ -90,121 +121,78 @@ class FirebaseCloudSyncService(context: Context) {
     private suspend fun loadAccessState(createDeviceRequestIfMissing: Boolean): CloudAccessState {
         val user = auth().currentUser ?: return CloudAccessState()
         val uid = user.uid
-        val email = user.email.orEmpty()
         val profileSnapshot = firestore().collection("users").document(uid).get(Source.SERVER).awaitResult()
         if (!profileSnapshot.exists()) {
-            return CloudAccessState(uid, email, gate = CloudGate.PROFILE_MISSING, message = "لا يوجد ملف مستخدم سحابي لهذا الحساب.")
+            return CloudAccessState(uid, user.email.orEmpty(), gate = CloudGate.PROFILE_MISSING, message = "لا يوجد ملف مستخدم سحابي لهذا الحساب.")
         }
+        val email = profileSnapshot.getString("email").orEmpty().ifBlank { user.email.orEmpty() }
         val role = profileSnapshot.getString("role") ?: "ADMIN_USER"
         if (profileSnapshot.getBoolean("active") != true) {
             return CloudAccessState(uid, email, role, CloudGate.ACCOUNT_INACTIVE, "الحساب غير معتمد أو غير مفعل في Firebase.")
         }
 
-        val deviceId = androidDeviceId(uid)
-        val deviceRef = firestore().collection("devices").document("${uid}_$deviceId")
+        val identity = deviceIdentity.identity()
+        val deviceRef = firestore().collection("devices").document("${uid}_${identity.deviceId}")
         var deviceSnapshot = deviceRef.get(Source.SERVER).awaitResult()
         if (!deviceSnapshot.exists()) {
             if (createDeviceRequestIfMissing) {
-                val now = System.currentTimeMillis()
-                deviceRef.set(
-                    mapOf(
-                        "userId" to uid,
-                        "deviceId" to deviceId,
-                        "email" to email,
-                        "deviceName" to "Android ${Build.MODEL.orEmpty()}",
-                        "status" to "PENDING",
-                        "approved" to false,
-                        "createdAt" to now,
-                        "lastSeenAt" to now
-                    )
-                ).awaitResult()
-                ensureAccessRequest(uid, email, deviceId, now)
+                callFunction("requestCloudDeviceApproval", emptyMap())
                 deviceSnapshot = deviceRef.get(Source.SERVER).awaitResult()
             } else {
                 return CloudAccessState(uid, email, role, CloudGate.DEVICE_PENDING, "هذا الجهاز غير مسجل للاعتماد بعد.")
             }
-        } else if (createDeviceRequestIfMissing && !isApprovedDevice(deviceSnapshot)) {
-            val now = System.currentTimeMillis()
-            deviceRef.set(mapOf("lastSeenAt" to now), SetOptions.merge()).awaitResult()
-            ensureAccessRequest(uid, email, deviceId, now)
         }
 
+        if (deviceSnapshot.getString("publicKeyHash") != identity.publicKeyHash) {
+            return CloudAccessState(uid, email, role, CloudGate.DEVICE_PENDING, "مفتاح هذا الجهاز تغيّر؛ سجّل الخروج ثم الدخول لطلب اعتماد المفتاح الجديد.")
+        }
         val approved = isApprovedDevice(deviceSnapshot)
         if (!approved) {
+            if (createDeviceRequestIfMissing) callFunction("requestCloudDeviceApproval", emptyMap())
             return CloudAccessState(uid, email, role, CloudGate.DEVICE_PENDING, "تم إرسال طلب اعتماد الجهاز أو ما زال بانتظار موافقة المدير.")
         }
-        deviceRef.set(mapOf("lastSeenAt" to System.currentTimeMillis()), SetOptions.merge()).awaitResult()
+
+        val tokenClaims = user.getIdToken(false).awaitResult().claims
+        if (tokenClaims[CLAIM_DEVICE_APPROVED] != true) refreshDeviceSession()
         return CloudAccessState(uid, email, role, CloudGate.READY, "الحساب والجهاز معتمدان؛ يمكنك مزامنة المستندات يدويًا.")
     }
 
     private fun isApprovedDevice(snapshot: DocumentSnapshot): Boolean =
         snapshot.getString("status") == "APPROVED"
             && (snapshot.getBoolean("approved") == true || !snapshot.contains("approved"))
+            && snapshot.getString("publicKeyHash") == deviceIdentity.identity().publicKeyHash
 
-    private suspend fun ensureAccessRequest(uid: String, email: String, deviceId: String, now: Long) {
-        val requestId = "${uid}_$deviceId"
-        val requestRef = firestore().collection("accessRequests").document(requestId)
-        val existing = requestRef.get(Source.SERVER).awaitResult()
-        if (!existing.exists()) {
-            requestRef.set(
-                mapOf(
-                    "userId" to uid,
-                    "email" to email,
-                    "deviceId" to deviceId,
-                    "deviceName" to "Android ${Build.MODEL.orEmpty()}",
-                    "status" to "PENDING",
-                    "requestedAt" to now
-                )
-            ).awaitResult()
-        }
+    private suspend fun refreshDeviceSession() {
+        val begin = callFunction("beginCloudSessionRefresh", emptyMap())
+        val challengeId = begin.string("challengeId")
+        val signature = deviceIdentity.signChallenge(begin.string("challenge"))
+        val completed = callFunction(
+            "completeCloudSessionRefresh",
+            mapOf("challengeId" to challengeId, "signature" to signature)
+        )
+        auth().signInWithCustomToken(completed.string("customToken")).awaitResult()
     }
 
     suspend fun pendingDeviceRequests(): List<CloudDeviceRequest> {
-        val state = loadAccessState(createDeviceRequestIfMissing = false)
-        require(state.canManageDevices) { "هذه العملية متاحة لمدير النظام فقط." }
-        val snapshot = firestore().collection("accessRequests")
-            .whereEqualTo("status", "PENDING")
-            .get(Source.SERVER)
-            .awaitResult()
-        return snapshot.documents.map { doc ->
+        val response = callFunction("listPendingCloudDevices", emptyMap())
+        val rows = response["requests"] as? List<*> ?: return emptyList()
+        return rows.mapNotNull { row ->
+            val data = row as? Map<*, *> ?: return@mapNotNull null
             CloudDeviceRequest(
-                id = doc.id,
-                userId = doc.getString("userId").orEmpty(),
-                email = doc.getString("email").orEmpty(),
-                deviceId = doc.getString("deviceId").orEmpty(),
-                deviceName = doc.getString("deviceName") ?: "جهاز Android",
-                requestedAt = doc.getLong("requestedAt") ?: 0L
+                id = data["id"] as? String ?: return@mapNotNull null,
+                userId = data["userId"] as? String ?: "",
+                email = data["email"] as? String ?: "",
+                deviceId = data["deviceId"] as? String ?: "",
+                deviceName = data["deviceName"] as? String ?: "جهاز Android",
+                requestedAt = (data["requestedAt"] as? Number)?.toLong() ?: 0L
             )
         }
     }
 
     suspend fun approveDevice(request: CloudDeviceRequest) {
-        val state = loadAccessState(createDeviceRequestIfMissing = false)
-        require(state.canManageDevices) { "هذه العملية متاحة لمدير النظام فقط." }
-        val adminUid = requireNotNull(state.uid)
-        val now = System.currentTimeMillis()
-        firestore().collection("devices").document("${request.userId}_${request.deviceId}")
-            .set(
-                mapOf(
-                    "status" to "APPROVED",
-                    "approved" to true,
-                    "approvedBy" to adminUid,
-                    "approvedAt" to now
-                ),
-                SetOptions.merge()
-            ).awaitResult()
-        firestore().collection("accessRequests").document(request.id)
-            .set(mapOf("status" to "APPROVED", "reviewedBy" to adminUid, "reviewedAt" to now), SetOptions.merge())
-            .awaitResult()
-        firestore().collection("notifications").add(
-            mapOf(
-                "userId" to request.userId,
-                "title" to "اعتماد الجهاز",
-                "body" to "تم اعتماد جهازك من المدير",
-                "read" to false,
-                "createdAt" to now
-            )
-        ).awaitResult()
+        val response = callFunction("approveCloudDevice", mapOf("requestId" to request.id))
+        val customToken = response["customToken"] as? String
+        if (!customToken.isNullOrBlank()) auth().signInWithCustomToken(customToken).awaitResult()
     }
 
     suspend fun syncDocuments(repository: MasrofRepository): CloudSyncReport {
@@ -273,6 +261,8 @@ class FirebaseCloudSyncService(context: Context) {
         for (original in localDocuments) {
             var document = original
             var cloudId = document.cloudId
+            val hadCloudId = cloudId.isNotBlank()
+            var matchedLegacyOwner: String? = null
             if (cloudId.isBlank()) {
                 val legacyId = "android_${document.id}"
                 val legacySnapshot = remoteById[legacyId]
@@ -285,25 +275,36 @@ class FirebaseCloudSyncService(context: Context) {
                     && CloudDocumentMapper.matchesLegacyRecord(document, legacyRemote)
                 ) {
                     cloudId = legacyId
+                    matchedLegacyOwner = legacyRemote.createdByUid
                 } else {
                     cloudId = UUID.randomUUID().toString()
                 }
             }
-            val creatorUid = document.createdByUid.ifBlank { uid }
+            val remoteSnapshot = remoteById[cloudId]
+            val remoteOwner = remoteSnapshot?.data?.let { data ->
+                CloudDocumentMapper.fromMap(cloudId, data)?.createdByUid
+            } ?: matchedLegacyOwner
+            val creatorUid = CloudDocumentMapper.syncCreatorUid(
+                localOwner = document.createdByUid,
+                currentUid = uid,
+                remoteOwner = remoteOwner,
+                isNewLocalRecord = !hadCloudId && remoteSnapshot == null && matchedLegacyOwner == null
+            )
             val prepared = document.copy(cloudId = cloudId, createdByUid = creatorUid)
             if (prepared != document) repository.update(prepared)
 
-            val remoteSnapshot = remoteById[cloudId]
             if (remoteSnapshot == null) {
                 if (creatorUid != uid) {
                     skipped++
                     continue
                 }
                 try {
-                    db.collection("documents").document(cloudId)
-                        .set(CloudDocumentMapper.toMap(prepared, cloudId, uid, prepared.updatedAt))
-                        .awaitResult()
-                    uploaded++
+                    val created = createCloudDocumentIfAbsent(
+                        db,
+                        cloudId,
+                        CloudDocumentMapper.toMap(prepared, cloudId, uid, prepared.updatedAt)
+                    )
+                    if (created) uploaded++ else conflicts++
                 } catch (error: FirebaseFirestoreException) {
                     if (error.code == FirebaseFirestoreException.Code.PERMISSION_DENIED) skipped++ else throw error
                 }
@@ -323,10 +324,12 @@ class FirebaseCloudSyncService(context: Context) {
                 continue
             }
             try {
-                db.collection("documents").document(cloudId)
-                    .set(CloudDocumentMapper.toMap(prepared, cloudId, uid, prepared.updatedAt), SetOptions.merge())
-                    .awaitResult()
-                uploaded++
+                val updated = updateCloudDocumentIfUnchanged(
+                    db,
+                    remoteSnapshot,
+                    CloudDocumentMapper.toMap(prepared, cloudId, uid, prepared.updatedAt)
+                )
+                if (updated) uploaded++ else conflicts++
             } catch (error: FirebaseFirestoreException) {
                 if (error.code == FirebaseFirestoreException.Code.PERMISSION_DENIED) skipped++ else throw error
             }
@@ -351,30 +354,55 @@ class FirebaseCloudSyncService(context: Context) {
         return documents
     }
 
-    private suspend fun resolveEmail(identifier: String, db: FirebaseFirestore): String {
-        val normalized = identifier.trim().lowercase(Locale.ROOT)
-        if ('@' in normalized) return normalized
-        val candidates = listOf(
-            normalized.replace('/', '_'),
-            normalized.replace(':', '_'),
-            normalized.replace('@', '_'),
-            normalized
-        ).distinct()
-        for (candidate in candidates) {
-            val alias = db.collection("authAliases").document(candidate).get(Source.SERVER).awaitResult()
-            val authEmail = alias.getString("authEmail")
-            if (!authEmail.isNullOrBlank()) return authEmail.trim().lowercase(Locale.ROOT)
-        }
-        return "$normalized@accounts.masrof-manager.local"
+    private suspend fun createCloudDocumentIfAbsent(
+        db: FirebaseFirestore,
+        cloudId: String,
+        data: Map<String, Any?>
+    ): Boolean {
+        val reference = db.collection("documents").document(cloudId)
+        return db.runTransaction { transaction ->
+            if (transaction.get(reference).exists()) {
+                false
+            } else {
+                transaction.set(reference, data)
+                true
+            }
+        }.awaitResult()
     }
 
-    private fun androidDeviceId(uid: String): String {
-        val raw = Settings.Secure.getString(appContext.contentResolver, Settings.Secure.ANDROID_ID)
-        return raw?.takeIf(String::isNotBlank) ?: "unknown-${uid.take(8)}"
+    private suspend fun updateCloudDocumentIfUnchanged(
+        db: FirebaseFirestore,
+        expected: DocumentSnapshot,
+        data: Map<String, Any?>
+    ): Boolean {
+        val expectedData = expected.data ?: return false
+        val reference = expected.reference
+        return db.runTransaction { transaction ->
+            val current = transaction.get(reference)
+            if (!current.exists() || current.data != expectedData) {
+                false
+            } else {
+                transaction.set(reference, data, SetOptions.merge())
+                true
+            }
+        }.awaitResult()
     }
+
+    private suspend fun callFunction(name: String, data: Map<String, Any?>): Map<String, Any?> {
+        val result = functions().getHttpsCallable(name).call(data).awaitResult()
+        return result.data as? Map<String, Any?>
+            ?: throw IllegalStateException("استجابة خدمة السحابة غير صالحة.")
+    }
+
+    private fun Map<String, Any?>.string(key: String): String =
+        this[key] as? String ?: throw IllegalStateException("استجابة خدمة السحابة غير مكتملة.")
 
     private companion object {
         const val PAGE_SIZE = 200
+        const val FUNCTIONS_REGION = "us-central1"
+        const val CLAIM_DEVICE_ID = "device_id"
+        const val CLAIM_DEVICE_KEY = "device_key"
+        const val CLAIM_DEVICE_APPROVED = "device_approved"
     }
 }
 

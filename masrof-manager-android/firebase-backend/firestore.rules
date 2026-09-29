@@ -1,0 +1,115 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userPath(uid) {
+      return /databases/$(database)/documents/users/$(uid);
+    }
+
+    function devicePath(uid, deviceId) {
+      return /databases/$(database)/documents/devices/$(uid + '_' + deviceId);
+    }
+
+    function activeUser() {
+      return signedIn()
+        && exists(userPath(request.auth.uid))
+        && get(userPath(request.auth.uid)).data.active == true;
+    }
+
+    function approvedDevice() {
+      return activeUser()
+        && request.auth.token.device_approved == true
+        && request.auth.token.device_id is string
+        && request.auth.token.device_key is string
+        && exists(devicePath(request.auth.uid, request.auth.token.device_id))
+        && get(devicePath(request.auth.uid, request.auth.token.device_id)).data.userId == request.auth.uid
+        && get(devicePath(request.auth.uid, request.auth.token.device_id)).data.status == 'APPROVED'
+        && get(devicePath(request.auth.uid, request.auth.token.device_id)).data.publicKeyHash == request.auth.token.device_key;
+    }
+
+    function systemAdmin() {
+      return activeUser()
+        && request.auth.token.app_role == 'SYSTEM_ADMIN'
+        && get(userPath(request.auth.uid)).data.role == 'SYSTEM_ADMIN';
+    }
+
+    function financialEditor() {
+      return activeUser()
+        && get(userPath(request.auth.uid)).data.role in ['SYSTEM_ADMIN', 'FINANCE_DIRECTOR'];
+    }
+
+    match /documents/{documentId} {
+      // Approved, active accounts share the organization-wide ledger.
+      allow read: if approvedDevice();
+      allow create: if approvedDevice()
+        && request.resource.data.createdByUid == request.auth.uid
+        && request.resource.data.id == documentId
+        && (
+          financialEditor()
+          || request.resource.data.status in ['DRAFT', 'SUBMITTED']
+        );
+      allow update: if approvedDevice()
+        && (
+          request.resource.data.createdByUid == resource.data.createdByUid
+          || (!('createdByUid' in resource.data)
+            && financialEditor()
+            && request.resource.data.createdByUid == request.auth.uid)
+        )
+        && (
+          financialEditor()
+          || (
+            resource.data.createdByUid == request.auth.uid
+            && resource.data.status in ['DRAFT', 'SUBMITTED']
+            && (
+              request.resource.data.status == resource.data.status
+              || (resource.data.status == 'DRAFT' && request.resource.data.status == 'SUBMITTED')
+            )
+          )
+        );
+      // Cloud sync is merge-only; client deletions are never allowed.
+      allow delete: if false;
+    }
+
+    match /users/{uid} {
+      allow get: if signedIn() && (request.auth.uid == uid || (approvedDevice() && systemAdmin()));
+      allow list: if approvedDevice() && systemAdmin();
+      // Profile and role changes are managed by trusted server workflows only.
+      allow create, update, delete: if false;
+    }
+
+    match /devices/{deviceDocId} {
+      allow get: if signedIn() && resource.data.userId == request.auth.uid;
+      allow list: if approvedDevice() && systemAdmin();
+      // Device registration, approval, and revocation are callable-function only.
+      allow create, update, delete: if false;
+    }
+
+    match /accessRequests/{requestId} {
+      // Pending queues are retrieved by a server-side admin callable.
+      allow read, write: if false;
+    }
+
+    match /authAliases/{aliasId} {
+      // Username-to-email mappings are private to the trusted Functions runtime.
+      allow read, write: if false;
+    }
+
+    match /notifications/{notificationId} {
+      allow get, list: if approvedDevice() && resource.data.userId == request.auth.uid;
+      allow create, update, delete: if false;
+    }
+
+    match /_androidLoginChallenges/{challengeId} {
+      allow read, write: if false;
+    }
+
+    match /_androidLoginAttempts/{attemptId} {
+      allow read, write: if false;
+    }
+
+    // Default deny for every collection not explicitly covered above.
+  }
+}

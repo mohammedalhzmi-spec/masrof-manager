@@ -47,8 +47,12 @@ fun CloudSyncScreen(viewModel: MasrofViewModel, onBack: () -> Unit) {
     ) {
         Text("حساب Firebase والمزامنة", style = MaterialTheme.typography.headlineMedium)
         Text(
-            "المزامنة يدوية وتدمج سجلات السحابة مع قاعدة Room المحلية؛ لا تحذف مستندات محلية. سجّل الدخول بالحساب الموجود في الإصدار الأصلي.",
+            "المزامنة يدوية وتدمج سجلات السحابة مع قاعدة Room المحلية؛ لا تحذف مستندات محلية. يتم التحقق من اسم المستخدم داخل الخدمة الآمنة ولا يُكشف البريد المرتبط للهاتف.",
             style = MaterialTheme.typography.bodyMedium
+        )
+        Text(
+            "قد يلزم اعتماد هذا الجهاز مرة واحدة بعد تفعيل حماية مفاتيح الأجهزة.",
+            style = MaterialTheme.typography.bodySmall
         )
         HorizontalDivider()
         Text(state.message, style = MaterialTheme.typography.bodyMedium)

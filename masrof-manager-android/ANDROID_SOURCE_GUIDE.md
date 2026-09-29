@@ -2,9 +2,9 @@
 
 ## Source of truth
 
-The maintained, buildable Android application is `masrof-manager-android/app/src/main`. The original APK reconstruction is retained only as a reference in [`reference/original-release/`](reference/original-release/README.md); it is deliberately outside Gradle source sets and must not be compiled or copied wholesale into the app.
+The maintained Android application is `masrof-manager-android/app/src/main`. The original APK reconstruction is retained only as a behavior reference in [`reference/original-release/`](reference/original-release/README.md); it is outside Gradle source sets and must not be compiled or copied wholesale into the app. Decompiled output can contain errors.
 
-The original release APK was version `1.1.0` (versionCode `2`). Its decompiled Java-like output is not equivalent to the original Kotlin project and contains decompilation errors. Use the reference to compare behavior, then port changes into the maintained Kotlin sources.
+The original release APK was version `1.1.0` (versionCode `2`). Keep the same application ID and original signing certificate for update compatibility.
 
 ## Document type parity
 
@@ -12,22 +12,53 @@ The original persisted enum contains these 14 values:
 
 `REQUEST`, `ORDER`, `RECEIPT`, `RECEIPT_PAPER`, `FINANCIAL_MEMO`, `PURCHASE_ORDER`, `SUPPLY_PERMIT`, `RECEIPT_MINUTES`, `FINANCIAL_CLAIM`, `CUSTODY_SETTLEMENT`, `ADVANCE_PERMIT`, `EXPENSE_STATEMENT`, `OFFICIAL_FINANCIAL_LETTER`, `BOOK`.
 
-The Android chooser exposes the original createable document types plus `VIOLATION_REPORT`. `BOOK` remains the separate document-book workflow, as in the original APK. `EXPENSE_REPORT` is retained only as a compatibility alias for records created by the earlier feature build; new expense statements use the original `EXPENSE_STATEMENT` value.
+The Android chooser exposes the original createable types plus `VIOLATION_REPORT`. `BOOK` remains a separate document-book workflow. `EXPENSE_REPORT` is retained only as a compatibility alias for records created by an earlier feature build; new monthly statements use `EXPENSE_STATEMENT`.
 
 ## Local data
 
-The active local database is Room (`MasrofDatabase`, schema version 13). The 11-to-12 migration adds `cloudId` and violation-report fields only when missing; the 12-to-13 migration adds `createdByUid` with an empty default. Both are additive and preserve existing records. Current Room entities cover documents, organization profile/settings, contacts, users, audit logs, document designs, and design elements. The app also has local database/full-backup export and restore code. Before any future schema change, add and test a non-destructive migration; do not use destructive fallback for user data.
+The active local database is Room (`MasrofDatabase`, schema version 13). The v11-to-v12 migration adds `cloudId` and violation-report fields only when missing; v12-to-v13 adds `createdByUid` with an empty default. Both migrations are additive and preserve existing records. Before any future schema change, add and test a non-destructive migration; never use destructive fallback for user data.
 
-## Cloud synchronization — important integration boundary
+## Android cloud sync and secure username flow
 
-The maintained Android source now includes `cloud/FirebaseCloudSyncService.kt` and `cloud/CloudDocumentMapper.kt`. The Settings screen supports signing in to an existing Firebase account by email or username alias, checking device approval, administrator approval of pending devices, and **explicit/manual** synchronization. It uses the original Android ID device key, existing username-alias/fallback email behavior, and legacy Firestore field names where needed.
+The Android implementation is in `app/src/main/java/.../cloud/`:
 
-Synchronization first reads a server snapshot, then merges into Room by `cloudId` (with a cautious fingerprint check for legacy `android_<numeric-id>` records). It never clears local data or applies remote deletions. Local-only records receive stable UUID cloud IDs; local edits are uploaded only when the Firestore owner/role rules permit. Equal-timestamp differences are preserved locally and reported as conflicts. Newly added document ownership metadata uses additive Room migration 12-to-13.
+- `FirebaseCloudSyncService.kt` owns explicit/manual sync and callable-function access.
+- `CloudDocumentMapper.kt` preserves original Firestore field names and legacy records.
+- `AndroidCloudDeviceIdentity.kt` creates a P-256 signing key in Android Keystore; the private key never leaves the device.
 
-The integration is **not production-ready until the correct Firebase project configuration and reviewed Firestore rules are installed**. `google-services.json` must match the existing Firebase project and application ID and must remain untracked. The selected sharing behavior is that active, approved accounts can read the shared document collection; writes should remain restricted by owner/finance/admin rules. Do not enable production sync based only on the decompiled client or the local draft rules. No production sync or rules deployment has been performed from this workspace.
+The login callables resolve the existing `authAliases` username mapping only on the server, verify the supplied password with Firebase Auth, discard the REST ID/refresh tokens, and issue a Firebase custom token for the existing UID. The mapped email is not returned to Android. A short-lived challenge must be signed by the install's Keystore private key. Device registration, pending queues, admin approval, and session-claim refresh are server-managed; the Android client cannot write device approvals directly.
 
-For local verification, the Firebase client metadata was reconstructed from the original APK resources into an ignored `app/google-services.json`; the Google Services Gradle task and Kotlin compilation succeeded. This file is not in Git. Before production release, compare it with the current project export in Firebase Console, especially if the Firebase project or Android app registration has changed.
+The selected sharing policy is preserved: active accounts on approved devices can read the shared organization-wide `documents` ledger. Ordinary users may create only `DRAFT`/`SUBMITTED` documents, may not self-approve or self-pay, and may edit only their own drafts/submitted documents without changing status (except `DRAFT` to `SUBMITTED`). Finance/system administrators manage workflow transitions. Firestore rules preserve document ownership, deny client deletes, and deny client access to username aliases and approval queues. Existing device records without a key binding will need one-time re-approval after the secure flow is deployed. A `SYSTEM_ADMIN` may bootstrap the first trusted admin device only while no active, approved `SYSTEM_ADMIN` device exists in the project; once one exists, it must approve all new devices.
+
+Synchronization remains **manual and merge-only**: fetch a server snapshot, match by `cloudId` (with cautious fingerprint matching for legacy `android_<numeric-id>` IDs), preserve ownerless legacy ownership, and never clear local data or apply remote deletions. Creates and updates use Firestore transactions as compare-and-set operations against the fetched document, so concurrent remote edits are reported as conflicts rather than silently overwritten. Local-only records get stable UUID cloud IDs.
+
+## Android-only Firebase backend and validation
+
+`firebase-backend/` contains its own Firebase config, Node.js 22 Functions v2 package, Firestore rules, TTL indexes, and a separate development-only `rules-tests/` package. This stays separate from repository-root/Web deployment configuration. Never deploy from the repository root.
+
+Validated locally:
+
+- Android Kotlin compilation, all 8 `:app:testDebugUnitTest` tests, and debug APK packaging succeeded after the final sync changes.
+- Backend P-256 challenge/alias tests passed (4 tests); Node syntax and module-load checks passed. The production Functions dependency audit reported zero vulnerabilities after pinning the patched UUID transitive dependency.
+- Firestore Emulator rule authorization tests passed (6 tests): approved shared reads succeed; inactive, unapproved, and key-mismatched devices are denied; ordinary users cannot create approved/paid records or self-approve; finance/admin transitions, ownership, no-delete behavior, and private alias/approval collections are enforced.
+- The Firestore Emulator started with the Android-scoped config; no production project was contacted or modified.
+
+The app's `google-services.json` was recovered locally from the original APK and remains Git-ignored. It has not been independently compared with the current production Firebase Console export. Confirm project ID, Android app registration, API key, roles, and production schema before rollout.
+
+**No production Firebase Functions or Firestore rules have been deployed.** Deployment requires an authorized Firebase project owner/admin session and a final review of the current live rules and data fields. `functions/.env.<project-id>` must be created locally with `FIREBASE_WEB_API_KEY` from the matching `google-services.json`; it is ignored and must never be committed. Firebase App Check is not yet enforced because the installed/sideloaded distribution's provider compatibility has not been validated; configure and test an appropriate provider before enabling enforcement.
+
+Local backend checks (run from `firebase-backend/`):
+
+```sh
+npm --prefix functions install
+npm --prefix functions test
+npm --prefix functions run check
+npm --prefix rules-tests install
+firebase emulators:exec --config firebase.json --only firestore --project demo-masrof-manager "cd rules-tests && npm test"
+```
+
+When deployment access and final project review are available, deploy only from `firebase-backend/` with its config. This Android backend must not alter the repository-root Web app or its Firebase configuration.
 
 ## Release signing
 
-Release signing must use the original private keystore outside the Git repository, with passwords passed only as environment variables. Before generating an update APK, verify that the keystore certificate matches the certificate of the user's currently installed release. Never commit the keystore, `google-services.json`, passwords, or local SDK configuration.
+Release updates must use the original private keystore outside the Git repository. The certificate matched the original APK during the earlier build; keep the same application ID, version continuity, and certificate. Pass signing passwords only through hidden prompts/environment variables. Never commit the keystore, `google-services.json`, passwords, Firebase deployment credentials, or local SDK configuration.

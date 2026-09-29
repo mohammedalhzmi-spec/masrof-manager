@@ -111,6 +111,14 @@ internal object CloudDocumentMapper {
         )
     }
 
+    fun syncCreatorUid(localOwner: String, currentUid: String, remoteOwner: String?, isNewLocalRecord: Boolean): String =
+        when {
+            localOwner.isNotBlank() -> localOwner
+            remoteOwner != null -> remoteOwner
+            isNewLocalRecord -> currentUid
+            else -> ""
+        }
+
     fun legacyLocalId(cloudId: String): Long? {
         val prefix = "android_"
         if (!cloudId.startsWith(prefix)) return null

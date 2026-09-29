@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuthException
 import com.google.firebase.firestore.FirebaseFirestoreException
+import com.google.firebase.functions.FirebaseFunctionsException
 import com.mohammedalhzmi.masrofmanager.data.Document
 import com.mohammedalhzmi.masrofmanager.data.MasrofDatabase
 import com.mohammedalhzmi.masrofmanager.data.MasrofRepository
@@ -228,6 +229,7 @@ class MasrofViewModel(
             try {
                 cloudSyncService.approveDevice(request)
                 pendingCloudDevices.value = cloudSyncService.pendingDeviceRequests()
+                cloudAccessState.value = cloudSyncService.currentAccessState()
                 cloudOperationMessage.value = "تم اعتماد الجهاز."
             } catch (error: Throwable) {
                 cloudOperationMessage.value = cloudErrorMessage(error)
@@ -247,6 +249,14 @@ class MasrofViewModel(
             "ERROR_TOO_MANY_REQUESTS" -> "محاولات كثيرة. انتظر قليلًا ثم حاول مرة أخرى."
             "ERROR_NETWORK_REQUEST_FAILED" -> "تعذر الاتصال بـ Firebase. تحقق من الإنترنت وحاول مرة أخرى."
             else -> "تعذر تسجيل الدخول إلى حساب Firebase."
+        }
+        if (error is FirebaseFunctionsException) return when (error.code) {
+            FirebaseFunctionsException.Code.UNAUTHENTICATED -> "بيانات الدخول غير صحيحة أو تعذر إثبات هوية هذا الجهاز."
+            FirebaseFunctionsException.Code.RESOURCE_EXHAUSTED -> "محاولات كثيرة. انتظر قليلًا ثم حاول مرة أخرى."
+            FirebaseFunctionsException.Code.PERMISSION_DENIED -> error.message?.takeIf { it.isNotBlank() } ?: "رفض الخادم هذه العملية؛ تحقق من اعتماد الحساب والجهاز."
+            FirebaseFunctionsException.Code.FAILED_PRECONDITION -> error.message?.takeIf { it.isNotBlank() } ?: "يلزم تحديث إعدادات الدخول أو إعادة تسجيل الدخول."
+            FirebaseFunctionsException.Code.UNAVAILABLE -> "تعذر الاتصال بخدمة المزامنة. تحقق من الإنترنت وحاول مرة أخرى."
+            else -> error.message?.takeIf { it.isNotBlank() } ?: "تعذر إكمال عملية السحابة."
         }
         val firestoreCode = (error as? FirebaseFirestoreException)?.code
         if (firestoreCode != null) return when (firestoreCode) {

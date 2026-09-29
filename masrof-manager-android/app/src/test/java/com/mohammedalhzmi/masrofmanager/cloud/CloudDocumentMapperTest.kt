@@ -98,6 +98,14 @@ class CloudDocumentMapperTest {
         assertNull(CloudDocumentMapper.legacyLocalId("uuid"))
     }
 
+    @Test
+    fun syncDoesNotClaimExistingOwnerlessCloudRecords() {
+        assertEquals("", CloudDocumentMapper.syncCreatorUid("", "current-user", "", false))
+        assertEquals("other-owner", CloudDocumentMapper.syncCreatorUid("", "current-user", "other-owner", false))
+        assertEquals("current-user", CloudDocumentMapper.syncCreatorUid("", "current-user", null, true))
+        assertEquals("", CloudDocumentMapper.syncCreatorUid("", "current-user", null, false))
+    }
+
     private fun sample(type: DocumentType): Document = Document(
         type = type,
         documentNumber = "D-1",
