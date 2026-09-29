@@ -48,7 +48,10 @@ class ExpenseBookRenderSmokeTest {
             val bitmap = Bitmap.createBitmap(595, 842, Bitmap.Config.ARGB_8888)
             bitmap.eraseColor(Color.WHITE)
             OfficialDocumentRenderer.render(Canvas(bitmap), document, header, emptyList(), context, null, pageIndex)
-            if (pageIndex == 3) debtPage = bitmap else bitmap.recycle()
+            if (pageIndex == 3) {
+                assertNotEquals(Color.WHITE, bitmap.getPixel(297, 440))
+                debtPage = bitmap
+            } else bitmap.recycle()
         }
         assertNotEquals(Color.WHITE, checkNotNull(debtPage).getPixel(30, 55))
         debtPage?.recycle()

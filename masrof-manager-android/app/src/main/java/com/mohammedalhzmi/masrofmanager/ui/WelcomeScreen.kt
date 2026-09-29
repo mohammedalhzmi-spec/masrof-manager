@@ -14,6 +14,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
@@ -38,8 +40,14 @@ fun WelcomeScreen(onFinished: () -> Unit) {
                 Spacer(Modifier.height(6.dp))
                 LinearProgressIndicator(animatedProgress, Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)), color = Color(0xff16834f), trackColor = Color(0xffdcefe4))
                 Spacer(Modifier.height(20.dp))
-                Text("هذا النظام من برمجة وتطوير المطور محمد الحزمي", fontSize = 11.sp, color = Color(0xff9a6b00))
-                Text("جميع الحقوق محفوظة © 2026", fontSize = 10.sp, color = Color(0xff6b7280))
+                Text(
+                    "تم برمجة وتطوير هذا النظام بواسطة المطور محمد الحزمي 2026",
+                    modifier = Modifier.fillMaxWidth(),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xff123b5d),
+                    textAlign = TextAlign.Center
+                )
             }
         }
     }

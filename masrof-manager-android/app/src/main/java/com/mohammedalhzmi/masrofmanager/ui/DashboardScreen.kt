@@ -11,8 +11,6 @@ import androidx.compose.ui.unit.dp
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.animation.AnimatedVisibility
-import kotlinx.coroutines.delay
 import com.mohammedalhzmi.masrofmanager.util.AppBackupManager
 import com.mohammedalhzmi.masrofmanager.util.RolePreferences
 import com.mohammedalhzmi.masrofmanager.util.AppPermission
@@ -41,16 +39,12 @@ fun DashboardScreen(viewModel: MasrofViewModel, onAddDocument: () -> Unit, onCre
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let { viewModel.importDatabase(context, it); viewModel.recordAudit("IMPORT_DATABASE", "استعادة DB") } }
     val zipExportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri -> uri?.let { viewModel.exportFullBackup(context, it); viewModel.recordAudit("EXPORT_BACKUP", "نسخة ZIP كاملة") } }
     val zipImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let { viewModel.importFullBackup(context, it); viewModel.recordAudit("IMPORT_BACKUP", "استعادة ZIP كاملة") } }
-    var showDeveloperNotice by remember { mutableStateOf(true) }
-    LaunchedEffect(Unit) { delay(4500); showDeveloperNotice = false }
-
     Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) { Text("نظام المالية لصندوق النظافة الحزم", style = MaterialTheme.typography.headlineMedium, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis); Text("الدور الحالي: ${role.title}", style = MaterialTheme.typography.bodySmall) }
             if (canSettings) IconButton(onClick = onSettings) { Icon(Icons.Default.Settings, contentDescription = "الإعدادات") }
         }
         Spacer(modifier = Modifier.height(12.dp))
-        AnimatedVisibility(visible = showDeveloperNotice) { Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer), modifier = Modifier.fillMaxWidth()) { Text("هذا التطبيق من برمجة وتطوير المطور محمد الحزمي\nجميع الحقوق محفوظة للمطور 2026", modifier = Modifier.padding(12.dp)) } }
         Spacer(modifier = Modifier.height(8.dp))
         Button(onClick = onAddDocument, modifier = Modifier.fillMaxWidth()) { Text("إضافة مستند جديد") }
         OutlinedButton(onClick = onCreateBook, modifier = Modifier.fillMaxWidth()) { Text("إنشاء دفتر مستندات مرقّم") }

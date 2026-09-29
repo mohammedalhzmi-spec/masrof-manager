@@ -143,6 +143,17 @@ internal object ExpenseReportTemplateRenderer {
     }
 
     private fun drawDebtPage(c: Canvas, d: Document, header: DocumentHeader, context: Context?, book: ExpenseBookData) {
+        context?.let { ctx ->
+            BitmapFactory.decodeResource(ctx.resources, R.drawable.expense_book_watermark)?.let { watermark ->
+                c.drawBitmap(
+                    watermark,
+                    null,
+                    RectF(75f, 190f, 520f, 689f),
+                    Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+                )
+                watermark.recycle()
+            }
+        }
         val month = d.purpose.orEmpty().ifBlank { "................" }
         val titleX = 69f
         val titleY = 11f
