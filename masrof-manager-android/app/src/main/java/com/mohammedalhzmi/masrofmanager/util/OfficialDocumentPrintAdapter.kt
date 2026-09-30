@@ -88,7 +88,6 @@ object OfficialDocumentRenderer {
         canvas.scale(targetW / baseW, targetH / baseH)
         val w = baseW
         val h = baseH
-        val half = landscape
         val pageBackground = if (document.type.isExpenseStatement()) Color.WHITE else design?.let { runCatching { Color.parseColor(it.backgroundColor) }.getOrDefault(Color.WHITE) } ?: (header.backgroundColors[document.type] ?: Color.WHITE)
         canvas.drawColor(pageBackground)
         val useBackgroundImage = !(document.type.isExpenseStatement() && pageIndex == 3)
@@ -114,13 +113,13 @@ object OfficialDocumentRenderer {
             val innerFramePaint = if (document.type == DocumentType.VIOLATION_REPORT) Paint(framePaint).apply { strokeWidth = 1.5f } else linePaint
             canvas.drawRect(25f, 25f, w - 25f, h - 25f, innerFramePaint)
             drawHeader(canvas, header, document, context)
-            if (half) renderOrder(canvas, document) else when (document.type) {
+            when (document.type) {
                 DocumentType.REQUEST -> renderRequest(canvas, document)
                 DocumentType.RECEIPT -> renderReceipt(canvas, document)
                 DocumentType.ORDER -> renderOrderPortrait(canvas, document)
                 DocumentType.VIOLATION_REPORT -> renderViolationReport(canvas, document)
                 DocumentType.EXPENSE_STATEMENT, DocumentType.EXPENSE_REPORT -> Unit
-                else -> renderOrderPortrait(canvas, document)
+                else -> renderAdministrativeTemplate(canvas, document)
             }
             renderElements(canvas, document, elements, context)
             design?.let { canvas.drawRect(it.marginLeft, it.marginTop, w - it.marginRight, h - it.marginBottom, Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = 0x55333333.toInt(); this.style = Paint.Style.STROKE; this.strokeWidth = 1f }) }
@@ -158,12 +157,12 @@ object OfficialDocumentRenderer {
         }
         val dividerPaint = if (type == DocumentType.VIOLATION_REPORT) Paint(linePaint).apply { color = 0xff087fb5.toInt(); strokeWidth = 3f } else linePaint
         c.drawLine(30f, 123f, w - 30f, 123f, dividerPaint)
+        drawLeft(c, "NO: ${document.documentNumber.ifBlank { "...." }}", leftX, 151f, headerBold)
         if (type == DocumentType.VIOLATION_REPORT) {
             val reportTitlePaint = Paint(titlePaint).apply { color = Color.BLACK }
             drawCentered(c, title(type), center, 157f, reportTitlePaint)
             c.drawLine(center - 108f, 162f, center + 108f, 162f, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.BLACK; strokeWidth = 1.5f })
         } else {
-            drawLeft(c, "NO: ${document.documentNumber.ifBlank { "...." }}", leftX, 151f, headerBold)
             drawCentered(c, title(type), center, 157f, titlePaint)
             c.drawRect(center - 112f, 134f, center + 112f, 170f, linePaint)
         }
@@ -182,20 +181,15 @@ object OfficialDocumentRenderer {
 
     private fun renderOrder(c: Canvas, d: Document) {
         val w = c.width.toFloat(); val right = w - 55f; val bottom = c.height.toFloat()
-        drawRight(c, "الأخ / أمين الصندوق", right, 220f, boldPaint); drawRight(c, "المحترم", right, 246f, bodyPaint)
-        drawRight(c, "يتم صرف مبلغ وقدره:", right, 292f, bodyPaint)
-        drawBoxed(c, d.amount?.toString() ?: "................", 70f, 263f, 290f, 304f)
-        drawRight(c, "فقط: ${d.amountWords ?: "................................................"}", right, 338f, bodyPaint)
-        drawRight(c, "وذلك مقابل /", right, 382f, bodyPaint)
-        drawParagraph(c, d.purpose.orEmpty().ifBlank { "................................................" }, right, 410f, bodyPaint)
-        drawCentered(c, "ولكم خالص الشكر والتقدير", w / 2f, 470f, boldPaint)
-        drawLeft(c, "مدير الفرع: رياض أحمد محمد", 58f, bottom - 112f, boldPaint)
-        drawLeft(c, "التوقيع: .........................", 58f, bottom - 84f, bodyPaint)
-        drawLeft(c, "المدير المالي للفرع", 238f, bottom - 112f, boldPaint)
-        drawLeft(c, "الاسم: ................................", 238f, bottom - 84f, bodyPaint)
-        drawLeft(c, "التوقيع: .........................", 238f, bottom - 56f, bodyPaint)
-        drawLeft(c, "المرفقات: ${d.attachmentsCount}", 55f, bottom - 24f, bodyPaint)
-        drawRight(c, "الاسم: ${d.beneficiaryName.orEmpty()}    رقم: ${d.documentNumber}", right, 205f, bodyPaint)
+        drawRight(c, "الأخ أمين الصندوق المحترم", right, 220f, boldPaint)
+        drawRight(c, "بعد التوجيه يتم صرف مبلغ وقدره:", right, 270f, bodyPaint)
+        drawParagraph(c, d.amountWords.orEmpty().ifBlank { "................................................" }, right, 302f, bodyPaint)
+        drawBoxed(c, d.amount?.toString() ?: "................", 70f, 324f, 285f, 365f)
+        drawRight(c, "وذلك للأخ /ـوه: ${d.beneficiaryName.orEmpty().ifBlank { "................................" }}", right, 399f, bodyPaint)
+        drawRight(c, "وذلك مقابل:", right, 438f, bodyPaint)
+        drawParagraph(c, d.purpose.orEmpty().ifBlank { "................................................" }, right, 465f, bodyPaint)
+        drawCentered(c, "ولكم خالص الشكر والتقدير", w / 2f, 525f, boldPaint)
+        drawManagerSignatures(c, bottom)
     }
 
     private fun renderOrderPortrait(c: Canvas, d: Document) = renderOrder(c, d)
@@ -207,14 +201,8 @@ object OfficialDocumentRenderer {
         c.drawRect(55f, 310f, right, 455f, linePaint)
         drawParagraph(c, d.details ?: "................................................................................................", right - 12f, 338f, bodyPaint)
         drawRight(c, "وتكرموا مشكورين بالتوجيه", right, 510f, boldPaint)
-        drawRight(c, "اسم مقدم الطلب: ${d.beneficiaryName.orEmpty()}", right, bottom - 190f, bodyPaint)
-        drawLeft(c, "مدير الفرع: رياض أحمد محمد", 58f, bottom - 112f, boldPaint)
-        drawLeft(c, "التوقيع: ................................", 58f, bottom - 84f, bodyPaint)
-        drawLeft(c, "المدير المالي للفرع", 238f, bottom - 112f, boldPaint)
-        drawLeft(c, "الاسم: ................................", 238f, bottom - 84f, bodyPaint)
-        drawLeft(c, "التوقيع: ................................", 238f, bottom - 56f, bodyPaint)
-        drawLeft(c, "المرفقات: ${d.attachmentsCount}", 55f, bottom - 24f, bodyPaint)
-        drawRight(c, "رقم الطلب: ${d.documentNumber}", right, 195f, bodyPaint)
+        drawLeft(c, "اسم مقدم الطلب: ${d.beneficiaryName.orEmpty()}", 58f, bottom - 112f, bodyPaint)
+        drawLeft(c, "توقيع مقدم الطلب: ........................", 58f, bottom - 84f, bodyPaint)
     }
 
     private fun renderReceipt(c: Canvas, d: Document) {
@@ -230,40 +218,148 @@ object OfficialDocumentRenderer {
         drawCentered(c, "المستلم", c.width / 2f, bottom - 188f, boldPaint)
         drawCentered(c, "الاسم: ........................", c.width / 2f, bottom - 160f, bodyPaint)
         drawCentered(c, "التوقيع والإبهام: ................", c.width / 2f, bottom - 132f, bodyPaint)
-        drawLeft(c, "مدير الفرع: رياض أحمد محمد", 58f, bottom - 92f, boldPaint)
-        drawLeft(c, "التوقيع: .........................", 58f, bottom - 64f, bodyPaint)
-        drawLeft(c, "أمين الصندوق", 238f, bottom - 92f, boldPaint)
-        drawLeft(c, "الاسم والتوقيع: ................", 238f, bottom - 64f, bodyPaint)
-        drawRight(c, "المدير المالي للفرع", right, bottom - 92f, boldPaint)
-        drawRight(c, "الاسم والتوقيع: ................", right, bottom - 64f, bodyPaint)
-        drawLeft(c, "المرفقات: ${d.attachmentsCount}", 55f, bottom - 24f, bodyPaint)
-        drawRight(c, "رقم الاستلام: ${d.documentNumber}", right, 195f, bodyPaint)
+        drawLeft(c, "مدير فرع صندوق النظافة والتحسين", 42f, bottom - 92f, boldPaint)
+        drawLeft(c, "الاسم: رياض أحمد محمد", 42f, bottom - 64f, bodyPaint)
+        drawLeft(c, "التوقيع: .........................", 42f, bottom - 36f, bodyPaint)
+        drawCentered(c, "أمين الصندوق", c.width / 2f, bottom - 92f, boldPaint)
+        drawCentered(c, "الاسم والتوقيع: ................", c.width / 2f, bottom - 64f, bodyPaint)
+        drawRight(c, "المدير المالي", right, bottom - 92f, boldPaint)
+        drawRight(c, "الاسم: ........................", right, bottom - 64f, bodyPaint)
+        drawRight(c, "التوقيع: .........................", right, bottom - 36f, bodyPaint)
+    }
+
+    private fun drawManagerSignatures(c: Canvas, bottom: Float) {
+        val right = c.width - 42f
+        drawLeft(c, "مدير فرع صندوق النظافة والتحسين", 42f, bottom - 112f, boldPaint)
+        drawLeft(c, "الاسم: رياض أحمد محمد", 42f, bottom - 84f, bodyPaint)
+        drawLeft(c, "التوقيع: ........................", 42f, bottom - 56f, bodyPaint)
+        drawRight(c, "المدير المالي", right, bottom - 112f, boldPaint)
+        drawRight(c, "الاسم: ........................", right, bottom - 84f, bodyPaint)
+        drawRight(c, "التوقيع: ........................", right, bottom - 56f, bodyPaint)
+    }
+
+    private fun renderAdministrativeTemplate(c: Canvas, d: Document) {
+        val right = c.width - 48f
+        val bottom = c.height.toFloat()
+        val content = d.details.orEmpty().ifBlank { "........................................................................................................................" }
+        when (d.type) {
+            DocumentType.FINANCIAL_MEMO -> {
+                drawRight(c, "إلى: ${d.beneficiaryName.orEmpty().ifBlank { "................................" }}", right, 220f, boldPaint)
+                drawRight(c, "الموضوع: ${d.purpose.orEmpty().ifBlank { "................................" }}", right, 252f, boldPaint)
+                c.drawRect(50f, 275f, right, 475f, linePaint)
+                drawParagraph(c, content, right - 12f, 305f, bodyPaint)
+                drawManagerSignatures(c, bottom)
+            }
+            DocumentType.PURCHASE_ORDER -> {
+                drawRight(c, "المورد: ${d.beneficiaryName.orEmpty().ifBlank { "................................" }}", right, 220f, boldPaint)
+                drawRight(c, "الغرض من الشراء: ${d.purpose.orEmpty().ifBlank { "................................" }}", right, 252f, bodyPaint)
+                drawBoxed(c, "الإجمالي: ${d.amount?.toString() ?: ".............."}", 55f, 275f, right, 316f)
+                c.drawRect(50f, 334f, right, 510f, linePaint)
+                drawRight(c, "بيان الأصناف / الشروط", right - 10f, 360f, boldPaint)
+                drawParagraph(c, content, right - 12f, 390f, bodyPaint)
+                drawManagerSignatures(c, bottom)
+            }
+            DocumentType.SUPPLY_PERMIT -> {
+                drawRight(c, "إذن توريد / استلام إلى: ${d.beneficiaryName.orEmpty().ifBlank { "................................" }}", right, 220f, boldPaint)
+                drawRight(c, "الغرض / الجهة المستفيدة: ${d.purpose.orEmpty().ifBlank { "................................" }}", right, 252f, bodyPaint)
+                c.drawRect(50f, 280f, right, 485f, linePaint)
+                drawRight(c, "الأصناف والكميات", right - 10f, 306f, boldPaint)
+                drawParagraph(c, content, right - 12f, 338f, bodyPaint)
+                drawManagerSignatures(c, bottom)
+            }
+            DocumentType.RECEIPT_MINUTES -> {
+                drawCentered(c, "محضر استلام", c.width / 2f, 220f, boldPaint)
+                drawRight(c, "تم الاستلام من: ${d.beneficiaryName.orEmpty().ifBlank { "................................" }}", right, 258f, bodyPaint)
+                drawRight(c, "بشأن: ${d.purpose.orEmpty().ifBlank { "................................" }}", right, 292f, bodyPaint)
+                c.drawRect(50f, 318f, right, 500f, linePaint)
+                drawParagraph(c, content, right - 12f, 346f, bodyPaint)
+                drawManagerSignatures(c, bottom)
+            }
+            DocumentType.FINANCIAL_CLAIM -> {
+                drawRight(c, "مقدم المطالبة: ${d.beneficiaryName.orEmpty().ifBlank { "................................" }}", right, 220f, boldPaint)
+                drawRight(c, "سبب المطالبة: ${d.purpose.orEmpty().ifBlank { "................................" }}", right, 252f, bodyPaint)
+                drawBoxed(c, "قيمة المطالبة: ${d.amount?.toString() ?: ".............."} ريال", 55f, 280f, right, 322f)
+                c.drawRect(50f, 340f, right, 505f, linePaint)
+                drawParagraph(c, content, right - 12f, 368f, bodyPaint)
+                drawManagerSignatures(c, bottom)
+            }
+            DocumentType.CUSTODY_SETTLEMENT -> {
+                drawRight(c, "صاحب العهدة: ${d.beneficiaryName.orEmpty().ifBlank { "................................" }}", right, 220f, boldPaint)
+                drawRight(c, "موضوع التسوية: ${d.purpose.orEmpty().ifBlank { "................................" }}", right, 252f, bodyPaint)
+                drawBoxed(c, "المبلغ: ${d.amount?.toString() ?: ".............."} ريال", 55f, 280f, right, 322f)
+                c.drawRect(50f, 340f, right, 505f, linePaint)
+                drawParagraph(c, content, right - 12f, 368f, bodyPaint)
+                drawManagerSignatures(c, bottom)
+            }
+            DocumentType.ADVANCE_PERMIT -> {
+                drawCentered(c, "إذن صرف سلفة", c.width / 2f, 220f, boldPaint)
+                drawRight(c, "تصرف إلى: ${d.beneficiaryName.orEmpty().ifBlank { "................................" }}", right, 258f, bodyPaint)
+                drawRight(c, "وذلك لغرض: ${d.purpose.orEmpty().ifBlank { "................................" }}", right, 292f, bodyPaint)
+                drawBoxed(c, "مبلغ السلفة: ${d.amount?.toString() ?: ".............."} ريال", 55f, 320f, right, 362f)
+                drawParagraph(c, content, right, 402f, bodyPaint)
+                drawManagerSignatures(c, bottom)
+            }
+            DocumentType.OFFICIAL_FINANCIAL_LETTER -> {
+                drawRight(c, "إلى: ${d.beneficiaryName.orEmpty().ifBlank { "................................" }}", right, 220f, boldPaint)
+                drawCentered(c, "الموضوع: ${d.purpose.orEmpty().ifBlank { "................................" }}", c.width / 2f, 260f, boldPaint)
+                c.drawRect(50f, 286f, right, 510f, linePaint)
+                drawParagraph(c, content, right - 12f, 315f, bodyPaint)
+                drawManagerSignatures(c, bottom)
+            }
+            DocumentType.RECEIPT_PAPER -> {
+                drawCentered(c, "سند قبض", c.width / 2f, 220f, boldPaint)
+                drawRight(c, "استلمنا من: ${d.beneficiaryName.orEmpty().ifBlank { "................................" }}", right, 258f, bodyPaint)
+                drawBoxed(c, "مبلغ وقدره: ${d.amount?.toString() ?: ".............."} ريال", 55f, 282f, right, 324f)
+                drawRight(c, "وذلك مقابل: ${d.purpose.orEmpty().ifBlank { "................................" }}", right, 360f, bodyPaint)
+                drawParagraph(c, content, right, 396f, bodyPaint)
+                drawManagerSignatures(c, bottom)
+            }
+            DocumentType.BOOK -> {
+                drawCentered(c, "دفتر المستندات", c.width / 2f, 240f, boldPaint)
+                drawCentered(c, d.tags.ifBlank { d.purpose.orEmpty() }, c.width / 2f, 290f, bodyPaint)
+                drawCentered(c, "النوع: ${d.type.displayName()}    رقم الصفحة: ${d.documentNumber}", c.width / 2f, 340f, bodyPaint)
+                drawParagraph(c, content, right, 390f, bodyPaint)
+                drawManagerSignatures(c, bottom)
+            }
+            else -> {
+                drawRight(c, "صاحب العلاقة: ${d.beneficiaryName.orEmpty()}", right, 220f, boldPaint)
+                drawRight(c, "الموضوع: ${d.purpose.orEmpty()}", right, 252f, bodyPaint)
+                drawParagraph(c, content, right, 290f, bodyPaint)
+                drawManagerSignatures(c, bottom)
+            }
+        }
     }
 
     private fun renderViolationReport(c: Canvas, d: Document) {
         val right = c.width - 42f
         val left = 42f
-        drawRight(c, "في تمام الساعة ${d.incidentTime.orEmpty().ifBlank { "............." }} من ${d.dateHijri.ifBlank { "............." }} يوم ${d.incidentDay.orEmpty().ifBlank { "............." }} الموافق: ${d.dateGregorian.ifBlank { "   /   / 14هـ" }}", right, 205f, boldPaint)
-        drawRight(c, "وفي الموقع الكائن ${d.incidentLocation.orEmpty().ifBlank { "................................................" }}", right, 231f, bodyPaint)
+        drawRight(c, "في تمام الساعة ${d.incidentTime.orEmpty().ifBlank { "............." }} من يوم ${d.incidentDay.orEmpty().ifBlank { "............." }} الموافق: ${d.dateHijri.ifBlank { "   /   / 14هـ" }}", right, 205f, boldPaint)
+        drawRight(c, "وفي الموقع الكائن: ${d.incidentLocation.orEmpty().ifBlank { "................................................" }}", right, 231f, bodyPaint)
         drawRight(c, "تم مشاهدة وضبط المخالفة الآتية ونوعها: ${d.violationType.orEmpty().ifBlank { "............................" }}", right, 257f, boldPaint)
         d.details.orEmpty().ifBlank { "........................................................................................................................" }.let { drawParagraph(c, it, right, 284f, bodyPaint) }
         val dotted = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.BLACK; style = Paint.Style.STROKE; strokeWidth = 1f; pathEffect = DashPathEffect(floatArrayOf(1.5f, 3.5f), 0f) }
         listOf(316f, 342f, 368f).forEach { y -> c.drawLine(left, y, right, y, dotted) }
 
         drawRight(c, "والمنسوب إليه فعل / مسؤولية ذلك هو ${d.beneficiaryName.orEmpty().ifBlank { "........................................" }}", right, 397f, boldPaint)
-        drawParagraph(c, "وهو الأمر ${d.responsibleAction.orEmpty().ifBlank { "........................................" }} وفقاً لما ورد بنص المادة (${d.lawArticle.orEmpty().ifBlank { "...." }}) من قانون النظافة والمعاقبة عليه بالحبس مدة لا تقل عن 7 أسبوع أو غرامة مالية لا تقل عن ألف ريال.", right, 422f, bodyPaint)
+        drawParagraph(c, "وهو الأمر ${d.responsibleAction.orEmpty().ifBlank { "........................................" }} وفقاً لما ورد بنص المادة (${d.lawArticle.orEmpty().ifBlank { "...." }}) من قانون النظافة، والمعاقبة عليه بالحبس مدة لا تقل عن 7 أسابيع أو غرامة مالية لا تقل عن ألف ريال (1000) أو كلاهما.", right, 422f, bodyPaint)
 
         val legalPaint = Paint(bodyPaint).apply { textSize = 11f }
-        drawParagraph(c, "واستناداً إلى نص المادة (32) من القانون تنفيذاً لذلك، فإنه يتعين تطبيق وتحصيل غرامة مالية من المذكور حددت بمبلغ ${d.amount?.toInt()?.toString() ?: "................"} ريال، تورد لحساب صندوق النظافة والتحسين فرع مديرية الحزم وفقاً للمادة (41) من قانون النظافة العامة بطرف البنك المركزي اليمني فرع المحافظة والمادة (26) والتي تنص على الآتي: يتم تحصيل الغرامة عند إشعار المخالفة بالمحضر المعتمد من المكتب لوقوع المخالفة، ويجوز أن يعطى مهلة للسداد لا تزيد عن أسبوع، فإذا تأخر عن التسديد أو لم يطع القاضي المختص يضاعف أصل الغرامة كل أسبوع من تاريخ استلامه أو تسليمه المحضر.", right, 463f, legalPaint)
+        drawParagraph(c, "واستناداً إلى نص المادة (32) من القانون تنفيذاً لذلك، فإنه يتعين تطبيق وتحصيل غرامة مالية من المذكور حددت بمبلغ ${d.amount?.toInt()?.toString() ?: "................"} ريال، تورد لحساب صندوق النظافة والتحسين فرع مديرية الحزم وفقاً للمادة (41) من قانون النظافة العامة بطرف البنك المركزي اليمني فرع المحافظة والمادة (26) والتي تنص على الآتي: يتم تحصيل الغرامة عند إشعار المخالفة بالمحضر المعتمد من المكتب لوقوع المخالفة، ويجوز أن يعطى مهلة للسداد لا تزيد عن أسبوع، فإذا تأخر عن التسديد أو لم يطع أمام القاضي المختص يضاعف أصل الغرامة كل أسبوع من تاريخ استلامه أو تسليمه المحضر.", right, 463f, legalPaint)
 
-        drawRight(c, "الشهود", right, 652f, boldPaint)
-        drawRight(c, "1- ${d.witnessOne.orEmpty().ifBlank { "...................." }}", right, 678f, bodyPaint)
-        drawRight(c, "2- ${d.witnessTwo.orEmpty().ifBlank { "...................." }}", right, 704f, bodyPaint)
-        drawCentered(c, "توقيع الشهود", c.width / 2f, 652f, boldPaint)
-        drawLeft(c, "مسؤول المنطقة", left, 652f, boldPaint)
-        drawLeft(c, "منطقة: ${d.regionName.orEmpty().ifBlank { "...................." }}", left, 678f, bodyPaint)
-        drawLeft(c, "الاسم: ${d.regionOfficerName.orEmpty().ifBlank { "...................." }}", left, 704f, bodyPaint)
-        drawLeft(c, "التوقيع: ........................", left, 730f, bodyPaint)
+        drawRight(c, "الشهود", right, 610f, boldPaint)
+        drawRight(c, "1- ${d.witnessOne.orEmpty().ifBlank { "...................." }}", right, 634f, bodyPaint)
+        drawRight(c, "2- ${d.witnessTwo.orEmpty().ifBlank { "...................." }}", right, 658f, bodyPaint)
+        drawCentered(c, "توقيع الشهود", c.width / 2f, 610f, boldPaint)
+        drawLeft(c, "مسؤول المنطقة", left, 610f, boldPaint)
+        drawLeft(c, "منطقة: ${d.regionName.orEmpty().ifBlank { "...................." }}", left, 634f, bodyPaint)
+        drawLeft(c, "الاسم: ${d.regionOfficerName.orEmpty().ifBlank { "...................." }}", left, 658f, bodyPaint)
+        drawLeft(c, "التوقيع: ........................", left, 682f, bodyPaint)
+        drawLeft(c, "مدير فرع صندوق النظافة والتحسين", left, 712f, boldPaint)
+        drawLeft(c, "الاسم: رياض أحمد محمد", left, 738f, bodyPaint)
+        drawLeft(c, "التوقيع: ........................", left, 764f, bodyPaint)
+        drawRight(c, "المدير المالي", right, 712f, boldPaint)
+        drawRight(c, "الاسم: ........................", right, 738f, bodyPaint)
+        drawRight(c, "التوقيع: ........................", right, 764f, bodyPaint)
     }
 
     private fun title(type: DocumentType) = type.displayName()
@@ -280,9 +376,40 @@ object OfficialDocumentRenderer {
                 "STICKER" -> { p.color = runCatching { Color.parseColor(e.textColor) }.getOrDefault(Color.BLACK); p.textSize = e.height * .75f; p.textAlign = Paint.Align.CENTER; c.drawText(resolve(e.content, d), e.x + e.width / 2f, e.y + e.height * .75f, p); p.textAlign = Paint.Align.LEFT }
                 "QR" -> drawQr(c, resolve(e.content, d), e)
                 "IMAGE" -> context?.let { ctx -> runCatching { ctx.contentResolver.openInputStream(Uri.parse(e.content)).use(BitmapFactory::decodeStream) }.getOrNull()?.let { c.drawBitmap(it, null, RectF(e.x, e.y, e.x + e.width, e.y + e.height), p) } }
+                "TABLE" -> drawTable(c, e)
             }; c.restore()
         }
     }
+    private fun drawTable(c: Canvas, e: DesignElementEntity) {
+        val rows = DocumentTableCodec.decode(e.content)
+        if (rows.isEmpty()) return
+        val rowHeight = e.height / rows.size
+        val columnCount = rows.first().size.coerceAtLeast(1)
+        val columnWidth = e.width / columnCount
+        val border = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = runCatching { Color.parseColor(e.strokeColor) }.getOrDefault(Color.DKGRAY)
+            style = Paint.Style.STROKE
+            strokeWidth = e.strokeWidth.coerceAtLeast(0.5f)
+        }
+        val text = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = runCatching { Color.parseColor(e.textColor) }.getOrDefault(Color.BLACK)
+            textSize = e.fontSize.coerceIn(8f, 24f)
+            textAlign = Paint.Align.CENTER
+            typeface = if (e.bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+        }
+        rows.forEachIndexed { rowIndex, row ->
+            row.forEachIndexed { columnIndex, cell ->
+                val left = e.x + columnIndex * columnWidth
+                val top = e.y + rowIndex * rowHeight
+                c.drawRect(left, top, left + columnWidth, top + rowHeight, border)
+                var fitted = cell
+                while (fitted.isNotEmpty() && text.measureText(fitted) > columnWidth - 4f) fitted = fitted.dropLast(1)
+                if (fitted != cell) fitted = fitted.dropLast(1) + "…"
+                c.drawText(fitted, left + columnWidth / 2f, top + rowHeight / 2f + text.textSize / 3f, text)
+            }
+        }
+    }
+
     private fun drawRichText(c: Canvas, value: String, e: DesignElementEntity, p: Paint, context: Context?) {
         p.color = runCatching { Color.parseColor(e.textColor) }.getOrDefault(Color.BLACK); p.textSize = e.fontSize; val style = if (e.bold && e.italic) Typeface.BOLD_ITALIC else if (e.bold) Typeface.BOLD else if (e.italic) Typeface.ITALIC else Typeface.NORMAL; p.typeface = context?.let { ctx -> runCatching { Typeface.createFromAsset(ctx.assets, "fonts/${when (e.fontFamily) { "AMIRI" -> if (e.bold) "amiri_bold.ttf" else "amiri_regular.ttf"; "CAIRO" -> if (e.bold) "cairo_bold.ttf" else "cairo_regular.ttf"; "SCHEHERAZADE" -> if (e.bold) "scheherazade_bold.ttf" else "scheherazade_regular.ttf"; "EL_MESSIRI" -> if (e.bold) "el_messiri_bold.ttf" else "el_messiri_regular.ttf"; "NOTO_KUFI" -> if (e.bold) "noto_kufi_bold.ttf" else "noto_kufi_regular.ttf"; "NOTO_NASKH" -> if (e.bold) "noto_naskh_bold.ttf" else "noto_naskh_regular.ttf"; "TAJAWAL" -> if (e.bold) "tajawal_bold.ttf" else "tajawal_regular.ttf"; else -> return@runCatching null }}") }.getOrNull() } ?: Typeface.create(when (e.fontFamily) { "SERIF" -> Typeface.SERIF; "MONOSPACE" -> Typeface.MONOSPACE; else -> Typeface.SANS_SERIF }, style); p.isUnderlineText = e.underline
         val lines = value.split("\n"); val lineHeight = e.fontSize * e.lineSpacing; val x = when (e.textAlign) { "CENTER" -> e.x + e.width / 2f; "END" -> e.x + e.width; else -> e.x }; p.textAlign = when (e.textAlign) { "CENTER" -> Paint.Align.CENTER; "END" -> Paint.Align.RIGHT; else -> Paint.Align.LEFT }

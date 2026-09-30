@@ -43,14 +43,14 @@ internal object ExpenseReportTemplateRenderer {
         val month = d.purpose.orEmpty().ifBlank { "................" }
         val hijriYear = d.dateHijri.ifBlank { "144هـ" }
         val gregorianYear = d.dateGregorian.ifBlank { "202م" }
-        drawBanner(c, 68f, 40f, listOf(
+        drawBanner(c, 86f, 40f, listOf(
             "الباب الأول: المصروفات التشغيلية الشهرية لفرع صندوق النظافة والتحسين مديرية الحزم",
             "لشهر: $month     ←     $hijriYear     /     $gregorianYear"
         ), 11.5f)
 
         val x = 32f
         val width = 531f
-        var y = 110f
+        var y = 128f
         drawMergedBand(c, x, y, width, 24f, "أولاً: النفقات التشغيلية والسلعية الشهرية لفرع صندوق النظافة", Color.WHITE, INK, 11f, true)
         y += 24f
         val operating = listOf(Column("التفاصيل", .22f), Column("متبقي غير مدفوع", .17f), Column("قيمة المستهلك / مدفوع", .18f), Column("عدد", .13f), Column("المصروفات", .30f))
@@ -202,6 +202,7 @@ internal object ExpenseReportTemplateRenderer {
         drawRight(c, "التاريخ:      /      / $hijri", 204f, 34f, body)
         drawRight(c, "الموافق:      /      / $gregorian", 204f, 49f, body)
         drawRight(c, "المرفقات: ........................", 204f, 64f, body)
+        drawLeft(c, "NO: ${d.documentNumber.ifBlank { "...." }}", 204f, 79f, body)
 
         val logo = header.logos[DocumentType.EXPENSE_STATEMENT] ?: header.logos[DocumentType.EXPENSE_REPORT]
             ?: context?.let { BitmapFactory.decodeResource(it.resources, R.drawable.expense_report_logo) }

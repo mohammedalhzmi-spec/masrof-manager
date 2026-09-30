@@ -72,7 +72,7 @@ enum class DocumentStatus {
 }
 
 fun DocumentType.displayName(): String = when (this) {
-    DocumentType.REQUEST -> "طلب صرف"
+    DocumentType.REQUEST -> "ورقة تقديم طلب"
     DocumentType.ORDER -> "أمر صرف"
     DocumentType.RECEIPT -> "ورقة استلام"
     DocumentType.RECEIPT_PAPER -> "سند قبض"

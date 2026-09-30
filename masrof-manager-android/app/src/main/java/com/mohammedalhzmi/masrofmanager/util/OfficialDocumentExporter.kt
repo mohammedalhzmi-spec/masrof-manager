@@ -78,7 +78,7 @@ object OfficialDocumentExporter {
             entry("_rels/.rels", """<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>""")
             entry("word/_rels/document.xml.rels", if (logo != null) """<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/logo.png"/></Relationships>""" else """<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>""")
             logo?.let { bytesEntry("word/media/logo.png", it) }
-            entry("word/document.xml", docxXml(document, logo != null))
+            entry("word/document.xml", docxXml(context, document, logo != null))
         }
         return shareUri(context, file)
     }
@@ -93,7 +93,93 @@ object OfficialDocumentExporter {
 
     private fun shareUri(context: Context, file: File): Uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
 
-    private fun docxXml(d: Document, hasLogo: Boolean): String {
+    private fun docxXml(context: Context, d: Document, hasLogo: Boolean): String {
+        if (d.type.isExpenseStatement()) return expenseReportDocxXml(d, hasLogo)
+        fun esc(value: String) = value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&apos;")
+        fun p(value: String, align: String = "right", bold: Boolean = false): String {
+            if (value.isBlank()) return ""
+            val weight = if (bold) "<w:b/>" else ""
+            return "<w:p><w:pPr><w:jc w:val=\"$align\"/><w:bidi/></w:pPr><w:r><w:rPr>$weight<w:rFonts w:ascii=\"Amiri\" w:hAnsi=\"Amiri\"/></w:rPr><w:t xml:space=\"preserve\">${esc(value)}</w:t></w:r></w:p>"
+        }
+        fun field(label: String, value: String?) = "$label ${value.orEmpty().ifBlank { "................................" }}"
+        fun signatureCell(lines: List<String>, align: String): String =
+            "<w:tc><w:tcPr><w:tcW w:w=\"3200\" w:type=\"dxa\"/></w:tcPr>" + lines.joinToString("") { p(it, align, it.startsWith("مدير") || it.startsWith("المدير")) } + "</w:tc>"
+        fun signatureTable(withCashier: Boolean = false): String {
+            val cells = if (withCashier) listOf(
+                signatureCell(listOf("مدير فرع صندوق النظافة والتحسين", "الاسم: رياض أحمد محمد", "التوقيع: ........................"), "left"),
+                signatureCell(listOf("أمين الصندوق", "الاسم والتوقيع: ........................"), "center"),
+                signatureCell(listOf("المدير المالي", "الاسم: ........................", "التوقيع: ........................"), "right")
+            ) else listOf(
+                signatureCell(listOf("مدير فرع صندوق النظافة والتحسين", "الاسم: رياض أحمد محمد", "التوقيع: ........................"), "left"),
+                signatureCell(listOf("المدير المالي", "الاسم: ........................", "التوقيع: ........................"), "right")
+            )
+            val grid = (cells.indices).joinToString("") { "<w:gridCol w:w=\"3200\"/>" }
+            return "<w:tbl><w:tblPr><w:tblW w:w=\"9600\" w:type=\"dxa\"/><w:tblBorders><w:top w:val=\"nil\"/><w:left w:val=\"nil\"/><w:bottom w:val=\"nil\"/><w:right w:val=\"nil\"/><w:insideH w:val=\"nil\"/><w:insideV w:val=\"nil\"/></w:tblBorders></w:tblPr><w:tblGrid>$grid</w:tblGrid><w:tr>${cells.joinToString("")}</w:tr></w:tbl>"
+        }
+        val blank = "................................................................................................"
+        val amount = d.amount?.toString().orEmpty().ifBlank { "................" }
+        val amountWords = d.amountWords.orEmpty().ifBlank { "................................................" }
+        val details = d.details.orEmpty().ifBlank { blank }
+        val body = when (d.type) {
+            DocumentType.REQUEST -> listOf(
+                "إلى الأخ / مدير فرع صندوق النظافة والتحسين المحترم",
+                "نتكرم بالتوجيه بصرف / اعتماد الطلب الموضح أدناه:",
+                details,
+                "وتكرموا مشكورين بالتوجيه"
+            ).joinToString("") { p(it) }
+            DocumentType.ORDER -> listOf(
+                "الأخ أمين الصندوق المحترم",
+                "بعد التوجيه يتم صرف مبلغ وقدره: $amountWords",
+                "المبلغ بالأرقام: $amount ريال",
+                "وذلك للأخ /ـوه: ${d.beneficiaryName.orEmpty().ifBlank { blank }}",
+                "وذلك مقابل / ${d.purpose.orEmpty().ifBlank { blank }}",
+                "ولكم خالص الشكر والتقدير"
+            ).joinToString("") { p(it, bold = it == "الأخ أمين الصندوق المحترم" || it.startsWith("ولكم")) }
+            DocumentType.RECEIPT -> listOf(
+                "أنا الموقع أدناه: ${d.beneficiaryName.orEmpty().ifBlank { blank }}",
+                "استلمت مبلغًا وقدره: $amount ريال",
+                "فقط: $amountWords",
+                "من فرع صندوق النظافة والتحسين",
+                "وذلك مقابل: ${d.purpose.orEmpty().ifBlank { blank }}",
+                "وأقر بأنني استلمت المبلغ كاملًا دون نقص وأصبحت ذمتي خالية من ذلك."
+            ).joinToString("") { p(it) }
+            DocumentType.VIOLATION_REPORT -> listOf(
+                "في تمام الساعة ${d.incidentTime.orEmpty().ifBlank { "............." }} من يوم ${d.incidentDay.orEmpty().ifBlank { "............." }} الموافق: ${d.dateHijri.ifBlank { "   /   / 14هـ" }}",
+                "وفي الموقع الكائن: ${d.incidentLocation.orEmpty().ifBlank { blank }}",
+                "تم مشاهدة وضبط المخالفة الآتية ونوعها: ${d.violationType.orEmpty().ifBlank { "............................" }}",
+                details,
+                "والمنسوب إليه فعل / مسؤولية ذلك هو ${d.beneficiaryName.orEmpty().ifBlank { blank }}",
+                "وهو الأمر ${d.responsibleAction.orEmpty().ifBlank { blank }} وفقًا للمادة (${d.lawArticle.orEmpty().ifBlank { "...." }}) من قانون النظافة، والمعاقبة عليه بالحبس مدة لا تقل عن 7 أسابيع أو غرامة مالية لا تقل عن ألف ريال (1000) أو كلاهما.",
+                "واستنادًا إلى المواد (32) و(41) و(26)، تُحصّل غرامة قدرها $amount ريال لصالح صندوق النظافة والتحسين فرع مديرية الحزم، ويجوز منح مهلة للسداد لا تزيد عن أسبوع، ثم يضاعف أصل الغرامة كل أسبوع عند التأخر.",
+                "الشهود: 1- ${d.witnessOne.orEmpty().ifBlank { "...................." }}    2- ${d.witnessTwo.orEmpty().ifBlank { "...................." }}",
+                "مسؤول المنطقة: ${d.regionName.orEmpty().ifBlank { "...................." }} — ${d.regionOfficerName.orEmpty().ifBlank { "...................." }} — التوقيع: ...................."
+            ).joinToString("") { p(it) }
+            DocumentType.FINANCIAL_MEMO -> listOf(field("إلى:", d.beneficiaryName), field("الموضوع:", d.purpose), details).joinToString("") { p(it) }
+            DocumentType.PURCHASE_ORDER -> listOf(field("المورد:", d.beneficiaryName), field("الغرض من الشراء:", d.purpose), "الإجمالي: $amount", "بيان الأصناف / الشروط:", details).joinToString("") { p(it) }
+            DocumentType.SUPPLY_PERMIT -> listOf(field("إذن توريد / استلام إلى:", d.beneficiaryName), field("الجهة المستفيدة:", d.purpose), "الأصناف والكميات:", details).joinToString("") { p(it) }
+            DocumentType.RECEIPT_MINUTES -> listOf("محضر استلام", field("تم الاستلام من:", d.beneficiaryName), field("بشأن:", d.purpose), details).joinToString("") { p(it) }
+            DocumentType.FINANCIAL_CLAIM -> listOf(field("مقدم المطالبة:", d.beneficiaryName), field("سبب المطالبة:", d.purpose), "قيمة المطالبة: $amount ريال", details).joinToString("") { p(it) }
+            DocumentType.CUSTODY_SETTLEMENT -> listOf(field("صاحب العهدة:", d.beneficiaryName), field("موضوع التسوية:", d.purpose), "المبلغ: $amount ريال", details).joinToString("") { p(it) }
+            DocumentType.ADVANCE_PERMIT -> listOf("إذن صرف سلفة", field("تصرف إلى:", d.beneficiaryName), field("وذلك لغرض:", d.purpose), "مبلغ السلفة: $amount ريال", details).joinToString("") { p(it) }
+            DocumentType.RECEIPT_PAPER -> listOf("سند قبض", field("استلمنا من:", d.beneficiaryName), "مبلغ وقدره: $amount ريال", field("وذلك مقابل:", d.purpose), details).joinToString("") { p(it) }
+            DocumentType.OFFICIAL_FINANCIAL_LETTER -> listOf(field("إلى:", d.beneficiaryName), field("الموضوع:", d.purpose), details).joinToString("") { p(it) }
+            DocumentType.BOOK -> listOf("دفتر المستندات", d.tags.ifBlank { d.purpose.orEmpty() }, "رقم الصفحة: ${d.documentNumber}", details).joinToString("") { p(it) }
+            DocumentType.EXPENSE_STATEMENT, DocumentType.EXPENSE_REPORT -> ""
+        }
+        val signatures = if (d.type == DocumentType.REQUEST) {
+            p("اسم مقدم الطلب: ${d.beneficiaryName.orEmpty()}", "left") + p("توقيع مقدم الطلب: ........................", "left")
+        } else signatureTable(withCashier = d.type == DocumentType.RECEIPT)
+        val logoXml = if (hasLogo) "<w:p><w:pPr><w:jc w:val=\"center\"/></w:pPr><w:r><w:drawing><wp:inline xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\" xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" xmlns:pic=\"http://schemas.openxmlformats.org/drawingml/2006/picture\"><wp:extent cx=\"900000\" cy=\"510000\"/><wp:docPr id=\"1\" name=\"Official logo\"/><a:graphic><a:graphicData uri=\"http://schemas.openxmlformats.org/drawingml/2006/picture\"><pic:pic><pic:blipFill><a:blip r:embed=\"rId2\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>" else ""
+        val design = DesignRenderLoader.design(context, d.type)
+        val pageSize = AppPreferences.pageSize(context, d.type)
+        val half = pageSize == "HALF_A4" || (d.type == DocumentType.ORDER && pageSize.isBlank())
+        val fixedA4 = d.type == DocumentType.VIOLATION_REPORT
+        val width = when { fixedA4 -> 595; half -> 842; design != null -> design.pageWidth.toInt(); design?.orientation == "LANDSCAPE" -> 842; else -> 595 }
+        val height = when { fixedA4 -> 842; half -> 595; design != null -> design.pageHeight.toInt(); design?.orientation == "LANDSCAPE" -> 595; else -> 842 }
+        return """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${p("بِسْمِ اللهِ الرَّحْمَنِ الرَّحِيمِ", "center", true)}$logoXml${p("الجمهورية اليمنية — وزارة الإدارة والتنمية المحلية والريفية — صندوق النظافة والتحسين م/إب — فرع مديرية الحزم", "center", true)}${p("الرقم: ............    التاريخ: ${d.dateHijri.ifBlank { "       /       / 144 هـ" }}    الموافق: ${d.dateGregorian.ifBlank { "       /       / 20   م" }}    المرفقات: ( ${d.attachmentsCount} )")}${p("NO: ${d.documentNumber}", "left", true)}${p(d.type.displayName(), "center", true)}$body$signatures<w:sectPr><w:pgSz w:w="${width * 20}" w:h="${height * 20}"/><w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720"/></w:sectPr></w:body></w:document>"""
+    }
+
+    private fun legacyDocxXml(d: Document, hasLogo: Boolean): String {
         if (d.type.isExpenseStatement()) return expenseReportDocxXml(d, hasLogo)
         fun esc(s: String) = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&apos;")
         fun p(label: String, value: String): String {
@@ -148,6 +234,7 @@ object OfficialDocumentExporter {
         val footer = { number: Int -> paragraph("طبع بواسطة/ نظام المالية التابع لفرع صندوق النظافة والتحسين مديرية الحزم     صفحة رقم: $number", "center", "2459BA", 16) }
         val pageThree = buildString {
             append(paragraph("الرقم: ....................      التاريخ:   /   / ${d.dateHijri.ifBlank { "144هـ" }}      الموافق:   /   / ${d.dateGregorian.ifBlank { "202م" }}      المرفقات: ....................", "right", size = 16))
+            append(paragraph("NO: ${d.documentNumber}", "left", size = 16, bold = true))
             append(logoXml)
             append(paragraph("الجمهورية اليمنية — ${esc("وزارة الإدارة والتنمية المحلية والريفية")} — صندوق النظافة والتحسين — فرع مديرية الحزم", "center", size = 17, bold = true))
             append(boxedBanner("الباب الأول: المصروفات التشغيلية الشهرية لفرع صندوق النظافة والتحسين مديرية الحزم", "لشهر: ${d.purpose.orEmpty().ifBlank { "................" }} ← ${d.dateHijri.ifBlank { "144هـ" }} / ${d.dateGregorian.ifBlank { "202م" }}"))

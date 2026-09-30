@@ -34,6 +34,16 @@ fun AppNavigation(viewModel: MasrofViewModel) {
             val allowed = userSelectableDocumentTypes().filter { RolePreferences.canCreate(context, it) }.toSet()
             DocumentTypeSelectionScreen(allowedTypes = allowed) { type -> navController.navigate(documentFormRoute(type)) }
         }
+        composable("editor/{type}") { entry ->
+            val type = runCatching { DocumentType.valueOf(entry.arguments?.getString("type").orEmpty()) }.getOrNull()
+            if (type == null || type == DocumentType.EXPENSE_STATEMENT || type == DocumentType.EXPENSE_REPORT || !RolePreferences.canCreate(context, type)) {
+                navController.popBackStack()
+            } else {
+                UniversalDocumentEditorScreen(viewModel, type, onBack = { navController.popBackStack() }) {
+                    navController.navigate("canvas/${type.name}")
+                }
+            }
+        }
         composable("request_form") { RequestFormScreen(viewModel, onNavigateBack = { navController.popBackStack() }) }
         composable("order_form") { PaymentOrderFormScreen(viewModel, onNavigateBack = { navController.popBackStack() }) }
         composable("receipt_form") { ReceiptFormScreen(viewModel, onNavigateBack = { navController.popBackStack() }) }
@@ -52,17 +62,15 @@ fun AppNavigation(viewModel: MasrofViewModel) {
             val id = entry.arguments?.getString("id")?.toLongOrNull()
             val document = viewModel.allDocuments.value.firstOrNull { it.id == id }
             val type = document?.type ?: runCatching { DocumentType.valueOf(routeType.uppercase()) }.getOrNull()
-            if (type == null || !RolePreferences.can(context, AppPermission.EDIT)) {
+            if (type == null || document == null || !RolePreferences.can(context, AppPermission.EDIT)) {
                 navController.popBackStack()
                 return@composable
             }
             when (type) {
-                DocumentType.REQUEST -> RequestFormScreen(viewModel, { navController.popBackStack() }, existing = document)
-                DocumentType.ORDER -> PaymentOrderFormScreen(viewModel, { navController.popBackStack() }, existing = document)
-                DocumentType.RECEIPT -> ReceiptFormScreen(viewModel, { navController.popBackStack() }, existing = document)
-                DocumentType.VIOLATION_REPORT -> ViolationReportFormScreen(viewModel, { navController.popBackStack() }, existing = document)
                 DocumentType.EXPENSE_STATEMENT, DocumentType.EXPENSE_REPORT -> ExpenseReportFormScreen(viewModel, { navController.popBackStack() }, existing = document)
-                else -> GenericDocumentFormScreen(viewModel, type, { navController.popBackStack() }, existing = document)
+                else -> UniversalDocumentEditorScreen(viewModel, type, existing = document, onBack = { navController.popBackStack() }) {
+                    navController.navigate("canvas/${type.name}")
+                }
             }
         }
         composable("settings") { SettingsScreen({ navController.popBackStack() }, { navController.navigate("users") }, { navController.navigate("updates") }, { navController.navigate("cloud_sync") }) }
@@ -79,10 +87,6 @@ fun AppNavigation(viewModel: MasrofViewModel) {
 }
 
 private fun documentFormRoute(type: DocumentType): String = when (type) {
-    DocumentType.REQUEST -> "request_form"
-    DocumentType.ORDER -> "order_form"
-    DocumentType.RECEIPT -> "receipt_form"
-    DocumentType.VIOLATION_REPORT -> "violation_report_form"
     DocumentType.EXPENSE_STATEMENT, DocumentType.EXPENSE_REPORT -> "expense_report_form"
-    else -> "generic_form/${type.name}"
+    else -> "editor/${type.name}"
 }

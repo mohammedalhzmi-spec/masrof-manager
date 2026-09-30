@@ -39,6 +39,7 @@ import com.example.R
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
 import com.mohammedalhzmi.masrofmanager.util.HybridAiAssistant
+import com.mohammedalhzmi.masrofmanager.util.DocumentTableCodec
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -51,6 +52,7 @@ fun CanvasEditorScreen(viewModel: MasrofViewModel, type: DocumentType, onBack: (
     var selectedId by remember { mutableStateOf<Long?>(null) }
     var showTextDialog by remember { mutableStateOf(false) }
     var showEditDialog by remember { mutableStateOf(false) }
+    var showTableDialog by remember { mutableStateOf(false) }
     var showPageDialog by remember { mutableStateOf(false) }
     var showAiDialog by remember { mutableStateOf(false) }
     var grid by remember { mutableStateOf(true) }
@@ -74,6 +76,7 @@ fun CanvasEditorScreen(viewModel: MasrofViewModel, type: DocumentType, onBack: (
         LazyRow(horizontalArrangement = Arrangement.spacedBy(5.dp), modifier = Modifier.fillMaxWidth()) {
             item { Button(onClick = { showTextDialog = true }) { Text("نص") } }
             item { Button(onClick = { imagePicker.launch(arrayOf("image/*")) }) { Text("صورة") } }
+            item { Button(onClick = { showTableDialog = true }) { Text("جدول") } }
             item { Button(onClick = { add("RECT") }) { Text("مستطيل") } }
             item { Button(onClick = { add("CIRCLE", x = 90f, y = 260f) }) { Text("دائرة") } }
             item { Button(onClick = { add("LINE", x = 70f, y = 340f, w = 230f, h = 8f) }) { Text("خط") } }
@@ -94,7 +97,7 @@ fun CanvasEditorScreen(viewModel: MasrofViewModel, type: DocumentType, onBack: (
             item { OutlinedButton(enabled = selected?.type == "TEXT", onClick = { selected?.let { viewModel.updateDesignElement(it.copy(textAlign = "START")) } }) { Text("يمين") } }
             item { OutlinedButton(enabled = selected?.type == "TEXT", onClick = { selected?.let { viewModel.updateDesignElement(it.copy(textAlign = "CENTER")) } }) { Text("وسط") } }
             item { OutlinedButton(enabled = selected?.type == "TEXT", onClick = { selected?.let { viewModel.updateDesignElement(it.copy(textAlign = "END")) } }) { Text("يسار") } }
-            item { OutlinedButton(enabled = selected?.type == "TEXT", onClick = { showEditDialog = true }) { Text("تحرير") } }
+            item { OutlinedButton(enabled = selected?.type == "TEXT" || selected?.type == "TABLE", onClick = { if (selected?.type == "TABLE") showTableDialog = true else showEditDialog = true }) { Text("تحرير") } }
             item { OutlinedButton(enabled = selected != null, onClick = { selected?.let { viewModel.deleteDesignElement(it); selectedId = null } }) { Text("حذف") } }
         }
         Spacer(Modifier.height(8.dp))
@@ -117,6 +120,12 @@ fun CanvasEditorScreen(viewModel: MasrofViewModel, type: DocumentType, onBack: (
     }
     if (showTextDialog) TextElementDialog(onDismiss = { showTextDialog = false }) { text, bold, italic, underline, family, color, size, align, spacing ->
         viewModel.addDesignElement(DesignElementEntity(0, 0, "TEXT", text, 40f, 70f, 280f, 70f, zIndex = nextZ, bold = bold, italic = italic, underline = underline, fontFamily = family, textColor = color, fontSize = size, textAlign = align, lineSpacing = spacing)); showTextDialog = false
+    }
+    if (showTableDialog) TableElementDialog(initial = selected?.takeIf { it.type == "TABLE" }, onDismiss = { showTableDialog = false }) { editorText ->
+        val encoded = DocumentTableCodec.encode(DocumentTableCodec.parseEditorText(editorText))
+        if (selected?.type == "TABLE") viewModel.updateDesignElement(selected.copy(content = encoded))
+        else add("TABLE", encoded, 40f, 150f, 280f, 150f)
+        showTableDialog = false
     }
     if (showEditDialog && selected != null) TextElementDialog(initial = selected, onDismiss = { showEditDialog = false }) { text, bold, italic, underline, family, color, size, align, spacing ->
         viewModel.updateDesignElement(selected.copy(content = text, bold = bold, italic = italic, underline = underline, fontFamily = family, textColor = color, fontSize = size, textAlign = align, lineSpacing = spacing)); showEditDialog = false
@@ -145,6 +154,21 @@ private fun CanvasElement(element: DesignElementEntity, selected: Boolean, grid:
             "STICKER" -> Text(element.content, Modifier.fillMaxSize(), fontSize = (element.height * .75f).sp, textAlign = TextAlign.Center)
             "QR" -> DocumentQr(element, Modifier.fillMaxSize())
             "IMAGE" -> DocumentImage(element, Modifier.fillMaxSize())
+            "TABLE" -> {
+                val rows = DocumentTableCodec.decode(element.content)
+                if (rows.isEmpty()) Text("جدول فارغ", Modifier.fillMaxSize(), textAlign = TextAlign.Center)
+                else Column(Modifier.fillMaxSize()) {
+                    rows.forEach { row ->
+                        Row(Modifier.fillMaxWidth().weight(1f)) {
+                            row.forEach { cell ->
+                                Box(Modifier.weight(1f).fillMaxHeight().border(0.5.dp, parseColor(element.strokeColor)).padding(2.dp), contentAlignment = Alignment.Center) {
+                                    Text(cell, fontSize = 10.sp, textAlign = TextAlign.Center, maxLines = 3)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
         if (selected) {
             Box(Modifier.align(Alignment.BottomEnd).size(18.dp).background(MaterialTheme.colorScheme.primary).pointerInput(element.id, element.width, element.height) { detectDragGestures { change, drag -> change.consume(); onResize(drag.x, drag.y) } })
@@ -174,6 +198,27 @@ private fun DocumentImage(element: DesignElementEntity, modifier: Modifier) {
 }
 
 @Composable
+private fun TableElementDialog(initial: DesignElementEntity? = null, onDismiss: () -> Unit, onSave: (String) -> Unit) {
+    val initialText = remember(initial?.id) {
+        DocumentTableCodec.decode(initial?.content.orEmpty()).joinToString("\n") { row -> row.joinToString(" | ") }
+            .ifBlank { "البند | الكمية | المبلغ\n................ | ............ | ............" }
+    }
+    var tableText by remember(initial?.id) { mutableStateOf(initialText) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (initial == null) "إضافة جدول" else "تحرير الجدول") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("اكتب كل صف في سطر، وافصل الخلايا بالرمز |. مثال: البند | الكمية | المبلغ")
+                OutlinedTextField(tableText, { tableText = it }, label = { Text("محتوى الجدول") }, minLines = 4)
+            }
+        },
+        confirmButton = { Button(onClick = { onSave(tableText) }) { Text("حفظ الجدول") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } }
+    )
+}
+
+@Composable
 private fun TextElementDialog(initial: DesignElementEntity? = null, onDismiss: () -> Unit, onSave: (String, Boolean, Boolean, Boolean, String, String, Float, String, Float) -> Unit) {
     var text by remember { mutableStateOf(initial?.content ?: "نص جديد") }; var bold by remember { mutableStateOf(initial?.bold ?: false) }; var italic by remember { mutableStateOf(initial?.italic ?: false) }; var underline by remember { mutableStateOf(initial?.underline ?: false) }; var family by remember { mutableStateOf(initial?.fontFamily ?: "SANS") }; var color by remember { mutableStateOf(initial?.textColor ?: "#000000") }; var size by remember { mutableStateOf(initial?.fontSize ?: 18f) }; var align by remember { mutableStateOf(initial?.textAlign ?: "START") }; var spacing by remember { mutableStateOf(initial?.lineSpacing ?: 1f) }
     AlertDialog(onDismissRequest = onDismiss, title = { Text("مربع نص متقدم") }, text = { Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { OutlinedTextField(text, { text = it }, label = { Text("النص؛ يدعم عدة أسطر وحقولًا مثل {المبلغ}") }); OutlinedTextField(color, { color = it }, label = { Text("اللون") }); Row { FilterChip(bold, { bold = !bold }, label = { Text("عريض") }); FilterChip(italic, { italic = !italic }, label = { Text("مائل") }); FilterChip(underline, { underline = !underline }, label = { Text("تحته خط") }) }; Row { listOf("START" to "يمين", "CENTER" to "وسط", "END" to "يسار").forEach { (key, label) -> TextButton(onClick = { align = key }) { Text(if (align == key) "$label ✓" else label) } } }; Row(verticalAlignment = Alignment.CenterVertically) { Text("الحجم ${size.roundToInt()}"); TextButton(onClick = { size = (size - 2).coerceAtLeast(8f) }) { Text("-") }; TextButton(onClick = { size = (size + 2).coerceAtMost(96f) }) { Text("+") } }; Row { listOf("SANS" to "Sans", "SERIF" to "Serif", "MONOSPACE" to "Mono", "AMIRI" to "Amiri", "CAIRO" to "Cairo", "SCHEHERAZADE" to "Scheherazade", "EL_MESSIRI" to "El Messiri", "NOTO_KUFI" to "Noto Kufi", "NOTO_NASKH" to "Noto Naskh", "TAJAWAL" to "Tajawal").forEach { (key, label) -> TextButton(onClick = { family = key }) { Text(if (family == key) "$label ✓" else label) } } } } }, confirmButton = { Button(onClick = { onSave(text, bold, italic, underline, family, color, size, align, spacing) }) { Text("حفظ") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } })
@@ -187,8 +232,8 @@ private fun PageSettingsDialog(initial: DocumentDesignEntity, onDismiss: () -> U
     var margin by remember { mutableStateOf(initial.marginLeft) }
     var background by remember { mutableStateOf(initial.backgroundColor) }
     AlertDialog(onDismissRequest = onDismiss, title = { Text("إعدادات الصفحة") }, text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row { TextButton(onClick = { orientation = "PORTRAIT"; width = 595f; height = 842f }) { Text(if (orientation == "PORTRAIT") "عمودي ✓" else "عمودي") }; TextButton(onClick = { orientation = "LANDSCAPE"; width = 842f; height = 595f }) { Text(if (orientation == "LANDSCAPE") "أفقي ✓" else "أفقي") } }
-        Row { TextButton(onClick = { width = 595f; height = 842f }) { Text("A4") }; TextButton(onClick = { width = 420f; height = 595f }) { Text("A5") }; Text("${width.roundToInt()} × ${height.roundToInt()}") }
+        Row { TextButton(onClick = { if (width > height) { val old = width; width = height; height = old }; orientation = "PORTRAIT" }) { Text(if (orientation == "PORTRAIT") "عمودي ✓" else "عمودي") }; TextButton(onClick = { if (width < height) { val old = width; width = height; height = old }; orientation = "LANDSCAPE" }) { Text(if (orientation == "LANDSCAPE") "أفقي ✓" else "أفقي") } }
+        Row { TextButton(onClick = { orientation = "PORTRAIT"; width = 595f; height = 842f }) { Text("A4") }; TextButton(onClick = { orientation = "PORTRAIT"; width = 420f; height = 595f }) { Text("A5") }; TextButton(onClick = { orientation = "PORTRAIT"; width = 842f; height = 1191f }) { Text("A3") }; Text("${width.roundToInt()} × ${height.roundToInt()}") }
         Row(verticalAlignment = Alignment.CenterVertically) { Text("الهامش ${margin.roundToInt()}"); TextButton(onClick = { margin = (margin - 5).coerceAtLeast(0f) }) { Text("-") }; TextButton(onClick = { margin += 5 }) { Text("+") } }
         OutlinedTextField(background, { background = it }, label = { Text("لون الخلفية #RRGGBB") })
     } }, confirmButton = { Button(onClick = { onSave(initial.copy(pageWidth = width, pageHeight = height, orientation = orientation, marginLeft = margin, marginTop = margin, marginRight = margin, marginBottom = margin, backgroundColor = background)) }) { Text("حفظ") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } })
