@@ -65,6 +65,10 @@ fun ExpenseReportFormScreen(
         debtPrevious = ExpenseBookData.parseAmount(debtPrevious),
         legacyGeneralTotal = if (chapterOne.isBlank() && chapterTwo.isBlank() && chapterThree.isBlank()) initial.legacyGeneralTotal else 0,
         legacyDetails = initial.legacyDetails,
+        pageOneRows = pageOneRows,
+        pageTwoRows = pageTwoRows,
+        pageThreeRows = pageThreeRows,
+        debtRows = debtRows,
         expenseRows = initial.expenseRows
     )
 
