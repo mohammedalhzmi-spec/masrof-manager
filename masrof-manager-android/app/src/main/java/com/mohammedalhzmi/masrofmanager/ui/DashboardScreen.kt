@@ -3,10 +3,15 @@ package com.mohammedalhzmi.masrofmanager.ui
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -19,6 +24,7 @@ import com.mohammedalhzmi.masrofmanager.data.DocumentType
 import com.mohammedalhzmi.masrofmanager.data.displayName
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
+import com.example.R
 
 @Composable
 fun DashboardScreen(viewModel: MasrofViewModel, onAddDocument: () -> Unit, onCreateBook: () -> Unit, onPrint: (String) -> Unit, onEdit: (String) -> Unit, onSettings: () -> Unit) {
@@ -39,7 +45,16 @@ fun DashboardScreen(viewModel: MasrofViewModel, onAddDocument: () -> Unit, onCre
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let { viewModel.importDatabase(context, it); viewModel.recordAudit("IMPORT_DATABASE", "استعادة DB") } }
     val zipExportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri -> uri?.let { viewModel.exportFullBackup(context, it); viewModel.recordAudit("EXPORT_BACKUP", "نسخة ZIP كاملة") } }
     val zipImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let { viewModel.importFullBackup(context, it); viewModel.recordAudit("IMPORT_BACKUP", "استعادة ZIP كاملة") } }
-    Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+    Column(modifier = Modifier.fillMaxSize().background(Color(0xffeef3f5)).verticalScroll(rememberScrollState()).padding(16.dp)) {
+        Image(
+            painter = painterResource(R.drawable.official_emblem),
+            contentDescription = "شعار الجمهورية اليمنية",
+            modifier = Modifier.fillMaxWidth().height(84.dp),
+            contentScale = ContentScale.Fit
+        )
+        Text("الجمهورية اليمنية", modifier = Modifier.fillMaxWidth(), style = MaterialTheme.typography.titleMedium, color = Color(0xff16486d), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        Text("صندوق النظافة والتحسين — فرع مديرية الحزم", modifier = Modifier.fillMaxWidth(), style = MaterialTheme.typography.bodyMedium, color = Color(0xff198b5b), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        Spacer(modifier = Modifier.height(12.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) { Text("نظام المالية لصندوق النظافة الحزم", style = MaterialTheme.typography.headlineMedium, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis); Text("الدور الحالي: ${role.title}", style = MaterialTheme.typography.bodySmall) }
             if (canSettings) IconButton(onClick = onSettings) { Icon(Icons.Default.Settings, contentDescription = "الإعدادات") }
