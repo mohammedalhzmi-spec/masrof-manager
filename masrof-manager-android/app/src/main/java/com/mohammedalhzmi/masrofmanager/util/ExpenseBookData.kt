@@ -13,8 +13,14 @@ internal data class ExpenseBookData(
     val debtMarch: Long = 0,
     val debtPrevious: Long = 0,
     val legacyGeneralTotal: Long = 0,
-    val legacyDetails: String = ""
+    val legacyDetails: String = "",
+    val pageOneRows: String = "",
+    val pageTwoRows: String = "",
+    val pageThreeRows: String = "",
+    val debtRows: String = "",
+    val expenseRows: String = ""
 ) {
+    data class ExpenseLine(val label: String, val quantity: String = "", val paid: String = "", val unpaid: String = "", val details: String = "")
     private val chapterTotal: Long
         get() = chapterOneTotal + chapterTwoTotal + chapterThreeTotal
 
@@ -30,15 +36,24 @@ internal data class ExpenseBookData(
         get() = if (hasChapterTotals) (chapterTotal - FIXED_GENERAL_TOTAL).coerceAtLeast(0) else 0
 
     val debtTotal: Long
-        get() = debtFebruary + debtMarch + debtPrevious + excessDebt
+        get() = debtFebruary + debtMarch + debtPrevious + excessDebt + debtRowsTotal
+
+    val debtRowsTotal: Long
+        get() = debtRows.lineSequence().map { it.split('|').getOrNull(1)?.let(::parseAmount) ?: 0L }.sum()
 
     fun encode(): String {
         val legacy = URLEncoder.encode(legacyDetails, StandardCharsets.UTF_8.name())
         val fields = listOf(
             chapterOneTotal, chapterTwoTotal, chapterThreeTotal,
-            debtFebruary, debtMarch, debtPrevious, legacyGeneralTotal
+            debtFebruary, debtMarch, debtPrevious, legacyGeneralTotal,
+            URLEncoder.encode(legacyDetails, StandardCharsets.UTF_8.name()),
+            URLEncoder.encode(pageOneRows, StandardCharsets.UTF_8.name()),
+            URLEncoder.encode(pageTwoRows, StandardCharsets.UTF_8.name()),
+            URLEncoder.encode(pageThreeRows, StandardCharsets.UTF_8.name()),
+            URLEncoder.encode(debtRows, StandardCharsets.UTF_8.name()),
+            URLEncoder.encode(expenseRows, StandardCharsets.UTF_8.name())
         ).joinToString("|")
-        return "$PREFIX$fields|$legacy"
+        return "$PREFIX$fields"
     }
 
     companion object {
@@ -58,9 +73,9 @@ internal data class ExpenseBookData(
             val raw = value.orEmpty()
             if (!raw.startsWith(PREFIX)) return ExpenseBookData(legacyDetails = raw)
             val fields = raw.removePrefix(PREFIX).split('|')
-            if (fields.size != 8) return ExpenseBookData(legacyDetails = raw)
+            if (fields.size !in setOf(8, 12, 13)) return ExpenseBookData(legacyDetails = raw)
             fun amount(index: Int): Long = fields[index].toLongOrNull()?.coerceIn(0, MAX_AMOUNT) ?: 0
-            val legacy = runCatching { URLDecoder.decode(fields[7], StandardCharsets.UTF_8.name()) }.getOrDefault("")
+            val legacy = decodeText(fields[7])
             return ExpenseBookData(
                 chapterOneTotal = amount(0),
                 chapterTwoTotal = amount(1),
@@ -69,9 +84,38 @@ internal data class ExpenseBookData(
                 debtMarch = amount(4),
                 debtPrevious = amount(5),
                 legacyGeneralTotal = amount(6),
-                legacyDetails = legacy
+                legacyDetails = legacy,
+                pageOneRows = fields.getOrNull(8)?.let(::decodeText).orEmpty(),
+                pageTwoRows = fields.getOrNull(9)?.let(::decodeText).orEmpty(),
+                pageThreeRows = fields.getOrNull(10)?.let(::decodeText).orEmpty(),
+                debtRows = fields.getOrNull(11)?.let(::decodeText).orEmpty(),
+                expenseRows = fields.getOrNull(12)?.let(::decodeText).orEmpty()
             )
         }
+
+        fun defaultRows(page: Int): List<String> = when (page) {
+            1 -> listOf("الوقود الديزل للأعمال اليومية", "وقود للدمر والتكاتك", "زيت وتشحيم للمعدات", "حملة النظافة الشهرية", "صيانة مشتريات 1", "صيانة مشتريات 2", "صيانة مشتريات 3", "أخرى مختلفة", "سروسه", "مكاسن + خراشات", "ملابس + أحذية", "كفوف", "أكياس قمامة")
+            2 -> listOf("مستحقات مدير المديرية", "مستحقات مدير الفرع", "مستحقات الإداريين", "مستحقات العمال", "مستحقات المشرفين", "مستحقات السائقين", "نسبة المحصلين", "بدل جلسات", "إضافي", "الحوافز والمكافآت", "إكرامية نقدية", "إكرامية عينية", "مياه وكهرباء", "مصروفات عهدة", "رسوم المقلب الشهرية", "خدمات الاستضافة والضيافة", "علاج وتداوي")
+            else -> listOf("القرطاسية والطباعة", "متأخرات مديونية متبقية من الشهر السابق", "تنقلات عامة", "بدل سفر", "إيجار مباني", "اتصالات والإنترنت", "استئجار معدات", "خدمات الأمن والضبط", "الفوائد والعمولات المحلية", "خدمات البنوك", "خدمات الحراسة والأمن", "أخرى مختلفة", "ديون محلية وسابقة", "ضرائب المرتبات والدخل والمبيعات")
+        }
+
+        fun decodeRows(value: String?, page: Int): Map<String, ExpenseLine> {
+            val prefix = "ROWV1|$page|"
+            val raw = value.orEmpty().lineSequence().firstOrNull { it.startsWith(prefix) }?.removePrefix(prefix).orEmpty()
+            return raw.split(";").asSequence().filter { it.isNotBlank() }.mapNotNull { encoded ->
+                val p = encoded.split("~")
+                if (p.size < 5) null else { val text = p.map(::decodeText); text[0] to ExpenseLine(text[0], text[1], text[2], text[3], text[4]) }
+            }.toMap()
+        }
+
+        fun encodeRows(rows: Map<String, ExpenseLine>, page: Int): String {
+            val body = rows.values.joinToString(";") { line -> listOf(line.label, line.quantity, line.paid, line.unpaid, line.details).joinToString("~") { URLEncoder.encode(it, StandardCharsets.UTF_8.name()) } }
+            return "ROWV1|$page|$body"
+        }
+
+        private fun decodeText(value: String): String = runCatching {
+            URLDecoder.decode(value, StandardCharsets.UTF_8.name())
+        }.getOrDefault("")
 
         fun hasEncodedData(value: String?): Boolean = value.orEmpty().startsWith(PREFIX)
 

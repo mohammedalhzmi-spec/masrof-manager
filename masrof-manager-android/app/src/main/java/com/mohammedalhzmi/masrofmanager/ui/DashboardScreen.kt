@@ -25,6 +25,7 @@ import com.mohammedalhzmi.masrofmanager.data.displayName
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import com.example.R
+import com.mohammedalhzmi.masrofmanager.util.OfficialDocumentExporter
 
 @Composable
 fun DashboardScreen(viewModel: MasrofViewModel, onAddDocument: () -> Unit, onCreateBook: () -> Unit, onPrint: (String) -> Unit, onEdit: (String) -> Unit, onSettings: () -> Unit) {
@@ -110,6 +111,17 @@ fun DashboardScreen(viewModel: MasrofViewModel, onAddDocument: () -> Unit, onCre
                         if (canApprove && !showArchive && (doc.status == DocumentStatus.SUBMITTED || doc.status == DocumentStatus.APPROVED)) TextButton(onClick = { viewModel.transitionDocument(doc, DocumentStatus.CANCELLED) }) { Text("إلغاء") }
                         if (showArchive) TextButton(onClick = { viewModel.restoreDocument(doc) }) { Text("استعادة") }
                         else if (canEdit) TextButton(onClick = { onEdit("${doc.type.name.lowercase()}:${doc.id}") }) { Text("تعديل") }
+                        val bookTag = doc.tags.split(",").map(String::trim).firstOrNull { it.startsWith("دفتر:") }
+                        TextButton(onClick = {
+                            val exportDocs = if (bookTag == null) listOf(doc) else sourceDocuments.filter { other -> other.tags.split(",").map(String::trim).contains(bookTag) }
+                            OfficialDocumentExporter.share(context, OfficialDocumentExporter.exportPdf(context, exportDocs), if (bookTag == null) "مشاركة المستند PDF" else "مشاركة دفتر المستندات PDF")
+                        }) { Text("مشاركة") }
+                        if (!showArchive && canDelete) {
+                            TextButton(onClick = { viewModel.deleteDocument(doc) }) { Text("حذف") }
+                            if (bookTag != null && sourceDocuments.firstOrNull { other -> other.tags.split(",").map(String::trim).contains(bookTag) }?.id == doc.id) {
+                                TextButton(onClick = { sourceDocuments.filter { other -> other.tags.split(",").map(String::trim).contains(bookTag) }.forEach(viewModel::deleteDocument) }) { Text("حذف الدفتر") }
+                            }
+                        }
                     }
                 }
             }

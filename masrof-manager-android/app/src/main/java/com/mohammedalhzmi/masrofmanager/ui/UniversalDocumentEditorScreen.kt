@@ -31,6 +31,7 @@ import com.mohammedalhzmi.masrofmanager.data.DocumentType
 import com.mohammedalhzmi.masrofmanager.data.displayName
 import com.mohammedalhzmi.masrofmanager.util.DocumentNumbering
 import com.mohammedalhzmi.masrofmanager.util.NumberToWordsConverter
+import com.mohammedalhzmi.masrofmanager.util.OfficialTemplateText
 
 /**
  * Offline-first, in-app editor for a single financial document. Existing records are
@@ -52,11 +53,14 @@ fun UniversalDocumentEditorScreen(
     var hijri by remember(existing?.id) { mutableStateOf(existing?.dateHijri.orEmpty()) }
     var gregorian by remember(existing?.id) { mutableStateOf(existing?.dateGregorian.orEmpty()) }
     var beneficiary by remember(existing?.id) { mutableStateOf(existing?.beneficiaryName.orEmpty()) }
+    var beneficiaryId by remember(existing?.id) { mutableStateOf(existing?.beneficiaryId.orEmpty()) }
     var amountText by remember(existing?.id) { mutableStateOf(existing?.amount?.toString().orEmpty()) }
     var amountWords by remember(existing?.id) { mutableStateOf(existing?.amountWords.orEmpty()) }
     var purpose by remember(existing?.id) { mutableStateOf(existing?.purpose.orEmpty()) }
     var details by remember(existing?.id) { mutableStateOf(existing?.details.orEmpty()) }
     var notes by remember(existing?.id) { mutableStateOf(existing?.notes.orEmpty()) }
+    var templateText by remember(existing?.id) { mutableStateOf(OfficialTemplateText.decode(existing?.notes)) }
+    var attachmentsText by remember(existing?.id) { mutableStateOf(existing?.attachmentsCount?.toString().orEmpty()) }
     var category by remember(existing?.id) { mutableStateOf(existing?.financialCategory.orEmpty()) }
     var costCenter by remember(existing?.id) { mutableStateOf(existing?.costCenter.orEmpty()) }
     var funding by remember(existing?.id) { mutableStateOf(existing?.fundingSource.orEmpty()) }
@@ -83,11 +87,37 @@ fun UniversalDocumentEditorScreen(
         else -> "المستفيد / صاحب العلاقة"
     }
     val purposeLabel = when (type) {
-        DocumentType.REQUEST -> "المخاطب إليه"
+        DocumentType.REQUEST -> "الجهة المخاطبة (تظهر بعد إلى الأخ /)"
         DocumentType.VIOLATION_REPORT -> "وصف الإجراء أو المخالفة"
         DocumentType.RECEIPT, DocumentType.RECEIPT_PAPER -> "مقابل / سبب الاستلام"
         DocumentType.PURCHASE_ORDER -> "الغرض من الشراء"
+        DocumentType.SUPPLY_PERMIT -> "جهة التوريد أو الاستلام والغرض"
+        DocumentType.RECEIPT_MINUTES -> "موضوع المواد أو الأعمال المستلمة"
+        DocumentType.FINANCIAL_CLAIM -> "سبب المطالبة المالية"
+        DocumentType.CUSTODY_SETTLEMENT -> "موضوع تسوية العهدة"
+        DocumentType.ADVANCE_PERMIT -> "غرض السلفة"
+        DocumentType.OFFICIAL_FINANCIAL_LETTER -> "موضوع الخطاب المالي"
+        DocumentType.FINANCIAL_MEMO -> "موضوع المذكرة المالية"
         else -> "الغرض / الموضوع"
+    }
+    val usesAmount = type in setOf(
+        DocumentType.ORDER, DocumentType.RECEIPT, DocumentType.RECEIPT_PAPER,
+        DocumentType.VIOLATION_REPORT, DocumentType.PURCHASE_ORDER,
+        DocumentType.CUSTODY_SETTLEMENT, DocumentType.ADVANCE_PERMIT,
+        DocumentType.FINANCIAL_CLAIM
+    )
+    val detailLabel = when (type) {
+        DocumentType.PURCHASE_ORDER -> "بيان الأصناف والكميات والشروط"
+        DocumentType.SUPPLY_PERMIT -> "الأصناف والكميات وبيانات التوريد / الاستلام"
+        DocumentType.RECEIPT_MINUTES -> "تفاصيل المواد أو الأعمال المستلمة ومحضر الاستلام"
+        DocumentType.FINANCIAL_CLAIM -> "تفاصيل المطالبة والمستندات المؤيدة"
+        DocumentType.CUSTODY_SETTLEMENT -> "تفاصيل العهدة والمصروفات والتسوية"
+        DocumentType.FINANCIAL_MEMO -> "نص المذكرة والبيانات والتوجيهات المالية"
+        DocumentType.ADVANCE_PERMIT -> "بيان استخدام السلفة وضوابط التسوية"
+        DocumentType.OFFICIAL_FINANCIAL_LETTER -> "نص الخطاب المالي والطلبات والمرفقات المؤيدة"
+        DocumentType.RECEIPT_PAPER -> "بيانات سند القبض ووصف العملية"
+        DocumentType.VIOLATION_REPORT -> "تفاصيل المخالفة / نص المحضر"
+        else -> "متن المستند / التفاصيل"
     }
 
     Column(
@@ -114,14 +144,17 @@ fun UniversalDocumentEditorScreen(
             OutlinedTextField(gregorian, { gregorian = it }, label = { Text("التاريخ الميلادي") }, modifier = Modifier.weight(1f), singleLine = true)
         }
         OutlinedTextField(beneficiary, { beneficiary = it }, label = { Text(beneficiaryLabel) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+        OutlinedTextField(beneficiaryId, { beneficiaryId = it }, label = { Text("رقم الهوية / الحساب / رقم السجل") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
         OutlinedTextField(purpose, { purpose = it }, label = { Text(purposeLabel) }, modifier = Modifier.fillMaxWidth(), minLines = 2)
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(amountText, { amountText = it.filter { ch -> ch.isDigit() || ch == '.' || ch == ',' } }, label = { Text("المبلغ بالأرقام") }, modifier = Modifier.weight(1f), singleLine = true)
-            OutlinedTextField(amountWords, { amountWords = it }, label = { Text("المبلغ كتابةً") }, modifier = Modifier.weight(1f), minLines = 1)
-        }
-        if (amountText.isNotBlank() && amountWords.isBlank()) {
-            OutlinedButton(onClick = { amountText.replace(',', '.').toDoubleOrNull()?.let { amountWords = NumberToWordsConverter.convert(it) } }) {
-                Text("تحويل المبلغ إلى كتابة")
+        if (usesAmount) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(amountText, { amountText = it.filter { ch -> ch.isDigit() || ch == '.' || ch == ',' } }, label = { Text("المبلغ بالأرقام (ريال يمني)") }, modifier = Modifier.weight(1f), singleLine = true)
+                OutlinedTextField(amountWords, { amountWords = it }, label = { Text("المبلغ كتابةً") }, modifier = Modifier.weight(1f), minLines = 1)
+            }
+            if (amountText.isNotBlank() && amountWords.isBlank()) {
+                OutlinedButton(onClick = { amountText.replace(',', '.').toDoubleOrNull()?.let { amountWords = NumberToWordsConverter.convert(it) } }) {
+                    Text("تحويل المبلغ إلى كتابة")
+                }
             }
         }
 
@@ -145,13 +178,20 @@ fun UniversalDocumentEditorScreen(
             }
         }
 
-        OutlinedTextField(details, { details = it }, label = { Text(if (type == DocumentType.VIOLATION_REPORT) "تفاصيل المخالفة / نص المحضر" else "متن المستند / التفاصيل") }, modifier = Modifier.fillMaxWidth(), minLines = 5)
+        Text("البيانات التفصيلية الخاصة بقالب ${type.displayName()}", style = MaterialTheme.typography.titleMedium)
+        OutlinedTextField(details, { details = it }, label = { Text(detailLabel) }, modifier = Modifier.fillMaxWidth(), minLines = 7)
+        if (type == DocumentType.ORDER || type == DocumentType.REQUEST || type == DocumentType.RECEIPT) {
+            TemplateTextFields(type, templateText) { templateText = it }
+        }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(category, { category = it }, label = { Text("البند المالي") }, modifier = Modifier.weight(1f), singleLine = true)
             OutlinedTextField(costCenter, { costCenter = it }, label = { Text("مركز التكلفة") }, modifier = Modifier.weight(1f), singleLine = true)
         }
         OutlinedTextField(funding, { funding = it }, label = { Text("مصدر التمويل") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(notes, { notes = it }, label = { Text("المرفقات / رقم النموذج / ملاحظات") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(attachmentsText, { attachmentsText = it.filter(Char::isDigit) }, label = { Text("عدد المرفقات") }, modifier = Modifier.weight(1f), singleLine = true)
+            OutlinedTextField(notes, { notes = it }, label = { Text("رقم النموذج / الملاحظات") }, modifier = Modifier.weight(2f), minLines = 2)
+        }
         OutlinedTextField(tags, { tags = it }, label = { Text("وسوم المستند (اختياري)؛ افصل بينها بفواصل") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
 
         OutlinedButton(onClick = onOpenTemplateDesigner, modifier = Modifier.fillMaxWidth()) {
@@ -175,9 +215,9 @@ fun UniversalDocumentEditorScreen(
                     beneficiaryName = beneficiary,
                     purpose = purpose,
                     details = details,
-                    notes = notes,
+                    notes = templateText.encode(notes),
                     status = existing?.status ?: DocumentStatus.SUBMITTED,
-                    attachmentsCount = existing?.attachmentsCount ?: 0,
+                    attachmentsCount = attachmentsText.toIntOrNull() ?: 0,
                     createdAt = existing?.createdAt ?: now,
                     isArchived = existing?.isArchived ?: false,
                     archivedAt = existing?.archivedAt,
@@ -186,7 +226,7 @@ fun UniversalDocumentEditorScreen(
                     financialCategory = category,
                     costCenter = costCenter,
                     fundingSource = funding,
-                    beneficiaryId = existing?.beneficiaryId.orEmpty(),
+                    beneficiaryId = beneficiaryId,
                     submittedBy = existing?.submittedBy.orEmpty(),
                     reviewedBy = existing?.reviewedBy.orEmpty(),
                     approvedBy = existing?.approvedBy.orEmpty(),
@@ -218,5 +258,42 @@ fun UniversalDocumentEditorScreen(
         ) { Text(if (existing == null) "إنشاء المستند وحفظه" else "حفظ جميع التعديلات") }
         OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("إغلاق محرر المستندات") }
         Spacer(Modifier.height(16.dp))
+    }
+}
+
+@Composable
+private fun TemplateTextFields(type: DocumentType, value: OfficialTemplateText, onChange: (OfficialTemplateText) -> Unit) {
+    Text("تحرير كل نصوص نموذج ${type.displayName()}", style = MaterialTheme.typography.titleMedium)
+    Text("يمكن تعديل العبارات الثابتة والعناوين كما ستظهر في الصفحة المطبوعة.", style = MaterialTheme.typography.bodySmall)
+    @Composable
+    fun field(text: String, label: String, update: (String) -> OfficialTemplateText) {
+        OutlinedTextField(text, { onChange(update(it)) }, label = { Text(label) }, modifier = Modifier.fillMaxWidth(), minLines = 1)
+    }
+    when (type) {
+        DocumentType.ORDER -> {
+            field(value.orderCashierGreeting, "عبارة مخاطبة أمين الصندوق") { value.copy(orderCashierGreeting = it) }
+            field(value.orderInstruction, "نص التوجيه والصرف") { value.copy(orderInstruction = it) }
+            field(value.orderBeneficiaryPrefix, "عبارة المستفيد") { value.copy(orderBeneficiaryPrefix = it) }
+            field(value.orderPurposeLabel, "عنوان سبب الصرف") { value.copy(orderPurposeLabel = it) }
+            field(value.orderClosing, "عبارة الختام") { value.copy(orderClosing = it) }
+        }
+        DocumentType.REQUEST -> {
+            field(value.requestRecipient, "اسم الجهة المخاطبة") { value.copy(requestRecipient = it) }
+            field(value.requestGreeting, "عبارة الاحترام") { value.copy(requestGreeting = it) }
+            field(value.requestInstruction, "نص طلب التوجيه") { value.copy(requestInstruction = it) }
+            field(value.requestClosing, "عبارة ختام الطلب") { value.copy(requestClosing = it) }
+        }
+        DocumentType.RECEIPT -> {
+            field(value.receiptOpening, "عبارة بداية الإقرار") { value.copy(receiptOpening = it) }
+            field(value.receiptJobLabel, "عبارة الوظيفة") { value.copy(receiptJobLabel = it) }
+            field(value.receiptAmountLabel, "عنوان المبلغ") { value.copy(receiptAmountLabel = it) }
+            field(value.receiptSource, "مصدر المبلغ") { value.copy(receiptSource = it) }
+            field(value.receiptPurposeLabel, "عنوان سبب الاستلام") { value.copy(receiptPurposeLabel = it) }
+            field(value.receiptDischarge, "نص الإخلاء") { value.copy(receiptDischarge = it) }
+            field(value.receiptRecipientLabel, "عنوان المستلم") { value.copy(receiptRecipientLabel = it) }
+            field(value.receiptNameLabel, "عنوان الاسم") { value.copy(receiptNameLabel = it) }
+            field(value.receiptSignatureLabel, "عنوان التوقيع والإبهام") { value.copy(receiptSignatureLabel = it) }
+        }
+        else -> Unit
     }
 }

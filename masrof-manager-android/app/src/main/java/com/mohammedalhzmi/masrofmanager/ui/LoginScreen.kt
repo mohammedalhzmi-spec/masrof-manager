@@ -55,7 +55,7 @@ fun LoginScreen(onLogin: (String, String, Boolean) -> Unit, onRegister: () -> Un
         Image(
             painter = painterResource(R.drawable.official_emblem),
             contentDescription = "شعار الجمهورية اليمنية",
-            modifier = Modifier.width(250.dp).height(142.dp),
+            modifier = Modifier.width(180.dp).height(102.dp),
             contentScale = ContentScale.Fit
         )
         Spacer(Modifier.height(4.dp))

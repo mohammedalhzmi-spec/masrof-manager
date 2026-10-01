@@ -2,6 +2,7 @@ package com.mohammedalhzmi.masrofmanager.ui
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
+import android.net.Uri
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -29,7 +30,21 @@ fun AppNavigation(viewModel: MasrofViewModel) {
                 { navController.navigate("settings") }
             )
         }
-        composable("document_book") { DocumentBookScreen(viewModel) { navController.popBackStack() } }
+        composable("document_book") {
+            DocumentBookScreen(viewModel, onNavigateBack = { navController.popBackStack() }) { tag ->
+                navController.navigate("book_editor/${Uri.encode(tag)}")
+            }
+        }
+        composable("book_editor/{bookTag}") { entry ->
+            val tag = Uri.decode(entry.arguments?.getString("bookTag").orEmpty())
+            BookEditorScreen(
+                viewModel = viewModel,
+                bookTag = tag,
+                onPreview = { ids -> navController.navigate("print_preview/$ids") },
+                onOpenCanvas = { type -> navController.navigate("canvas/${type.name}") },
+                onBack = { navController.popBackStack() }
+            )
+        }
         composable("select_type") {
             val allowed = userSelectableDocumentTypes().filter { RolePreferences.canCreate(context, it) }.toSet()
             DocumentTypeSelectionScreen(allowedTypes = allowed) { type -> navController.navigate(documentFormRoute(type)) }

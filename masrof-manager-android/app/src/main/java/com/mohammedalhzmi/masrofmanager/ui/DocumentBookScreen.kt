@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -21,6 +22,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.rememberScrollState
@@ -34,7 +36,7 @@ import com.mohammedalhzmi.masrofmanager.util.DocumentNumbering
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DocumentBookScreen(viewModel: MasrofViewModel, onNavigateBack: () -> Unit) {
+fun DocumentBookScreen(viewModel: MasrofViewModel, onNavigateBack: () -> Unit, onOpenBook: (String) -> Unit) {
     var type by remember { mutableStateOf(DocumentType.ORDER) }
     var expanded by remember { mutableStateOf(false) }
     var countText by remember { mutableStateOf("10") }
@@ -42,6 +44,12 @@ fun DocumentBookScreen(viewModel: MasrofViewModel, onNavigateBack: () -> Unit) {
     var bookName by remember { mutableStateOf("دفتر مستندات") }
     var message by remember { mutableStateOf("") }
     val context = androidx.compose.ui.platform.LocalContext.current
+    val allDocuments by viewModel.allDocuments.collectAsState()
+    val existingBooks = remember(allDocuments) {
+        allDocuments.mapNotNull { document ->
+            document.tags.split(",").map(String::trim).firstOrNull { it.startsWith("دفتر:") }
+        }.distinct().sorted()
+    }
     val defaultStart = DocumentNumbering.next(context, type)
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -69,10 +77,20 @@ fun DocumentBookScreen(viewModel: MasrofViewModel, onNavigateBack: () -> Unit) {
             }
             DocumentNumbering.setStart(context, type, start + count)
             message = "تم إنشاء $count صفحة مرقمة من ${start.toString().padStart(4, '0')} إلى ${(start + count - 1).toString().padStart(4, '0')}"
+            onOpenBook(tag)
         }, modifier = Modifier.fillMaxWidth()) { Text("إنشاء الدفتر وحفظ الصفحات") }
         if (message.isNotBlank()) Text(message, color = androidx.compose.material3.MaterialTheme.colorScheme.primary)
+        if (existingBooks.isNotEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            Text("الدفاتر المحفوظة", style = androidx.compose.material3.MaterialTheme.typography.titleMedium)
+            existingBooks.forEach { tag ->
+                OutlinedButton(onClick = { onOpenBook(tag) }, modifier = Modifier.fillMaxWidth()) {
+                    Text("فتح ${tag.removePrefix("دفتر:").trim()}")
+                }
+            }
+        }
         Spacer(Modifier.height(6.dp))
-        Button(onClick = onNavigateBack, modifier = Modifier.fillMaxWidth()) { Text("العودة إلى المستندات لفتح الصفحات") }
+        Button(onClick = onNavigateBack, modifier = Modifier.fillMaxWidth()) { Text("العودة إلى المستندات") }
     }
 }
 

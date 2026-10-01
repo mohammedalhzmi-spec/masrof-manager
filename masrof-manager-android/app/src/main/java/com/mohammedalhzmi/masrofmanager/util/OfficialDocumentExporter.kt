@@ -9,6 +9,7 @@ import android.net.Uri
 import androidx.core.content.FileProvider
 import com.mohammedalhzmi.masrofmanager.data.Document
 import com.mohammedalhzmi.masrofmanager.data.DocumentType
+import com.mohammedalhzmi.masrofmanager.data.DesignElementEntity
 import com.mohammedalhzmi.masrofmanager.data.displayName
 import com.mohammedalhzmi.masrofmanager.data.isExpenseStatement
 import java.io.File
@@ -141,7 +142,7 @@ object OfficialDocumentExporter {
                 "فقط: $amountWords",
                 "من فرع صندوق النظافة والتحسين",
                 "وذلك مقابل: ${d.purpose.orEmpty().ifBlank { blank }}",
-                "وأقر بأنني استلمت المبلغ كاملًا دون نقص وأصبحت ذمتي خالية من ذلك."
+                "وأقر بأنني استلمت المبلغ كاملاً دون نقص وإبهامي شاهدة على ذلك."
             ).joinToString("") { p(it) }
             DocumentType.VIOLATION_REPORT -> listOf(
                 "في تمام الساعة ${d.incidentTime.orEmpty().ifBlank { "............." }} من يوم ${d.incidentDay.orEmpty().ifBlank { "............." }} الموافق: ${d.dateHijri.ifBlank { "   /   / 14هـ" }}",
@@ -171,12 +172,23 @@ object OfficialDocumentExporter {
         } else signatureTable(withCashier = d.type == DocumentType.RECEIPT)
         val logoXml = if (hasLogo) "<w:p><w:pPr><w:jc w:val=\"center\"/></w:pPr><w:r><w:drawing><wp:inline xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\" xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" xmlns:pic=\"http://schemas.openxmlformats.org/drawingml/2006/picture\"><wp:extent cx=\"900000\" cy=\"510000\"/><wp:docPr id=\"1\" name=\"Official logo\"/><a:graphic><a:graphicData uri=\"http://schemas.openxmlformats.org/drawingml/2006/picture\"><pic:pic><pic:blipFill><a:blip r:embed=\"rId2\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>" else ""
         val design = DesignRenderLoader.design(context, d.type)
+        fun customTable(element: DesignElementEntity): String {
+            val rows = DocumentTableCodec.decode(element.content)
+            if (rows.isEmpty()) return ""
+            val columns = rows.maxOfOrNull { it.size }?.coerceAtLeast(1) ?: return ""
+            val cellWidth = 9600 / columns
+            fun cell(text: String) = "<w:tc><w:tcPr><w:tcW w:w=\"$cellWidth\" w:type=\"dxa\"/></w:tcPr><w:p><w:pPr><w:jc w:val=\"center\"/><w:bidi/></w:pPr><w:r><w:rPr><w:rFonts w:ascii=\"Amiri\" w:hAnsi=\"Amiri\"/><w:sz w:val=\"${(element.fontSize.coerceIn(8f, 24f) * 2).toInt()}\"/></w:rPr><w:t xml:space=\"preserve\">${esc(text)}</w:t></w:r></w:p></w:tc>"
+            val body = rows.joinToString("") { row -> "<w:tr>${List(columns) { index -> cell(row.getOrElse(index) { "" }) }.joinToString("")}</w:tr>" }
+            val grid = (0 until columns).joinToString("") { "<w:gridCol w:w=\"$cellWidth\"/>" }
+            return "<w:tbl><w:tblPr><w:tblW w:w=\"9600\" w:type=\"dxa\"/><w:tblBorders><w:top w:val=\"single\" w:sz=\"6\"/><w:left w:val=\"single\" w:sz=\"6\"/><w:bottom w:val=\"single\" w:sz=\"6\"/><w:right w:val=\"single\" w:sz=\"6\"/><w:insideH w:val=\"single\" w:sz=\"4\"/><w:insideV w:val=\"single\" w:sz=\"4\"/></w:tblBorders></w:tblPr><w:tblGrid>$grid</w:tblGrid>$body</w:tbl>"
+        }
+        val customTables = DesignRenderLoader.elements(context, d.type).filter { it.type == "TABLE" }.joinToString("") { customTable(it) }
         val pageSize = AppPreferences.pageSize(context, d.type)
         val half = pageSize == "HALF_A4" || (d.type == DocumentType.ORDER && pageSize.isBlank())
         val fixedA4 = d.type == DocumentType.VIOLATION_REPORT
         val width = when { fixedA4 -> 595; half -> 842; design != null -> design.pageWidth.toInt(); design?.orientation == "LANDSCAPE" -> 842; else -> 595 }
         val height = when { fixedA4 -> 842; half -> 595; design != null -> design.pageHeight.toInt(); design?.orientation == "LANDSCAPE" -> 595; else -> 842 }
-        return """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${p("بِسْمِ اللهِ الرَّحْمَنِ الرَّحِيمِ", "center", true)}$logoXml${p("الجمهورية اليمنية — وزارة الإدارة والتنمية المحلية والريفية — صندوق النظافة والتحسين م/إب — فرع مديرية الحزم", "center", true)}${p("الرقم: ............    التاريخ: ${d.dateHijri.ifBlank { "       /       / 144 هـ" }}    الموافق: ${d.dateGregorian.ifBlank { "       /       / 20   م" }}    المرفقات: ( ${d.attachmentsCount} )")}${p("NO: ${d.documentNumber}", "left", true)}${p(d.type.displayName(), "center", true)}$body$signatures<w:sectPr><w:pgSz w:w="${width * 20}" w:h="${height * 20}"/><w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720"/></w:sectPr></w:body></w:document>"""
+        return """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${p("بِسْمِ اللهِ الرَّحْمَنِ الرَّحِيمِ", "center", true)}$logoXml${p("الجمهورية اليمنية — وزارة الإدارة والتنمية المحلية والريفية — صندوق النظافة والتحسين م/إب — فرع مديرية الحزم", "center", true)}${p("الرقم: ............    التاريخ: ${d.dateHijri.ifBlank { "       /       / 144 هـ" }}    الموافق: ${d.dateGregorian.ifBlank { "       /       / 20   م" }}    المرفقات: ( ${d.attachmentsCount} )")}${p("NO: ${d.documentNumber}", "left", true)}${p(d.type.displayName(), "center", true)}$body$customTables$signatures<w:sectPr><w:pgSz w:w="${width * 20}" w:h="${height * 20}"/><w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720"/></w:sectPr></w:body></w:document>"""
     }
 
     private fun legacyDocxXml(d: Document, hasLogo: Boolean): String {

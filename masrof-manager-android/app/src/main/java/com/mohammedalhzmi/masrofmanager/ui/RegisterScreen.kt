@@ -37,7 +37,7 @@ fun RegisterScreen(onRegister: (String, String, String, AppRole, Boolean, Boolea
             Image(
                 painter = painterResource(R.drawable.official_emblem),
                 contentDescription = "شعار الجمهورية اليمنية",
-                modifier = Modifier.fillMaxWidth().height(112.dp),
+                modifier = Modifier.fillMaxWidth().height(82.dp),
                 contentScale = ContentScale.Fit
             )
             Text("الجمهورية اليمنية", modifier = Modifier.fillMaxWidth(), color = navy, fontSize = 23.sp, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center)

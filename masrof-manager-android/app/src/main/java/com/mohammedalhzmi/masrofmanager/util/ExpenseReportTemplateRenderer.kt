@@ -28,6 +28,13 @@ internal object ExpenseReportTemplateRenderer {
 
     private data class Column(val label: String, val fraction: Float)
 
+    private fun editableRow(default: List<String>, encoded: String, page: Int): List<String> {
+        val label = default.lastOrNull { it.isNotBlank() } ?: return default
+        val detailed = ExpenseBookData.decodeRows(encoded, page)[label] ?: return default
+        return if (default.size == 3) listOf(detailed.details, detailed.paid, detailed.label)
+        else listOf(detailed.details, detailed.unpaid, detailed.paid, detailed.quantity, detailed.label)
+    }
+
     fun draw(canvas: Canvas, document: Document, pageIndex: Int, header: DocumentHeader, context: Context?) {
         val book = ExpenseBookData.decode(document.details)
         when (pageIndex.coerceIn(0, 3)) {
@@ -39,6 +46,7 @@ internal object ExpenseReportTemplateRenderer {
     }
 
     private fun drawOperatingExpensesPage(c: Canvas, d: Document, header: DocumentHeader, context: Context?, book: ExpenseBookData) {
+        fun row(default: List<String>) = editableRow(default, book.expenseRows, 1)
         drawInstitutionHeader(c, d, header, context)
         val month = d.purpose.orEmpty().ifBlank { "................" }
         val hijriYear = d.dateHijri.ifBlank { "144هـ" }
@@ -56,29 +64,31 @@ internal object ExpenseReportTemplateRenderer {
         val operating = listOf(Column("التفاصيل", .22f), Column("متبقي غير مدفوع", .17f), Column("قيمة المستهلك / مدفوع", .18f), Column("عدد", .13f), Column("المصروفات", .30f))
         drawTableRow(c, x, y, width, operating, operating.map { it.label }, 27f, HEADER_BLUE, RED, true, true); y += 27f
         listOf("الوقود الديزل للأعمال اليومية", "وقود للدمر والتكاتك", "زيت وتشحيم للمعدات").forEach { label ->
-            drawTableRow(c, x, y, width, operating, listOf("", "", "", "", label), 28f); y += 28f
+            drawTableRow(c, x, y, width, operating, row(listOf("", "", "", "", label)), 28f); y += 28f
         }
 
         drawMergedBand(c, x, y, width, 23f, "حملات النظافة", Color.WHITE, CYAN, 12f, true); y += 23f
         val campaigns = listOf(Column("ملاحظات", .20f), Column("نفقات الديزل للحملة", .20f), Column("مصروفات نقدية للحملة", .20f), Column("أيام الحملة", .15f), Column("بيان الحملة", .25f))
         drawTableRow(c, x, y, width, campaigns, campaigns.map { it.label }, 27f, HEADER_BLUE, INK, true, true); y += 27f
-        drawTableRow(c, x, y, width, campaigns, listOf("", "", "", "", "حملة النظافة الشهرية"), 29f); y += 29f
+        drawTableRow(c, x, y, width, campaigns, row(listOf("", "", "", "", "حملة النظافة الشهرية")), 29f); y += 29f
 
         drawMergedBand(c, x, y, width, 23f, "نفقات صيانة مشتريات", Color.WHITE, BLUE, 11.5f, true); y += 23f
         val maintenance = listOf(Column("ملاحظات", .20f), Column("متبقي آجل", .20f), Column("قيمتها مدفوع", .20f), Column("عدد", .15f), Column("البيان", .25f))
         drawTableRow(c, x, y, width, maintenance, maintenance.map { it.label }, 27f, HEADER_BLUE, RED, true, true); y += 27f
-        repeat(3) { drawTableRow(c, x, y, width, maintenance, emptyList(), 27f); y += 27f }
+        listOf("صيانة مشتريات 1", "صيانة مشتريات 2", "صيانة مشتريات 3").forEach { label ->
+            drawTableRow(c, x, y, width, maintenance, row(listOf("", "", "", "", label)), 27f); y += 27f
+        }
 
         drawMergedBand(c, x, y, width, 23f, "أخرى مختلفة (صيانة لوازم - سروسه)", Color.WHITE, BLUE, 11f, true); y += 23f
-        drawTableRow(c, x, y, width, maintenance, emptyList(), 27f); y += 27f
-        drawTableRow(c, x, y, width, maintenance, listOf("", "", "", "", "سروسه"), 27f); y += 27f
+        drawTableRow(c, x, y, width, maintenance, row(listOf("", "", "", "", "أخرى مختلفة")), 27f); y += 27f
+        drawTableRow(c, x, y, width, maintenance, row(listOf("", "", "", "", "سروسه")), 27f); y += 27f
         drawTableRow(c, x, y, width, maintenance, listOf("", "", "", "", "الإجمالي"), 27f, PALE_PINK, BLUE, true); y += 33f
 
         drawBanner(c, y, 29f, listOf("المصروفات الشهرية المخصصة: بالمستلزمات الأساسية للنظافة"), 12f); y += 29f
         val supplies = listOf(Column("التفاصيل", .34f), Column("متبقي لم يصرف", .20f), Column("المبلغ المصروف", .20f), Column("البيان", .26f))
         drawTableRow(c, x, y, width, supplies, supplies.map { it.label }, 27f, HEADER_BLUE, RED, true, true); y += 27f
         listOf("مكاسن + خراشات", "ملابس + أحذية", "كفوف", "أكياس قمامة").forEach { label ->
-            drawTableRow(c, x, y, width, supplies, listOf("", "", "", label), 27f); y += 27f
+            drawTableRow(c, x, y, width, supplies, row(listOf("", "", "", label)), 27f); y += 27f
         }
         drawTableRow(c, x, y, width, supplies, listOf("", "", "", "الإجمالي"), 27f, PALE_PINK, BLUE, true); y += 27f
         drawTableRow(c, x, y, width, supplies, listOf("", "", visibleAmount(book.chapterOneTotal), "إجمالي الباب الأول"), 27f, VIOLET, BLUE, true)
@@ -86,6 +96,7 @@ internal object ExpenseReportTemplateRenderer {
     }
 
     private fun drawMonthlyEntitlementsPage(c: Canvas, d: Document, book: ExpenseBookData) {
+        fun row(default: List<String>) = editableRow(default, book.expenseRows, 2)
         val month = d.purpose.orEmpty().ifBlank { "................" }
         val hijriYear = d.dateHijri.ifBlank { "144هـ" }
         val gregorianYear = d.dateGregorian.ifBlank { "202م" }
@@ -101,21 +112,22 @@ internal object ExpenseReportTemplateRenderer {
         val columns = listOf(Column("التفاصيل", .30f), Column("المبلغ المتبقي لم يصرف", .17f), Column("المبلغ المصروف", .17f), Column("العدد", .12f), Column("البيان", .24f))
         drawTableRow(c, x, y, width, columns, columns.map { it.label }, 26f, HEADER_BLUE, RED, true, true); y += 26f
         listOf("مستحقات مدير المديرية", "مستحقات مدير الفرع", "مستحقات الإداريين").forEach { label ->
-            drawTableRow(c, x, y, width, columns, listOf("", "", "", "", label), 22f); y += 22f
+            drawTableRow(c, x, y, width, columns, row(listOf("", "", "", "", label)), 22f); y += 22f
         }
         drawMergedBand(c, x, y, width, 23f, "مستحقات القوى العاملة الشهرية", GRAY, PURPLE, 12f, true); y += 23f
         listOf("مستحقات العمال", "مستحقات المشرفين", "مستحقات السائقين", "نسبة المحصلين").forEach { label ->
-            drawTableRow(c, x, y, width, columns, listOf("", "", "", "", label), 22f); y += 22f
+            drawTableRow(c, x, y, width, columns, row(listOf("", "", "", "", label)), 22f); y += 22f
         }
         drawMergedBand(c, x, y, width, 23f, "مستحقات أخرى", GRAY, PURPLE, 12f, true); y += 23f
         listOf("بدل جلسات", "إضافي", "الحوافز والمكافآت", "إكرامية نقدية", "إكرامية عينية", "مياه وكهرباء", "مصروفات عهدة", "رسوم المقلب الشهرية", "خدمات الاستضافة والضيافة", "علاج وتداوي").forEach { label ->
-            drawTableRow(c, x, y, width, columns, listOf("", "", "", "", label), 21f); y += 21f
+            drawTableRow(c, x, y, width, columns, row(listOf("", "", "", "", label)), 21f); y += 21f
         }
         drawTableRow(c, x, y, width, columns, listOf("", "", visibleAmount(book.chapterTwoTotal), "", "إجمالي الباب الثاني"), 27f, PALE_PINK, BLUE, true)
-        drawFooter(c, 4, "فاصل صفحات: -------------")
+        drawFooter(c, 4)
     }
 
     private fun drawOtherExpensesPage(c: Canvas, d: Document, book: ExpenseBookData) {
+        fun row(default: List<String>) = editableRow(default, book.expenseRows, 3)
         val x = 40f
         val width = 515f
         drawBanner(c, 28f, 33f, listOf("الباب الثالث: مصروفات أخرى متنوعة وعهدة"), 13f)
@@ -123,15 +135,15 @@ internal object ExpenseReportTemplateRenderer {
         val columns = listOf(Column("التفاصيل", .34f), Column("المبلغ", .32f), Column("البيان", .34f))
         drawTableRow(c, x, y, width, columns, columns.map { it.label }, 27f, HEADER_BLUE, RED, true, true); y += 27f
         listOf("القرطاسية والطباعة", "متأخرات مديونية متبقية من الشهر السابق").forEach { label ->
-            drawTableRow(c, x, y, width, columns, listOf("", "", label), 29f); y += 29f
+            drawTableRow(c, x, y, width, columns, row(listOf("", "", label)), 29f); y += 29f
         }
         drawMergedBand(c, x, y, width, 34f, "المستلزمات الخدمية", YELLOW, BLUE, 15f, true); y += 34f
         listOf("تنقلات عامة", "بدل سفر", "إيجار مباني", "اتصالات والإنترنت", "استئجار معدات", "خدمات الأمن والضبط", "الفوائد والعمولات المحلية", "خدمات البنوك", "خدمات الحراسة والأمن", "أخرى مختلفة").forEach { label ->
-            drawTableRow(c, x, y, width, columns, listOf("", "", label), 29f); y += 29f
+            drawTableRow(c, x, y, width, columns, row(listOf("", "", label)), 29f); y += 29f
         }
         drawMergedBand(c, x, y, width, 34f, "المصاريف الجارية والتحويلية ومديونية", PINK, BLUE, 13f, true); y += 34f
         listOf("ديون محلية وسابقة", "ضرائب المرتبات والدخل والمبيعات").forEach { label ->
-            drawTableRow(c, x, y, width, columns, listOf("", "", label), 29f); y += 29f
+            drawTableRow(c, x, y, width, columns, row(listOf("", "", label)), 29f); y += 29f
         }
         drawMergedBand(c, x, y, width, 32f, "المصروفات المخصصة", GRAY, 0xff8b2424.toInt(), 13f, true); y += 32f
         drawTableRow(c, x, y, width, columns, listOf("", visibleAmount(book.chapterThreeTotal), "إجمالي الباب الثالث"), 25f, PALE_PINK, BLUE, true); y += 25f
@@ -170,9 +182,13 @@ internal object ExpenseReportTemplateRenderer {
         val columns = listOf(Column("التفاصيل", .34f), Column("المبلغ", .32f), Column("رواتب متأخرة للقوى العاملة", .34f))
         var y = 50f
         drawTableRow(c, x, y, width, columns, columns.map { it.label }, 20f, 0xff358df0.toInt(), Color.BLACK, true, true); y += 20f
-        drawTableRow(c, x, y, width, columns, listOf("", visibleAmount(book.debtFebruary), "شهر فبراير"), 20f); y += 20f
-        drawTableRow(c, x, y, width, columns, listOf("", visibleAmount(book.debtMarch), "شهر مارس"), 20f); y += 20f
-        drawTableRow(c, x, y, width, columns, listOf("", visibleAmount(book.debtPrevious), "أخرى ماضية"), 20f); y += 20f
+        val enteredDebtRows = book.debtRows.lineSequence().map { it.split('|').map(String::trim) }.filter { it.any(String::isNotBlank) }.toList()
+        val debtRows = if (enteredDebtRows.isEmpty()) listOf(
+            listOf("", visibleAmount(book.debtFebruary), "شهر فبراير"),
+            listOf("", visibleAmount(book.debtMarch), "شهر مارس"),
+            listOf("", visibleAmount(book.debtPrevious), "أخرى ماضية")
+        ) else enteredDebtRows.map { values -> listOf(values.getOrElse(2) { "" }, values.getOrElse(1) { "" }, values.firstOrNull().orEmpty()) }
+        debtRows.forEach { values -> drawTableRow(c, x, y, width, columns, values, 20f); y += 20f }
         if (book.excessDebt > 0) {
             drawTableRow(c, x, y, width, columns, listOf("", ExpenseBookData.formatAmount(book.excessDebt), "زيادة المصروفات عن الثابت — $month"), 21f, Color.WHITE, INK, true); y += 21f
         }
@@ -206,7 +222,11 @@ internal object ExpenseReportTemplateRenderer {
 
         val logo = header.logos[DocumentType.EXPENSE_STATEMENT] ?: header.logos[DocumentType.EXPENSE_REPORT]
             ?: context?.let { BitmapFactory.decodeResource(it.resources, R.drawable.expense_report_logo) }
-        logo?.let { c.drawBitmap(it, null, RectF(245f, 8f, 345f, 65f), Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)) }
+            ?: context?.let { BitmapFactory.decodeResource(it.resources, R.drawable.cleaning_fund_watermark) }
+        logo?.let { bitmap ->
+            val logoPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply { alpha = 235 }
+            c.drawBitmap(bitmap, null, RectF(245f, 8f, 345f, 65f), logoPaint)
+        }
     }
 
     private fun drawBanner(c: Canvas, y: Float, height: Float, lines: List<String>, textSize: Float) {
