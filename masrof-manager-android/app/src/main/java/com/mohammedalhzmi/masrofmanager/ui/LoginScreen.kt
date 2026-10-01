@@ -1,6 +1,7 @@
 package com.mohammedalhzmi.masrofmanager.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -16,8 +17,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.R
 
 private val GovNavy = Color(0xff123b5d)
 private val GovGreen = Color(0xff16834f)
@@ -47,6 +51,13 @@ fun LoginScreen(onLogin: (String, String, Boolean) -> Unit, onRegister: () -> Un
             .padding(horizontal = 20.dp, vertical = 28.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        Spacer(Modifier.height(4.dp))
+        Image(
+            painter = painterResource(R.drawable.official_emblem),
+            contentDescription = "شعار الجمهورية اليمنية",
+            modifier = Modifier.width(250.dp).height(142.dp),
+            contentScale = ContentScale.Fit
+        )
         Spacer(Modifier.height(4.dp))
         Text("الجمهورية اليمنية", fontSize = 27.sp, fontWeight = FontWeight.Bold, color = GovNavy)
         Text("صندوق النظافة والتحسين م/إب", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = GovNavy)

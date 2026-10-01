@@ -1,6 +1,7 @@
 package com.mohammedalhzmi.masrofmanager.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -12,8 +13,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.R
 import com.mohammedalhzmi.masrofmanager.util.AppRole
 
 @Composable
@@ -30,6 +34,15 @@ fun RegisterScreen(onRegister: (String, String, String, AppRole, Boolean, Boolea
     val fieldColors = OutlinedTextFieldDefaults.colors(focusedBorderColor = green, focusedLabelColor = green, unfocusedBorderColor = Color(0xffb9c6d0))
     Box(Modifier.fillMaxSize().background(Color(0xffeef3f5))) {
         Column(Modifier.fillMaxSize().padding(18.dp).verticalScroll(androidx.compose.foundation.rememberScrollState()), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+            Image(
+                painter = painterResource(R.drawable.official_emblem),
+                contentDescription = "شعار الجمهورية اليمنية",
+                modifier = Modifier.fillMaxWidth().height(112.dp),
+                contentScale = ContentScale.Fit
+            )
+            Text("الجمهورية اليمنية", modifier = Modifier.fillMaxWidth(), color = navy, fontSize = 23.sp, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            Text("صندوق النظافة والتحسين م/إب", modifier = Modifier.fillMaxWidth(), color = navy, fontSize = 19.sp, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            Text("فرع مديرية الحزم", modifier = Modifier.fillMaxWidth(), color = green, fontSize = 18.sp, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
             Text("طلب إنشاء حساب مستخدم", style = MaterialTheme.typography.headlineSmall, color = navy, fontWeight = FontWeight.Bold)
             Text("يخضع الحساب للصلاحيات المعتمدة في منظومة الفرع.", color = Color(0xff607080), fontSize = 13.sp)
             Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(Color.White)) {
