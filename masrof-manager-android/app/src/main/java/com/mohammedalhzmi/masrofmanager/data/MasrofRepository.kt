@@ -20,6 +20,10 @@ class MasrofRepository(
     suspend fun documentByCloudId(cloudId: String) = documentDao.findByCloudId(cloudId)
     suspend fun documentById(id: Long) = documentDao.findById(id)
     suspend fun delete(document: Document) = documentDao.delete(document)
+    suspend fun replaceRemoteDocuments(documents: List<Document>) {
+        documentDao.deleteAll()
+        documents.forEach { documentDao.insert(it) }
+    }
     suspend fun archive(document: Document, timestamp: Long) = documentDao.archive(document.id, timestamp)
     suspend fun restore(document: Document, timestamp: Long) = documentDao.restore(document.id, timestamp)
     suspend fun archiveOlderThan(cutoff: Long, timestamp: Long) = documentDao.archiveOlderThan(cutoff, timestamp)

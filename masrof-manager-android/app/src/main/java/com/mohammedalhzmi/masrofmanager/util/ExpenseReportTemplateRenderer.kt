@@ -144,7 +144,7 @@ internal object ExpenseReportTemplateRenderer {
 
     private fun drawDebtPage(c: Canvas, d: Document, header: DocumentHeader, context: Context?, book: ExpenseBookData) {
         context?.let { ctx ->
-            BitmapFactory.decodeResource(ctx.resources, R.drawable.expense_book_watermark)?.let { watermark ->
+            BitmapFactory.decodeResource(ctx.resources, R.drawable.cleaning_fund_watermark)?.let { watermark ->
                 c.drawBitmap(
                     watermark,
                     null,

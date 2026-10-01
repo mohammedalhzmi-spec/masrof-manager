@@ -29,6 +29,9 @@ interface DocumentDao {
     @Delete
     suspend fun delete(document: Document)
 
+    @Query("DELETE FROM documents")
+    suspend fun deleteAll()
+
     @Query("SELECT MAX(CAST(documentNumber AS INTEGER)) FROM documents")
     fun getLastDocumentNumber(): Flow<Int?>
 

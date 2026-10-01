@@ -47,7 +47,7 @@ object DocumentHeaderFactory {
             runCatching { context.contentResolver.openInputStream(Uri.parse(uri)).use(BitmapFactory::decodeStream) }.getOrNull()
         }
         if (saved != null) return saved
-        val fallback = if (type.isExpenseStatement()) R.drawable.expense_report_logo else R.drawable.official_emblem
+        val fallback = R.drawable.cleaning_fund_watermark
         return runCatching { BitmapFactory.decodeResource(context.resources, fallback) }.getOrNull()
     }
 }

@@ -1,4 +1,5 @@
 import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy
+import java.util.Properties
 
 plugins {
   alias(libs.plugins.android.application)
@@ -24,13 +25,17 @@ android {
   }
 
   signingConfigs {
+    val keystoreProperties = Properties().apply {
+      val propertiesFile = rootProject.file("keystore/keystore.properties")
+      if (propertiesFile.exists()) propertiesFile.inputStream().use(::load)
+    }
     val releaseKeystore = file(System.getenv("KEYSTORE_PATH") ?: "${rootDir}/keystore/masrof-release.jks")
     if (releaseKeystore.exists()) {
       create("release") {
         storeFile = releaseKeystore
-        storePassword = System.getenv("STORE_PASSWORD")
-        keyAlias = System.getenv("KEY_ALIAS") ?: "masrof-release"
-        keyPassword = System.getenv("KEY_PASSWORD")
+        storePassword = System.getenv("STORE_PASSWORD") ?: keystoreProperties.getProperty("storePassword")
+        keyAlias = System.getenv("KEY_ALIAS") ?: keystoreProperties.getProperty("keyAlias") ?: "masrof-release"
+        keyPassword = System.getenv("KEY_PASSWORD") ?: keystoreProperties.getProperty("keyPassword")
       }
     }
     val debugKeystore = file("${rootDir}/debug.keystore")
@@ -122,6 +127,7 @@ dependencies {
   // Cloud account sign-in uses Firebase Email/Password; Google sign-in remains optional.
   implementation(libs.firebase.auth)
   implementation(libs.firebase.functions)
+  implementation(libs.firebase.messaging)
   // implementation(libs.androidx.credentials)
   // implementation(libs.androidx.credentials.play.services)
   // implementation(libs.googleid)

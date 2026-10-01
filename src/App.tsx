@@ -17,8 +17,7 @@ import { SplashLoginScreen } from './components/SplashLoginScreen';
 import { Document, DocumentType, OrganizationProfile } from './types';
 import { sampleDocuments, initialOrganizationProfile } from './utils/initialData';
 import { GitBranch, ShieldCheck, Sparkles, Building2, CheckCircle2, Smartphone, Download } from 'lucide-react';
-import { fbSaveDocument } from './utils/firebaseService';
-import { getCurrentLoggedInUser } from './utils/governmentAuthService';
+import { fbGetDocuments, fbSaveDocument } from './utils/firebaseService';
 
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
@@ -145,19 +144,7 @@ export default function App() {
 
     // Sync to Firebase & FCM notification to Director alhzmim57@gmail.com
     try {
-      const user = getCurrentLoggedInUser();
-      fbSaveDocument({
-        id: docToSave.id,
-        serialNumber: docToSave.documentNumber,
-        type: docToSave.type === 'ORDER' ? 'أمر صرف' : docToSave.type === 'RECEIPT' ? 'سند قبض' : 'طلب مالي',
-        title: docToSave.purpose || 'مستند مالي',
-        amount: docToSave.amount,
-        beneficiary: docToSave.beneficiaryName || 'مستفيد',
-        createdBy: user?.username || 'admin',
-        dayName: new Date(docToSave.createdAt || Date.now()).toLocaleDateString('ar-SA', { weekday: 'long' }),
-        dateString: docToSave.dateGregorian || new Date(docToSave.createdAt || Date.now()).toLocaleDateString('ar-SA'),
-        status: docToSave.status
-      });
+      void fbSaveDocument(docToSave);
     } catch (e) {
       console.error('Failed to sync document to Firebase:', e);
     }
@@ -248,9 +235,11 @@ export default function App() {
   if (!isLoggedIn) {
     return (
       <SplashLoginScreen
-        onLoginSuccess={() => {
+        onLoginSuccess={async () => {
           setIsLoggedIn(true);
           localStorage.setItem('masrof_logged_in', 'true');
+          const remoteDocuments = await fbGetDocuments();
+          if (remoteDocuments.length > 0) setDocuments(remoteDocuments);
         }}
       />
     );
