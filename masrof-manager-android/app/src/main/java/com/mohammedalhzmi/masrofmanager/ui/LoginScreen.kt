@@ -97,7 +97,7 @@ fun LoginScreen(onLogin: (String, String, Boolean) -> Unit, onRegister: () -> Un
                 OutlinedTextField(
                     value = username,
                     onValueChange = { username = it },
-                    label = { Text("اسم المستخدم") },
+                    label = { Text("البريد الإلكتروني لأول دخول / اسم المستخدم لاحقًا") },
                     leadingIcon = { Icon(Icons.Default.Person, contentDescription = "اسم المستخدم") },
                     colors = fieldColors,
                     modifier = Modifier.fillMaxWidth(),

@@ -115,15 +115,48 @@ class MasrofViewModel(
     }
 
     suspend fun authenticate(context: Context, username: String, password: String, remember: Boolean): AuthenticatedUser? {
-        val user = repository.findActiveUser(username.trim())
-        if (user != null && AuthSecurity.verify(password, user.passwordHash)) {
-            val auth = AuthenticatedUser(user.id, user.username, user.fullName, runCatching { com.mohammedalhzmi.masrofmanager.util.AppRole.valueOf(user.role) }.getOrDefault(com.mohammedalhzmi.masrofmanager.util.AppRole.USER))
+        val identifier = username.trim()
+        val lookupIdentifier = if (identifier.contains("@")) identifier.lowercase() else identifier
+        val isEmail = identifier.contains("@")
+        val cloudUser = if (isEmail) {
+            runCatching { cloudSyncService.signIn(identifier, password) }
+                .onSuccess { cloudAccessState.value = it }
+                .onFailure { cloudOperationMessage.value = cloudErrorMessage(it) }
+                .getOrNull()
+                ?.takeIf { it.uid != null }
+        } else null
+
+        // Email login is intentionally cloud-first. Do not silently authenticate a
+        // nonexistent Firebase account from the local Room database.
+        if (isEmail && cloudUser == null) return null
+
+        var user = repository.findActiveUser(lookupIdentifier)
+        if (cloudUser != null) {
+            val cloudRole = when (cloudUser.role) {
+                "SYSTEM_ADMIN" -> AppRole.ADMIN
+                "FINANCE_DIRECTOR" -> AppRole.FINANCE_MANAGER
+                "ACCOUNTANT" -> AppRole.ACCOUNTANT
+                else -> AppRole.USER
+            }
+            val synced = (user ?: UserEntity(username = lookupIdentifier, passwordHash = "", fullName = cloudUser.email ?: identifier, role = cloudRole.name))
+                .copy(
+                    username = user?.username ?: lookupIdentifier,
+                    passwordHash = AuthSecurity.hash(password),
+                    role = cloudRole.name,
+                    active = true
+                )
+            if (user == null) repository.insertUser(synced) else repository.updateUser(synced)
+            user = repository.findActiveUser(synced.username)
+        }
+
+        if (user != null && (!isEmail || AuthSecurity.verify(password, user.passwordHash))) {
+            val auth = AuthenticatedUser(user.id, user.username, user.fullName, runCatching { AppRole.valueOf(user.role) }.getOrDefault(AppRole.USER))
             UserSession.current = auth
             if (remember) RememberedLogin.save(context, user.username) else RememberedLogin.clear(context)
             repository.addAudit(AuditLogEntity(userId = user.id, username = user.username, action = "LOGIN_SUCCESS", details = "تسجيل دخول ناجح"))
             return auth
         }
-        repository.addAudit(AuditLogEntity(userId = user?.id, username = username, action = "LOGIN_FAILED", details = "محاولة دخول فاشلة"))
+        repository.addAudit(AuditLogEntity(userId = user?.id, username = identifier, action = "LOGIN_FAILED", details = "محاولة دخول فاشلة"))
         return null
     }
 

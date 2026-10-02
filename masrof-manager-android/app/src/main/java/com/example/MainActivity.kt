@@ -49,6 +49,7 @@ class MainActivity : FragmentActivity() {
         setContent {
             MyApplicationTheme {
                 val scope = rememberCoroutineScope()
+                val cloudMessage by viewModel.cloudOperationMessage.collectAsState()
                 LaunchedEffect(Unit) {
                     viewModel.ensureDefaultAdmin()
                     if (viewModel.restoreRememberedUser(this@MainActivity) != null) { loggedIn = true; locked = false }
@@ -72,9 +73,9 @@ class MainActivity : FragmentActivity() {
                     LoginScreen(onLogin = { username, password, remember ->
                         scope.launch {
                             val user = viewModel.authenticate(this@MainActivity, username, password, remember)
-                            if (user == null) loginError = "اسم المستخدم أو كلمة المرور غير صحيحة" else { loggedIn = true; locked = false; loginError = null; AppLockPreferences.markUnlocked(this@MainActivity) }
+                            if (user == null) loginError = cloudMessage.ifBlank { "تعذر تسجيل الدخول عبر Firebase؛ تحقق من البريد وكلمة المرور والإنترنت." } else { loggedIn = true; locked = false; loginError = null; AppLockPreferences.markUnlocked(this@MainActivity) }
                         }
-                    }, onRegister = { showRegister = true; loginError = null }, error = loginError)
+                    }, onRegister = { showRegister = true; loginError = null }, error = loginError ?: cloudMessage.takeIf { it.isNotBlank() })
                 } else if (locked && AppLockPreferences.enabled(this)) {
                     AppLockScreen(
                         type = AppLockPreferences.type(this),
