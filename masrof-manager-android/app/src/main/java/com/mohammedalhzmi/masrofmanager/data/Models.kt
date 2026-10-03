@@ -92,6 +92,13 @@ fun DocumentType.displayName(): String = when (this) {
 fun DocumentType.isExpenseStatement(): Boolean =
     this == DocumentType.EXPENSE_STATEMENT || this == DocumentType.EXPENSE_REPORT
 
+fun DocumentType.hasFinancialAmountField(): Boolean = this !in setOf(
+    DocumentType.REQUEST,
+    DocumentType.EXPENSE_STATEMENT,
+    DocumentType.EXPENSE_REPORT,
+    DocumentType.BOOK
+)
+
 fun userSelectableDocumentTypes(): List<DocumentType> = DocumentType.values().filter {
     it != DocumentType.BOOK && it != DocumentType.EXPENSE_REPORT
 }

@@ -29,6 +29,7 @@ import com.mohammedalhzmi.masrofmanager.data.Document
 import com.mohammedalhzmi.masrofmanager.data.DocumentStatus
 import com.mohammedalhzmi.masrofmanager.data.DocumentType
 import com.mohammedalhzmi.masrofmanager.data.displayName
+import com.mohammedalhzmi.masrofmanager.data.hasFinancialAmountField
 import com.mohammedalhzmi.masrofmanager.util.DocumentNumbering
 import com.mohammedalhzmi.masrofmanager.util.NumberToWordsConverter
 import com.mohammedalhzmi.masrofmanager.util.OfficialTemplateText
@@ -83,6 +84,10 @@ fun UniversalDocumentEditorScreen(
         DocumentType.RECEIPT_PAPER -> "اسم دافع المبلغ"
         DocumentType.VIOLATION_REPORT -> "اسم المخالف / المنسوب إليه"
         DocumentType.PURCHASE_ORDER -> "المورد"
+        DocumentType.SUPPLY_PERMIT, DocumentType.RECEIPT_MINUTES -> "المورد / الجهة المسلِّمة"
+        DocumentType.FINANCIAL_CLAIM -> "صاحب المطالبة / المستفيد"
+        DocumentType.CUSTODY_SETTLEMENT -> "مستلم العهدة / أمين العهدة"
+        DocumentType.ADVANCE_PERMIT -> "مستلم السلفة"
         DocumentType.FINANCIAL_MEMO, DocumentType.OFFICIAL_FINANCIAL_LETTER -> "الجهة المخاطبة"
         else -> "المستفيد / صاحب العلاقة"
     }
@@ -100,12 +105,7 @@ fun UniversalDocumentEditorScreen(
         DocumentType.FINANCIAL_MEMO -> "موضوع المذكرة المالية"
         else -> "الغرض / الموضوع"
     }
-    val usesAmount = type in setOf(
-        DocumentType.ORDER, DocumentType.RECEIPT, DocumentType.RECEIPT_PAPER,
-        DocumentType.VIOLATION_REPORT, DocumentType.PURCHASE_ORDER,
-        DocumentType.CUSTODY_SETTLEMENT, DocumentType.ADVANCE_PERMIT,
-        DocumentType.FINANCIAL_CLAIM
-    )
+    val usesAmount = type.hasFinancialAmountField()
     val detailLabel = when (type) {
         DocumentType.PURCHASE_ORDER -> "بيان الأصناف والكميات والشروط"
         DocumentType.SUPPLY_PERMIT -> "الأصناف والكميات وبيانات التوريد / الاستلام"
