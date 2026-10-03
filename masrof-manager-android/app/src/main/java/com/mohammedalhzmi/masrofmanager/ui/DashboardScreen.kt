@@ -63,6 +63,7 @@ fun DashboardScreen(
     onAddDocument: () -> Unit,
     onCreateBook: () -> Unit,
     onBranchAssets: () -> Unit,
+    onOfficeEditor: () -> Unit,
     onPrint: (String) -> Unit,
     onEdit: (String) -> Unit,
     onSettings: () -> Unit
@@ -135,6 +136,7 @@ fun DashboardScreen(
         item(key = "add_document") { Button(onClick = onAddDocument, modifier = Modifier.fillMaxWidth()) { Text("إضافة مستند جديد") } }
         item(key = "create_book") { OutlinedButton(onClick = onCreateBook, modifier = Modifier.fillMaxWidth()) { Text("إنشاء دفتر مستندات مرقّم") } }
         item(key = "branch_assets") { OutlinedButton(onClick = onBranchAssets, modifier = Modifier.fillMaxWidth()) { Text("ممتلكات الفرع") } }
+        item(key = "office_editor") { OutlinedButton(onClick = onOfficeEditor, modifier = Modifier.fillMaxWidth()) { Text("محرر وورد") } }
         item(key = "search") {
             OutlinedTextField(value = query, onValueChange = { query = it }, modifier = Modifier.fillMaxWidth(), singleLine = true,
                 label = { Text("بحث بالنوع أو التاريخ أو الرقم أو اسم المستفيد") })

@@ -23,6 +23,7 @@ fun AppNavigation(viewModel: MasrofViewModel) {
                 onAddDocument = { navController.navigate("select_type") },
                 onCreateBook = { navController.navigate("document_book") },
                 onBranchAssets = { navController.navigate("branch_assets") },
+                onOfficeEditor = { navController.navigate("office_editor") },
                 onPrint = { navController.navigate("print_preview/$it") },
                 onEdit = { token ->
                     val parts = token.split(":")
@@ -57,6 +58,9 @@ fun AppNavigation(viewModel: MasrofViewModel) {
                 entry.arguments?.getString("kind").orEmpty(),
                 onNavigateBack = { navController.popBackStack() }
             )
+        }
+        composable("office_editor") {
+            OfficeEditorScreen(onBack = { navController.popBackStack() })
         }
         composable("select_type") {
             val allowed = userSelectableDocumentTypes().filter { RolePreferences.canCreate(context, it) }.toSet()
