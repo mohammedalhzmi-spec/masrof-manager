@@ -244,7 +244,9 @@ object OfficialDocumentRenderer {
     private fun renderAdministrativeTemplate(c: Canvas, d: Document) {
         val right = c.width - 48f
         val bottom = c.height.toFloat()
-        val content = d.details.orEmpty().ifBlank { "........................................................................................................................" }
+        val structured = StructuredDocumentFields.toDisplayText(d.structuredFields)
+        val content = listOf(d.details.orEmpty(), structured).filter(String::isNotBlank).joinToString("\n")
+            .ifBlank { "........................................................................................................................" }
         when (d.type) {
             DocumentType.FINANCIAL_MEMO -> {
                 drawRight(c, "إلى: ${d.beneficiaryName.orEmpty().ifBlank { "................................" }}", right, 220f, boldPaint)

@@ -33,6 +33,7 @@ import com.mohammedalhzmi.masrofmanager.data.hasFinancialAmountField
 import com.mohammedalhzmi.masrofmanager.util.DocumentNumbering
 import com.mohammedalhzmi.masrofmanager.util.NumberToWordsConverter
 import com.mohammedalhzmi.masrofmanager.util.OfficialTemplateText
+import com.mohammedalhzmi.masrofmanager.util.StructuredDocumentFields
 
 /**
  * Offline-first, in-app editor for a single financial document. Existing records are
@@ -77,6 +78,7 @@ fun UniversalDocumentEditorScreen(
     var regionName by remember(existing?.id) { mutableStateOf(existing?.regionName.orEmpty()) }
     var regionOfficer by remember(existing?.id) { mutableStateOf(existing?.regionOfficerName.orEmpty()) }
     var message by remember { mutableStateOf("") }
+    var structuredFields by remember(existing?.id) { mutableStateOf(StructuredDocumentFields.decode(existing?.structuredFields)) }
 
     val beneficiaryLabel = when (type) {
         DocumentType.REQUEST -> "اسم مقدم الطلب"
@@ -178,6 +180,10 @@ fun UniversalDocumentEditorScreen(
             }
         }
 
+        StructuredFieldsSection(type, structuredFields) { key, value ->
+            structuredFields = structuredFields + (key to value)
+        }
+
         Text("البيانات التفصيلية الخاصة بقالب ${type.displayName()}", style = MaterialTheme.typography.titleMedium)
         OutlinedTextField(details, { details = it }, label = { Text(detailLabel) }, modifier = Modifier.fillMaxWidth(), minLines = 7)
         if (type == DocumentType.ORDER || type == DocumentType.REQUEST || type == DocumentType.RECEIPT) {
@@ -244,7 +250,8 @@ fun UniversalDocumentEditorScreen(
                     regionName = regionName.takeIf { type == DocumentType.VIOLATION_REPORT },
                     regionOfficerName = regionOfficer.takeIf { type == DocumentType.VIOLATION_REPORT },
                     cloudId = existing?.cloudId.orEmpty(),
-                    createdByUid = existing?.createdByUid.orEmpty()
+                    createdByUid = existing?.createdByUid.orEmpty(),
+                    structuredFields = StructuredDocumentFields.encode(structuredFields)
                 )
                 if (existing == null) {
                     viewModel.addDocument(value)
@@ -258,6 +265,125 @@ fun UniversalDocumentEditorScreen(
         ) { Text(if (existing == null) "إنشاء المستند وحفظه" else "حفظ جميع التعديلات") }
         OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("إغلاق محرر المستندات") }
         Spacer(Modifier.height(16.dp))
+    }
+}
+
+@Composable
+private fun StructuredFieldsSection(
+    type: DocumentType,
+    values: Map<String, String>,
+    onChange: (String, String) -> Unit
+) {
+    val fields: List<Pair<String, String>> = when (type) {
+        DocumentType.PURCHASE_ORDER -> listOf(
+            "supplierName" to "اسم المورد / الجهة الموردة",
+            "supplierId" to "رقم المورد / السجل التجاري",
+            "supplierAddress" to "عنوان المورد ووسيلة التواصل",
+            "items" to "الأصناف المطلوبة",
+            "quantities" to "الكميات المطلوبة",
+            "unitPrices" to "سعر الوحدة لكل صنف",
+            "totalBeforeTax" to "الإجمالي قبل الضرائب",
+            "taxes" to "الضرائب والرسوم",
+            "totalAfterTax" to "الإجمالي النهائي",
+            "deliveryDate" to "موعد ومكان التسليم",
+            "purchaseTerms" to "شروط الشراء والضمان",
+            "requestingDepartment" to "الإدارة / القسم الطالب"
+        )
+        DocumentType.SUPPLY_PERMIT -> listOf(
+            "permitKind" to "نوع الإذن: توريد أو استلام",
+            "supplierName" to "اسم المورد / الجهة المسلِّمة",
+            "recipientName" to "اسم المستلم / الجهة المستلمة",
+            "source" to "مصدر التوريد",
+            "destination" to "جهة أو مكان التوريد",
+            "items" to "الأصناف والمواد",
+            "quantities" to "الكميات والوحدات",
+            "unitValues" to "قيمة الوحدة",
+            "totalValue" to "إجمالي القيمة",
+            "transportDetails" to "بيانات النقل والتسليم",
+            "inspectionResult" to "نتيجة الفحص والاستلام"
+        )
+        DocumentType.RECEIPT_MINUTES -> listOf(
+            "committeeMembers" to "أسماء أعضاء لجنة الاستلام",
+            "supplierName" to "الجهة أو المورد المسلِّم",
+            "projectOrLocation" to "المشروع / الموقع",
+            "deliveryDate" to "تاريخ الاستلام الفعلي",
+            "items" to "المواد أو الأعمال المستلمة",
+            "quantities" to "الكميات والوحدات",
+            "condition" to "حالة المواد أو الأعمال",
+            "acceptanceDecision" to "قرار اللجنة: قبول أو تحفظ أو رفض",
+            "deficiencies" to "النواقص والملاحظات",
+            "handoverDocuments" to "المستندات المسلّمة مع المحضر"
+        )
+        DocumentType.FINANCIAL_CLAIM -> listOf(
+            "claimantName" to "اسم صاحب المطالبة",
+            "claimantId" to "رقم الهوية / الحساب",
+            "claimBasis" to "أساس المطالبة والعقد أو التكليف",
+            "servicePeriod" to "الفترة أو مدة الاستحقاق",
+            "claimedItems" to "بيان البنود والمبالغ المطالب بها",
+            "supportingDocuments" to "المستندات المؤيدة",
+            "grossAmount" to "إجمالي المطالبة",
+            "deductions" to "الاستقطاعات والخصميات",
+            "netAmount" to "صافي المبلغ المستحق",
+            "paymentAccount" to "حساب أو وسيلة الصرف"
+        )
+        DocumentType.CUSTODY_SETTLEMENT -> listOf(
+            "custodianName" to "اسم أمين العهدة",
+            "custodianId" to "رقم الهوية / الحساب",
+            "custodyNumber" to "رقم العهدة أو السلفة",
+            "custodyDate" to "تاريخ تسليم العهدة",
+            "settlementDate" to "تاريخ التسوية",
+            "advanceAmount" to "قيمة العهدة المستلمة",
+            "expenseItems" to "تفصيل المصروفات بالفواتير",
+            "spentAmount" to "إجمالي المصروف",
+            "returnedAmount" to "المبلغ المرتجع",
+            "remainingBalance" to "الرصيد المتبقي أو العجز",
+            "settlementNotes" to "ملاحظات لجنة التسوية"
+        )
+        DocumentType.ADVANCE_PERMIT -> listOf(
+            "recipientName" to "اسم مستلم السلفة",
+            "recipientId" to "رقم الهوية / الحساب",
+            "advancePurpose" to "الغرض التفصيلي من السلفة",
+            "requestedAmount" to "المبلغ المطلوب",
+            "dueDate" to "تاريخ الاستحقاق والتسوية",
+            "guarantee" to "الضمان أو التعهد",
+            "settlementDocuments" to "المستندات المطلوبة للتسوية",
+            "financeApproval" to "اعتماد المدير المالي",
+            "managerApproval" to "اعتماد مدير الفرع"
+        )
+        DocumentType.FINANCIAL_MEMO -> listOf(
+            "recipient" to "الجهة أو المسؤول الموجه إليه",
+            "referenceNumber" to "رقم وتاريخ المرجع",
+            "subject" to "موضوع المذكرة",
+            "body" to "نص المذكرة والتفاصيل المالية",
+            "recommendation" to "التوجيه أو التوصية المطلوبة",
+            "attachments" to "المرفقات المؤيدة",
+            "preparedBy" to "معد المذكرة",
+            "reviewedBy" to "مراجع المذكرة"
+        )
+        DocumentType.OFFICIAL_FINANCIAL_LETTER -> listOf(
+            "recipient" to "الجهة المخاطبة",
+            "referenceNumber" to "رقم وتاريخ المرجع",
+            "subject" to "موضوع الخطاب",
+            "body" to "نص الخطاب المالي",
+            "requestedAction" to "الإجراء المطلوب من الجهة المخاطبة",
+            "attachments" to "المرفقات",
+            "senderName" to "اسم وصفة مرسل الخطاب",
+            "replyDeadline" to "الموعد المطلوب للرد"
+        )
+        else -> emptyList()
+    }
+    if (fields.isEmpty()) return
+    Text("الحقول التفصيلية المستقلة — ${type.displayName()}", style = MaterialTheme.typography.titleMedium)
+    Text("كل خانة أدناه تحفظ منفصلة داخل المستند وتظهر عند إعادة فتحه والمزامنة السحابية.", style = MaterialTheme.typography.bodySmall)
+    fields.forEach { (key, label) ->
+        OutlinedTextField(
+            value = values[key].orEmpty(),
+            onValueChange = { onChange(key, it) },
+            label = { Text(label) },
+            modifier = Modifier.fillMaxWidth(),
+            minLines = if (key in setOf("items", "quantities", "expenseItems", "body", "supportingDocuments", "deficiencies", "purchaseTerms")) 3 else 1,
+            singleLine = key !in setOf("items", "quantities", "expenseItems", "body", "supportingDocuments", "deficiencies", "purchaseTerms")
+        )
     }
 }
 

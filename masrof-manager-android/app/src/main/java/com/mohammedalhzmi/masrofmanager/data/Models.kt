@@ -26,7 +26,8 @@ data class Document(
     val regionName: String? = null,
     val regionOfficerName: String? = null,
     val cloudId: String = "",
-    val createdByUid: String = ""
+    val createdByUid: String = "",
+    val structuredFields: String = ""
 )
 
 @Entity(tableName = "organization_profile")

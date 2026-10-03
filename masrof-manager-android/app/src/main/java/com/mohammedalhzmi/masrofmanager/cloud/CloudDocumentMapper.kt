@@ -57,7 +57,8 @@ internal object CloudDocumentMapper {
             regionName = nullableString(data, "regionName", existing?.regionName),
             regionOfficerName = nullableString(data, "regionOfficerName", existing?.regionOfficerName),
             cloudId = cloudId,
-            createdByUid = firstString(data, listOf("createdByUid"), existing?.createdByUid.orEmpty())
+            createdByUid = firstString(data, listOf("createdByUid"), existing?.createdByUid.orEmpty()),
+            structuredFields = firstString(data, listOf("structuredFields"), existing?.structuredFields.orEmpty())
         )
     }
 
@@ -107,7 +108,8 @@ internal object CloudDocumentMapper {
             "witnessTwo" to document.witnessTwo,
             "regionName" to document.regionName,
             "regionOfficerName" to document.regionOfficerName,
-            "createdByUid" to ownerUid
+            "createdByUid" to ownerUid,
+            "structuredFields" to document.structuredFields
         )
     }
 
