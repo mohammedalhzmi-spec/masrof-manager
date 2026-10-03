@@ -3,9 +3,11 @@ package com.mohammedalhzmi.masrofmanager.cloud
 import com.mohammedalhzmi.masrofmanager.data.Document
 import com.mohammedalhzmi.masrofmanager.data.DocumentStatus
 import com.mohammedalhzmi.masrofmanager.data.DocumentType
+import com.mohammedalhzmi.masrofmanager.util.BranchAssetData
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CloudDocumentMapperTest {
@@ -89,6 +91,27 @@ class CloudDocumentMapperTest {
         assertEquals("المنطقة", map["regionName"])
         assertEquals("شاهد أول", map["witnessOne"])
         assertEquals(500L, map["updatedAt"])
+    }
+
+    @Test
+    fun branchAssetPayloadSurvivesTheExistingCloudDocumentSchema() {
+        val payload = BranchAssetData.encode(
+            BranchAssetData.Equipment("مولد", "GX-270", "جيدة", "ADM-7", "ENG-2", "CH-4", "2024", "أحمد")
+        )
+        val source = sample(DocumentType.BOOK).copy(
+            documentNumber = "BA-EQ-test",
+            details = payload,
+            tags = "branch_asset_equipment_v1"
+        )
+        val cloud = CloudDocumentMapper.toMap(source, "asset-cloud-id", "owner-uid", 999L)
+        val restored = CloudDocumentMapper.fromMap("asset-cloud-id", cloud)
+
+        assertNotNull(restored)
+        assertEquals(DocumentType.BOOK, restored?.type)
+        assertEquals(payload, restored?.details)
+        assertEquals("owner-uid", restored?.createdByUid)
+        assertTrue(BranchAssetData.isRecord(requireNotNull(restored)))
+        assertEquals("مولد", BranchAssetData.decodeEquipment(requireNotNull(restored))?.name)
     }
 
     @Test

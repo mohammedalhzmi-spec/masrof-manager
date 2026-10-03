@@ -14,6 +14,7 @@ import kotlinx.coroutines.launch
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import android.content.Context
@@ -36,6 +37,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import com.mohammedalhzmi.masrofmanager.cloud.CloudAccessState
 import com.mohammedalhzmi.masrofmanager.cloud.CloudDeviceRequest
 import com.mohammedalhzmi.masrofmanager.cloud.FirebaseCloudSyncService
+import com.mohammedalhzmi.masrofmanager.util.BranchAssetData
 
 class MasrofViewModel(
     private val repository: MasrofRepository,
@@ -313,6 +315,39 @@ class MasrofViewModel(
             val now = System.currentTimeMillis()
             repository.insert(document.copy(submittedBy = submittedBy, updatedAt = now))
             audit("CREATE_DOCUMENT", "${document.documentNumber} — الحالة: ${document.status.name}")
+        }
+    }
+
+    /** Save branch assets locally first, then sync only this row when the cloud gate is ready. */
+    fun saveBranchAsset(document: Document, onComplete: (locallySaved: Boolean, message: String) -> Unit) {
+        viewModelScope.launch {
+            var savedId: Long? = null
+            try {
+                require(BranchAssetData.isRecord(document)) { "بيانات ممتلكات الفرع غير صالحة." }
+                savedId = withContext(Dispatchers.IO) {
+                    val now = System.currentTimeMillis()
+                    val submittedBy = document.submittedBy.ifBlank { UserSession.current?.fullName.orEmpty() }
+                    if (document.id == 0L) {
+                        repository.insert(document.copy(submittedBy = submittedBy, updatedAt = now))
+                    } else {
+                        repository.update(document.copy(submittedBy = submittedBy, updatedAt = now))
+                        document.id
+                    }
+                }
+                audit("SAVE_BRANCH_ASSET", document.documentNumber)
+                val cloudResult = withContext(Dispatchers.IO) {
+                    cloudSyncService.syncBranchAsset(requireNotNull(savedId), repository)
+                }
+                onComplete(true, cloudResult.message)
+            } catch (error: Throwable) {
+                if (error is CancellationException) throw error
+                val message = if (savedId != null) {
+                    "تم حفظ السجل محليًا؛ تعذرت المزامنة السحابية الآن. ${cloudErrorMessage(error)}"
+                } else {
+                    "تعذر حفظ السجل: ${cloudErrorMessage(error)}"
+                }
+                onComplete(savedId != null, message)
+            }
         }
     }
 

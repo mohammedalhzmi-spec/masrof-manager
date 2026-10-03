@@ -140,6 +140,26 @@ test('owners may edit and submit drafts but cannot approve or reject their own d
   await assertFails(updateDoc(doc(owner, 'documents', 'owner-draft'), { status: 'APPROVED' }));
 });
 
+test('branch asset rows use the existing shared ledger owner and no-delete rules', async () => {
+  await seedProfile('asset-owner');
+  await seedProfile('asset-reader');
+  const owner = clientDb('asset-owner');
+  const reader = clientDb('asset-reader');
+  const asset = doc(owner, 'documents', 'branch-equipment-1');
+  await assertSucceeds(setDoc(asset, {
+    id: 'branch-equipment-1',
+    type: 'BOOK',
+    documentNumber: 'BA-EQ-test',
+    status: 'DRAFT',
+    details: 'MASROF_BRANCH_ASSET_V1|E|encoded-equipment-fields',
+    createdByUid: 'asset-owner',
+  }));
+  await assertSucceeds(getDoc(doc(reader, 'documents', 'branch-equipment-1')));
+  await assertSucceeds(updateDoc(asset, { details: 'MASROF_BRANCH_ASSET_V1|E|updated-fields' }));
+  await assertFails(updateDoc(doc(reader, 'documents', 'branch-equipment-1'), { details: 'forged' }));
+  await assertFails(deleteDoc(asset));
+});
+
 test('normal users cannot change another owner document; finance admins may edit but cannot reassign ownership', async () => {
   await seedProfile('ordinary-account');
   await seedProfile('finance-account', { role: 'FINANCE_DIRECTOR' });

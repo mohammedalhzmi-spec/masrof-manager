@@ -1,8 +1,8 @@
 package com.mohammedalhzmi.masrofmanager.ui
 
+import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
-import android.net.Uri
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -19,15 +19,16 @@ fun AppNavigation(viewModel: MasrofViewModel) {
     NavHost(navController = navController, startDestination = "dashboard") {
         composable("dashboard") {
             DashboardScreen(
-                viewModel,
-                { navController.navigate("select_type") },
-                { navController.navigate("document_book") },
-                { navController.navigate("print_preview/$it") },
-                { token ->
+                viewModel = viewModel,
+                onAddDocument = { navController.navigate("select_type") },
+                onCreateBook = { navController.navigate("document_book") },
+                onBranchAssets = { navController.navigate("branch_assets") },
+                onPrint = { navController.navigate("print_preview/$it") },
+                onEdit = { token ->
                     val parts = token.split(":")
                     if (parts.size == 2) navController.navigate("edit/${parts[0]}/${parts[1]}")
                 },
-                { navController.navigate("settings") }
+                onSettings = { navController.navigate("settings") }
             )
         }
         composable("document_book") {
@@ -43,6 +44,18 @@ fun AppNavigation(viewModel: MasrofViewModel) {
                 onPreview = { ids -> navController.navigate("print_preview/$ids") },
                 onOpenCanvas = { type -> navController.navigate("canvas/${type.name}") },
                 onBack = { navController.popBackStack() }
+            )
+        }
+        composable("branch_assets") {
+            BranchAssetsScreen(viewModel, onNavigateBack = { navController.popBackStack() }) { kind ->
+                navController.navigate("branch_assets_inventory/$kind")
+            }
+        }
+        composable("branch_assets_inventory/{kind}") { entry ->
+            BranchAssetsAnnualInventoryScreen(
+                viewModel,
+                entry.arguments?.getString("kind").orEmpty(),
+                onNavigateBack = { navController.popBackStack() }
             )
         }
         composable("select_type") {

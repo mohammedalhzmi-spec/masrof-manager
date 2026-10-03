@@ -14,6 +14,7 @@ import com.google.firebase.firestore.Source
 import com.google.firebase.functions.FirebaseFunctions
 import com.mohammedalhzmi.masrofmanager.data.Document
 import com.mohammedalhzmi.masrofmanager.data.MasrofRepository
+import com.mohammedalhzmi.masrofmanager.util.BranchAssetData
 import java.util.UUID
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -48,6 +49,8 @@ data class CloudSyncReport(
     val skipped: Int,
     val conflicts: Int
 )
+
+data class BranchAssetCloudResult(val synced: Boolean, val message: String)
 
 /** Android Firebase bridge. Alias resolution and device approval are server-only; local Room data is never cleared. */
 class FirebaseCloudSyncService(context: Context) {
@@ -193,6 +196,80 @@ class FirebaseCloudSyncService(context: Context) {
         val response = callFunction("approveCloudDevice", mapOf("requestId" to request.id))
         val customToken = response["customToken"] as? String
         if (!customToken.isNullOrBlank()) auth().signInWithCustomToken(customToken).awaitResult()
+    }
+
+    /**
+     * Push exactly one branch-asset row after checking the existing account/device gate.
+     * The transaction never deletes records and refuses to overwrite a newer shared edit.
+     */
+    suspend fun syncBranchAsset(documentId: Long, repository: MasrofRepository): BranchAssetCloudResult {
+        val access = currentAccessState()
+        if (!access.canSync) return BranchAssetCloudResult(false, access.message)
+        val uid = requireNotNull(access.uid) { "تعذر إثبات حساب السحابة الحالي." }
+        val local = repository.documentById(documentId)
+            ?: return BranchAssetCloudResult(false, "حُفظت البيانات محليًا لكن تعذر العثور على سجل الممتلكات.")
+        require(BranchAssetData.isRecord(local)) { "السجل المحدد ليس من سجلات ممتلكات الفرع." }
+        require(local.createdByUid.isBlank() || local.createdByUid == uid) {
+            "لا يمكن لهذا الحساب تعديل سجل ممتلكات أنشأه حساب سحابي آخر."
+        }
+
+        val cloudId = local.cloudId.ifBlank { UUID.randomUUID().toString() }
+        val prepared = local.copy(
+            cloudId = cloudId,
+            createdByUid = uid,
+            updatedAt = maxOf(local.updatedAt, System.currentTimeMillis())
+        )
+        // Persist the cloud identity locally first so a transient network failure can retry
+        // the same record instead of creating a duplicate on the next attempt.
+        repository.update(prepared)
+        val reference = firestore().collection("documents").document(cloudId)
+        val result = firestore().runTransaction { transaction ->
+            val snapshot = transaction.get(reference)
+            if (!snapshot.exists()) {
+                transaction.set(reference, CloudDocumentMapper.toMap(prepared, cloudId, uid, prepared.updatedAt))
+                "uploaded"
+            } else {
+                val remote = snapshot.data?.let { CloudDocumentMapper.fromMap(cloudId, it) }
+                    ?: throw IllegalStateException("يوجد سجل سحابي غير قابل للقراءة؛ لم يتم استبداله.")
+                if (!BranchAssetData.isRecord(remote)) {
+                    throw IllegalStateException("معرّف السحابة مرتبط بسجل آخر؛ لم يتم استبدال أي بيانات.")
+                }
+                if (remote.createdByUid != uid) {
+                    throw IllegalStateException("هذا السجل السحابي مملوك لحساب آخر؛ لم يتم تعديله.")
+                }
+                val samePayload = remote.type == prepared.type
+                    && remote.documentNumber == prepared.documentNumber
+                    && remote.details == prepared.details
+                    && remote.beneficiaryName == prepared.beneficiaryName
+                    && remote.purpose == prepared.purpose
+                    && remote.amount == prepared.amount
+                    && remote.tags == prepared.tags
+                if (remote.updatedAt > prepared.updatedAt) {
+                    "conflict:${remote.updatedAt}"
+                } else if (remote.updatedAt == prepared.updatedAt && samePayload) {
+                    "current"
+                } else if (remote.updatedAt == prepared.updatedAt) {
+                    "conflict:${remote.updatedAt}"
+                } else {
+                    transaction.set(
+                        reference,
+                        CloudDocumentMapper.toMap(prepared, cloudId, uid, prepared.updatedAt),
+                        SetOptions.merge()
+                    )
+                    "uploaded"
+                }
+            }
+        }.awaitResult()
+
+        if (result.startsWith("conflict:")) {
+            // Equal timestamps make the existing full-ledger sync report a conflict and
+            // preserve both copies rather than letting either side silently win.
+            result.substringAfter(':').toLongOrNull()?.let { remoteTime ->
+                repository.update(prepared.copy(updatedAt = remoteTime))
+            }
+            return BranchAssetCloudResult(false, "حُفظت محليًا؛ وُجد تعديل سحابي متزامن ولم تُستبدل أي نسخة. راجع السجل قبل المزامنة العامة.")
+        }
+        return BranchAssetCloudResult(true, if (result == "current") "السجل موجود ومحدّث في السحابة." else "تم حفظ السجل محليًا ومزامنته سحابيًا.")
     }
 
     suspend fun syncDocuments(repository: MasrofRepository): CloudSyncReport {
