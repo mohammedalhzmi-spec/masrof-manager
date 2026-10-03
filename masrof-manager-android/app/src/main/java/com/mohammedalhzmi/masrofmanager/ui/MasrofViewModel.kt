@@ -15,6 +15,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import android.content.Context
@@ -44,6 +46,7 @@ class MasrofViewModel(
     private val database: MasrofDatabase,
     private val cloudSyncService: FirebaseCloudSyncService
 ) : ViewModel() {
+    private val automaticSyncMutex = Mutex()
     val allDocuments = repository.allDocuments
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val archivedDocuments = repository.archivedDocuments
@@ -243,6 +246,19 @@ class MasrofViewModel(
         }
     }
 
+    private suspend fun automaticSyncAfterLocalSave() {
+        automaticSyncMutex.withLock {
+            try {
+                val report = cloudSyncService.syncDocuments(repository)
+                cloudAccessState.value = cloudSyncService.currentAccessState()
+                cloudOperationMessage.value = "تم الحفظ محليًا والمزامنة تلقائيًا: رفع ${report.uploaded}، تنزيل ${report.downloaded}، تخطي ${report.skipped}، تعارضات ${report.conflicts}."
+            } catch (error: Throwable) {
+                if (error is CancellationException) throw error
+                cloudOperationMessage.value = "تم الحفظ محليًا؛ ستتم المزامنة تلقائيًا عند توفر الحساب والاتصال واعتماد الجهاز."
+            }
+        }
+    }
+
     fun loadPendingCloudDevices() {
         viewModelScope.launch(Dispatchers.IO) {
             cloudBusy.value = true
@@ -315,6 +331,7 @@ class MasrofViewModel(
             val now = System.currentTimeMillis()
             repository.insert(document.copy(submittedBy = submittedBy, updatedAt = now))
             audit("CREATE_DOCUMENT", "${document.documentNumber} — الحالة: ${document.status.name}")
+            automaticSyncAfterLocalSave()
         }
     }
 
@@ -375,11 +392,16 @@ class MasrofViewModel(
             )
             repository.update(updated)
             audit("WORKFLOW_${target.name}", "${document.documentNumber} — بواسطة $actor")
+            automaticSyncAfterLocalSave()
         }
     }
 
     fun updateDocument(document: Document) {
-        viewModelScope.launch { repository.update(document.copy(updatedAt = System.currentTimeMillis())); audit("UPDATE_DOCUMENT", document.documentNumber) }
+        viewModelScope.launch {
+            repository.update(document.copy(updatedAt = System.currentTimeMillis()))
+            audit("UPDATE_DOCUMENT", document.documentNumber)
+            automaticSyncAfterLocalSave()
+        }
     }
 
     fun deleteDocument(document: Document) {
@@ -387,11 +409,19 @@ class MasrofViewModel(
     }
 
     fun archiveDocument(document: Document) {
-        viewModelScope.launch(Dispatchers.IO) { repository.archive(document, System.currentTimeMillis()); audit("ARCHIVE_DOCUMENT", document.documentNumber) }
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.archive(document, System.currentTimeMillis())
+            audit("ARCHIVE_DOCUMENT", document.documentNumber)
+            automaticSyncAfterLocalSave()
+        }
     }
 
     fun restoreDocument(document: Document) {
-        viewModelScope.launch(Dispatchers.IO) { repository.restore(document, System.currentTimeMillis()); audit("RESTORE_DOCUMENT", document.documentNumber) }
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.restore(document, System.currentTimeMillis())
+            audit("RESTORE_DOCUMENT", document.documentNumber)
+            automaticSyncAfterLocalSave()
+        }
     }
 
     fun exportDatabase(context: Context, uri: Uri) {
