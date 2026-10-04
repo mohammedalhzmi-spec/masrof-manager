@@ -1,6 +1,9 @@
 package com.mohammedalhzmi.masrofmanager.ui
 
 import android.graphics.Typeface
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.text.Editable
 import android.text.Html
 import android.text.Spannable
@@ -50,6 +53,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -72,8 +76,10 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.res.ResourcesCompat
 import com.example.R
+import com.mohammedalhzmi.masrofmanager.data.Document
 import com.mohammedalhzmi.masrofmanager.util.LocalOfficeDocument
 import com.mohammedalhzmi.masrofmanager.util.LocalOfficeDocumentStore
+import com.mohammedalhzmi.masrofmanager.util.OfficeDocumentRecord
 import com.mohammedalhzmi.masrofmanager.util.OfficeDocumentKind
 import com.mohammedalhzmi.masrofmanager.util.SpreadsheetFormulaEvaluator
 import kotlinx.coroutines.Dispatchers
@@ -95,15 +101,35 @@ private val ArabicFonts = listOf(
 )
 
 @Composable
-fun OfficeEditorScreen(onBack: () -> Unit) {
+fun OfficeEditorScreen(viewModel: MasrofViewModel, initialDocumentId: Long? = null, onBack: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var savedFiles by remember { mutableStateOf(emptyList<LocalOfficeDocument>()) }
     var current by remember { mutableStateOf<LocalOfficeDocument?>(null) }
     var saveMessage by remember { mutableStateOf("") }
+    var localSaveMessage by remember { mutableStateOf("") }
+    val roomDocuments by viewModel.allDocuments.collectAsState()
+    val editorDocuments = remember(savedFiles, roomDocuments) {
+        val byId = linkedMapOf<String, LocalOfficeDocument>()
+        savedFiles.forEach { byId[it.id] = it }
+        roomDocuments.mapNotNull(OfficeDocumentRecord::decode).forEach { roomFile ->
+            val prior = byId[roomFile.id]
+            if (prior == null || roomFile.updatedAt >= prior.updatedAt) byId[roomFile.id] = roomFile
+        }
+        byId.values.sortedByDescending(LocalOfficeDocument::updatedAt)
+    }
+    val bookTags = remember(roomDocuments) {
+        roomDocuments.flatMap { it.tags.split(',').map(String::trim) }
+            .filter { it.startsWith("دفتر:") }.distinct().sorted()
+    }
 
     LaunchedEffect(Unit) {
         savedFiles = withContext(Dispatchers.IO) { LocalOfficeDocumentStore.list(context) }
+    }
+    LaunchedEffect(initialDocumentId, roomDocuments) {
+        if (initialDocumentId != null && current == null) {
+            roomDocuments.firstOrNull { it.id == initialDocumentId }?.let(OfficeDocumentRecord::decode)?.let { current = it }
+        }
     }
     LaunchedEffect(current) {
         val document = current ?: return@LaunchedEffect
@@ -111,17 +137,16 @@ fun OfficeEditorScreen(onBack: () -> Unit) {
         runCatching {
             withContext(Dispatchers.IO) { LocalOfficeDocumentStore.save(context, document) }
             savedFiles = withContext(Dispatchers.IO) { LocalOfficeDocumentStore.list(context) }
-            saveMessage = "حُفظ محليًا"
-        }.onFailure { saveMessage = "تعذر الحفظ المحلي: ${it.message.orEmpty()}" }
+            localSaveMessage = "حفظ محلي تلقائي"
+        }.onFailure { localSaveMessage = "تعذر الحفظ المحلي: ${it.message.orEmpty()}" }
     }
 
     val openHome: () -> Unit = {
         val latest = current
-        scope.launch {
-            runCatching { latest?.let { withContext(Dispatchers.IO) { LocalOfficeDocumentStore.save(context, it) } } }
-                .onFailure { saveMessage = "تعذر حفظ آخر تعديل: ${it.message.orEmpty()}" }
-            savedFiles = withContext(Dispatchers.IO) { LocalOfficeDocumentStore.list(context) }
-            current = null
+        if (latest == null) onBack() else viewModel.saveOfficeDocument(context, latest) { linked, message ->
+            saveMessage = message
+            if (linked != null) current = null
+            scope.launch { savedFiles = withContext(Dispatchers.IO) { LocalOfficeDocumentStore.list(context) } }
         }
     }
 
@@ -129,15 +154,22 @@ fun OfficeEditorScreen(onBack: () -> Unit) {
     BackHandler(enabled = document != null) { openHome() }
     if (document == null) {
         OfficeEditorHome(
-            documents = savedFiles,
+            documents = editorDocuments,
+            bookTags = bookTags,
+            saveMessage = saveMessage,
             onBack = onBack,
-            onCreate = { kind, title ->
+            onCreate = { kind, title, bookTag ->
                 scope.launch {
                     runCatching {
-                        withContext(Dispatchers.IO) { LocalOfficeDocumentStore.create(context, kind, title) }
+                        withContext(Dispatchers.IO) { LocalOfficeDocumentStore.create(context, kind, title).copy(bookTag = bookTag) }
                     }.onSuccess { created ->
                         savedFiles = withContext(Dispatchers.IO) { LocalOfficeDocumentStore.list(context) }
                         current = created
+                        viewModel.saveOfficeDocument(context, created) { linked, message ->
+                            saveMessage = message
+                            if (linked != null) current = current?.takeIf { it.id == linked.id }?.copy(roomDocumentId = linked.roomDocumentId, updatedAt = linked.updatedAt)
+                            scope.launch { savedFiles = withContext(Dispatchers.IO) { LocalOfficeDocumentStore.list(context) } }
+                        }
                     }.onFailure { saveMessage = "تعذر إنشاء الصفحة: ${it.message.orEmpty()}" }
                 }
             },
@@ -159,19 +191,16 @@ fun OfficeEditorScreen(onBack: () -> Unit) {
                     label = { Text("اسم الملف") }
                 )
                 TextButton(onClick = {
-                    scope.launch {
-                        runCatching { withContext(Dispatchers.IO) { LocalOfficeDocumentStore.save(context, current ?: document) } }
-                            .onSuccess {
-                                saveMessage = "حُفظ محليًا"
-                                savedFiles = withContext(Dispatchers.IO) { LocalOfficeDocumentStore.list(context) }
-                            }
-                            .onFailure { saveMessage = "فشل الحفظ: ${it.message.orEmpty()}" }
+                    viewModel.saveOfficeDocument(context, current ?: document) { linked, message ->
+                        saveMessage = message
+                        if (linked != null) current = current?.takeIf { it.id == linked.id }?.copy(roomDocumentId = linked.roomDocumentId, updatedAt = linked.updatedAt)
+                        scope.launch { savedFiles = withContext(Dispatchers.IO) { LocalOfficeDocumentStore.list(context) } }
                     }
                 }) { Text("حفظ") }
             }
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(document.kind.extensionLabel, style = MaterialTheme.typography.labelLarge, color = Color(0xff16486d))
-                Text(saveMessage, style = MaterialTheme.typography.labelSmall, color = Color(0xff25704b))
+                Text(listOf(saveMessage, localSaveMessage).filter(String::isNotBlank).joinToString(" • "), style = MaterialTheme.typography.labelSmall, color = Color(0xff25704b))
             }
             when (document.kind) {
                 OfficeDocumentKind.WORD -> WordPageEditor(
@@ -194,12 +223,16 @@ fun OfficeEditorScreen(onBack: () -> Unit) {
 @Composable
 private fun OfficeEditorHome(
     documents: List<LocalOfficeDocument>,
+    bookTags: List<String>,
+    saveMessage: String,
     onBack: () -> Unit,
-    onCreate: (OfficeDocumentKind, String) -> Unit,
+    onCreate: (OfficeDocumentKind, String, String) -> Unit,
     onOpen: (LocalOfficeDocument) -> Unit
 ) {
     var selectedKind by remember { mutableStateOf(OfficeDocumentKind.WORD) }
     var title by remember { mutableStateOf("مستند جديد") }
+    var selectedBookTag by remember { mutableStateOf("") }
+    var bookMenu by remember { mutableStateOf(false) }
     Column(
         Modifier.fillMaxSize().background(Color(0xffeef2f5)).verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -208,7 +241,8 @@ private fun OfficeEditorHome(
             TextButton(onClick = onBack) { Text("رجوع") }
             Text("محرر وورد", style = MaterialTheme.typography.headlineSmall, color = Color(0xff16486d))
         }
-        Text("اختر نوع صفحة جديدة. تُحفظ الملفات في مساحة التطبيق المحلية ولا تُرفع إلى Firebase في هذه المرحلة.", style = MaterialTheme.typography.bodyMedium)
+        Text("تُحفظ الصفحات محليًا وفي سجل المستندات؛ وتُزامن سحابيًا عند توفر حساب وجهاز معتمدين.", style = MaterialTheme.typography.bodyMedium)
+        if (saveMessage.isNotBlank()) Text(saveMessage, style = MaterialTheme.typography.bodySmall, color = Color(0xff25704b))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OfficeDocumentKind.values().forEach { kind ->
                 if (selectedKind == kind) Button(onClick = { selectedKind = kind; title = if (kind == OfficeDocumentKind.WORD) "مستند جديد" else "جدول بيانات جديد" }, modifier = Modifier.weight(1f)) { Text(kind.extensionLabel) }
@@ -216,7 +250,18 @@ private fun OfficeEditorHome(
             }
         }
         OutlinedTextField(value = title, onValueChange = { title = it }, modifier = Modifier.fillMaxWidth(), singleLine = true, label = { Text("اسم الصفحة") })
-        Button(onClick = { onCreate(selectedKind, title) }, modifier = Modifier.fillMaxWidth()) {
+        Box {
+            OutlinedButton(onClick = { bookMenu = true }, modifier = Modifier.fillMaxWidth()) {
+                Text(if (selectedBookTag.isBlank()) "إضافة اختيارية إلى دفتر مرقم" else "الدفتر: ${selectedBookTag.removePrefix("دفتر:")}")
+            }
+            DropdownMenu(expanded = bookMenu, onDismissRequest = { bookMenu = false }) {
+                DropdownMenuItem(text = { Text("بدون إلحاق بدفتر") }, onClick = { selectedBookTag = ""; bookMenu = false })
+                bookTags.forEach { tag ->
+                    DropdownMenuItem(text = { Text(tag.removePrefix("دفتر:")) }, onClick = { selectedBookTag = tag; bookMenu = false })
+                }
+            }
+        }
+        Button(onClick = { onCreate(selectedKind, title, selectedBookTag) }, modifier = Modifier.fillMaxWidth()) {
             Text("إنشاء صفحة جديدة بيضاء")
         }
         HorizontalDivider()
@@ -314,10 +359,20 @@ private fun WordToolbar(editor: EditText?, fontKey: String, onFontChange: (Strin
         TextButton(onClick = { applySelectedSpan(context, editor, ForegroundColorSpan(Color(0xff16486d).toArgb())) }) { Text("لون") }
         TextButton(onClick = { applySelectedSpan(context, editor, BackgroundColorSpan(Color(0xffffef9b).toArgb())) }) { Text("تمييز") }
         TextButton(onClick = { applySelectedSpan(context, editor, AbsoluteSizeSpan(24, true)) }) { Text("حجم 24") }
+        TextButton(onClick = { copySelection(context, editor, removeAfterCopy = false) }) { Text("نسخ") }
+        TextButton(onClick = { copySelection(context, editor, removeAfterCopy = true) }) { Text("قص") }
+        TextButton(onClick = { pasteClipboard(context, editor) }) { Text("لصق") }
+        TextButton(onClick = {
+            applySelectedSpan(context, editor, StyleSpan(Typeface.BOLD))
+            applySelectedSpan(context, editor, AbsoluteSizeSpan(30, true))
+        }) { Text("عنوان") }
         TextButton(onClick = { alignParagraph(editor, android.text.Layout.Alignment.ALIGN_OPPOSITE) }) { Text("يمين") }
         TextButton(onClick = { alignParagraph(editor, android.text.Layout.Alignment.ALIGN_CENTER) }) { Text("وسط") }
         TextButton(onClick = { alignParagraph(editor, android.text.Layout.Alignment.ALIGN_NORMAL) }) { Text("يسار") }
         TextButton(onClick = { insertBullet(editor) }) { Text("• قائمة") }
+        TextButton(onClick = { insertNumberedItem(editor) }) { Text("١. قائمة") }
+        TextButton(onClick = { insertAtCursor(editor, "\n────────────────────\n") }) { Text("فاصل") }
+        TextButton(onClick = { insertAtCursor(editor, "\n${DateFormat.getDateInstance(DateFormat.SHORT).format(Date())}\n") }) { Text("التاريخ") }
         Box {
             TextButton(onClick = { fontMenu = true }) { Text("الخط") }
             DropdownMenu(expanded = fontMenu, onDismissRequest = { fontMenu = false }) {
@@ -335,6 +390,33 @@ private fun WordToolbar(editor: EditText?, fontKey: String, onFontChange: (Strin
             }
         }
     }
+}
+
+private fun copySelection(context: Context, editor: EditText?, removeAfterCopy: Boolean) {
+    editor ?: return
+    val start = minOf(editor.selectionStart, editor.selectionEnd).coerceAtLeast(0)
+    val end = maxOf(editor.selectionStart, editor.selectionEnd).coerceAtLeast(0)
+    if (start == end) {
+        Toast.makeText(context, "حدد نصًا أولًا.", Toast.LENGTH_SHORT).show()
+        return
+    }
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    clipboard.setPrimaryClip(ClipData.newPlainText("office_selection", editor.text.subSequence(start, end)))
+    if (removeAfterCopy) editor.text.delete(start, end)
+}
+
+private fun pasteClipboard(context: Context, editor: EditText?) {
+    editor ?: return
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    val value = clipboard.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString().orEmpty()
+    if (value.isNotEmpty()) insertAtCursor(editor, value)
+}
+
+private fun insertAtCursor(editor: EditText?, value: String) {
+    editor ?: return
+    val start = minOf(editor.selectionStart, editor.selectionEnd).coerceAtLeast(0)
+    val end = maxOf(editor.selectionStart, editor.selectionEnd).coerceAtLeast(0)
+    editor.text.replace(start, end, value)
 }
 
 private fun applySelectedSpan(context: android.content.Context, editor: EditText?, span: Any) {
@@ -368,6 +450,17 @@ private fun insertBullet(editor: EditText?) {
     editor.setSelection((cursor + 2).coerceAtMost(text.length))
 }
 
+private fun insertNumberedItem(editor: EditText?) {
+    editor ?: return
+    val text = editor.text
+    val cursor = editor.selectionStart.coerceIn(0, text.length)
+    val lineStart = if (cursor == 0) 0 else text.toString().lastIndexOf('\n', cursor - 1) + 1
+    val number = text.toString().substring(0, lineStart).count { it == '\n' } + 1
+    val prefix = "$number. "
+    text.insert(lineStart, prefix)
+    editor.setSelection((cursor + prefix.length).coerceAtMost(text.length))
+}
+
 private fun fontTypeface(context: android.content.Context, key: String): Typeface =
     ArabicFonts.firstOrNull { it.key == key }?.let { ResourcesCompat.getFont(context, it.resourceId) } ?: Typeface.DEFAULT
 
@@ -394,15 +487,20 @@ private fun SpreadsheetPageEditor(
             }
         }
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf("SUM" to "جمع", "AVERAGE" to "متوسط", "MIN" to "أصغر", "MAX" to "أكبر").forEach { (function, label) ->
+            listOf("SUM" to "جمع", "AVERAGE" to "متوسط", "MIN" to "أصغر", "MAX" to "أكبر", "PRODUCT" to "ضرب", "ROUND" to "تقريب").forEach { (function, label) ->
                 OutlinedButton(onClick = {
                     val column = selectedCell.dropLastWhile(Char::isDigit).ifBlank { "A" }
                     val row = selectedCell.takeLastWhile(Char::isDigit).toIntOrNull() ?: 6
                     val firstRow = if (row > 1) 1 else 2
-                    val lastRow = if (row > 1) row - 1 else 6
-                    onCellChange(selectedCell, "=$function($column$firstRow:$column$lastRow)")
+                    val lastRow = if (row > 1) row - 1 else 100
+                    val formula = if (function == "ROUND") {
+                        val source = cellValue.trim().let { value -> if (value.startsWith("=")) value.drop(1) else value }.ifBlank { "0" }
+                        "=ROUND($source,2)"
+                    } else "=$function($column$firstRow:$column$lastRow)"
+                    onCellChange(selectedCell, formula)
                 }) { Text(label) }
             }
+            OutlinedButton(onClick = { onCellChange(selectedCell, "") }) { Text("مسح الخلية") }
             Box {
                 OutlinedButton(onClick = { fontMenu = true }) { Text("خط عربي") }
                 DropdownMenu(expanded = fontMenu, onDismissRequest = { fontMenu = false }) {
@@ -411,7 +509,7 @@ private fun SpreadsheetPageEditor(
                     }
                 }
             }
-            Text("أدخل = قبل المعادلة؛ المتاح: + − × ÷ و SUM/AVERAGE/MIN/MAX", modifier = Modifier.align(Alignment.CenterVertically), style = MaterialTheme.typography.labelSmall)
+            Text("المتاح: العمليات الحسابية و SUM / AVERAGE / MIN / MAX / PRODUCT / ROUND / ABS", modifier = Modifier.align(Alignment.CenterVertically), style = MaterialTheme.typography.labelSmall)
         }
         SpreadsheetGrid(document, selectedCell, onSelect = { selectedCell = it }, onCellChange = onCellChange, fontKey = document.fontFamily, modifier = Modifier.weight(1f))
     }
@@ -426,7 +524,7 @@ private fun SpreadsheetGrid(
     fontKey: String,
     modifier: Modifier = Modifier
 ) {
-    val columns = (1..10).map(::columnLabel)
+    val columns = (1..20).map(::columnLabel)
     LazyColumn(modifier = modifier.fillMaxWidth().background(Color.White).border(1.dp, Color(0xffa9b1b8))) {
         item(key = "column_headers") {
             Row(Modifier.horizontalScroll(rememberScrollState()).background(Color(0xffdce8f3))) {
@@ -436,7 +534,7 @@ private fun SpreadsheetGrid(
                 }
             }
         }
-        items((1..30).toList(), key = { "row_$it" }) { row ->
+        items((1..100).toList(), key = { "row_$it" }) { row ->
             Row(Modifier.horizontalScroll(rememberScrollState())) {
                 Box(Modifier.width(44.dp).height(46.dp).background(Color(0xfff1f4f7)).border(0.5.dp, Color.LightGray), contentAlignment = Alignment.Center) { Text(row.toString(), style = MaterialTheme.typography.labelSmall) }
                 columns.forEachIndexed { index, column ->

@@ -43,4 +43,7 @@ interface DocumentDao {
 
     @Query("SELECT * FROM documents WHERE id = :id LIMIT 1")
     suspend fun findById(id: Long): Document?
+
+    @Query("SELECT * FROM documents WHERE documentNumber = :documentNumber AND type = 'BOOK' LIMIT 1")
+    suspend fun findOfficeOrBookByNumber(documentNumber: String): Document?
 }

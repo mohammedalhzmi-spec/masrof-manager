@@ -1,6 +1,8 @@
 package com.mohammedalhzmi.masrofmanager.util
 
 import java.util.Locale
+import java.math.BigDecimal
+import java.math.RoundingMode
 import kotlin.math.abs
 
 /** A small, explicitly scoped formula engine for the first offline spreadsheet milestone. */
@@ -132,6 +134,13 @@ object SpreadsheetFormulaEvaluator {
                 "AVERAGE" -> if (numbers.isEmpty()) 0.0 else numbers.average()
                 "MIN" -> numbers.minOrNull() ?: 0.0
                 "MAX" -> numbers.maxOrNull() ?: 0.0
+                "PRODUCT" -> numbers.fold(1.0) { product, value -> product * value }
+                "ABS" -> { require(numbers.size == 1); abs(numbers.single()) }
+                "ROUND" -> {
+                    require(numbers.size in 1..2)
+                    val digits = numbers.getOrElse(1) { 0.0 }.toInt().coerceIn(-8, 8)
+                    BigDecimal.valueOf(numbers.first()).setScale(digits, RoundingMode.HALF_UP).toDouble()
+                }
                 else -> error("Unsupported function")
             }
         }

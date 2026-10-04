@@ -27,7 +27,8 @@ fun AppNavigation(viewModel: MasrofViewModel) {
                 onPrint = { navController.navigate("print_preview/$it") },
                 onEdit = { token ->
                     val parts = token.split(":")
-                    if (parts.size == 2) navController.navigate("edit/${parts[0]}/${parts[1]}")
+                    if (parts.size == 2 && parts[0] == "office") navController.navigate("office_editor/${parts[1]}")
+                    else if (parts.size == 2) navController.navigate("edit/${parts[0]}/${parts[1]}")
                 },
                 onSettings = { navController.navigate("settings") }
             )
@@ -44,6 +45,7 @@ fun AppNavigation(viewModel: MasrofViewModel) {
                 bookTag = tag,
                 onPreview = { ids -> navController.navigate("print_preview/$ids") },
                 onOpenCanvas = { type -> navController.navigate("canvas/${type.name}") },
+                onOpenOffice = { id -> navController.navigate("office_editor/$id") },
                 onBack = { navController.popBackStack() }
             )
         }
@@ -60,7 +62,10 @@ fun AppNavigation(viewModel: MasrofViewModel) {
             )
         }
         composable("office_editor") {
-            OfficeEditorScreen(onBack = { navController.popBackStack() })
+            OfficeEditorScreen(viewModel, onBack = { navController.popBackStack() })
+        }
+        composable("office_editor/{documentId}") { entry ->
+            OfficeEditorScreen(viewModel, entry.arguments?.getString("documentId")?.toLongOrNull(), onBack = { navController.popBackStack() })
         }
         composable("select_type") {
             val allowed = userSelectableDocumentTypes().filter { RolePreferences.canCreate(context, it) }.toSet()

@@ -33,4 +33,12 @@ class SpreadsheetFormulaEvaluatorTest {
         assertEquals("#DIV/0!", SpreadsheetFormulaEvaluator.evaluate("=5/0", emptyMap()))
         assertEquals("#VALUE!", SpreadsheetFormulaEvaluator.evaluate("=A1+1", mapOf("A1" to "=A1+2")))
     }
+
+    @Test
+    fun supportsProductAbsoluteValueAndRounding() {
+        assertEquals("120", SpreadsheetFormulaEvaluator.evaluate("=PRODUCT(4,5,6)", emptyMap()))
+        assertEquals("12.35", SpreadsheetFormulaEvaluator.evaluate("=ROUND(12.345,2)", emptyMap()))
+        assertEquals("9", SpreadsheetFormulaEvaluator.evaluate("=ABS(-9)", emptyMap()))
+        assertEquals("#VALUE!", SpreadsheetFormulaEvaluator.evaluate("=ABS(1,2)", emptyMap()))
+    }
 }

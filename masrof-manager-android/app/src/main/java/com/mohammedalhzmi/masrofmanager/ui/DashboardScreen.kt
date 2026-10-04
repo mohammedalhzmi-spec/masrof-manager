@@ -55,6 +55,7 @@ import com.mohammedalhzmi.masrofmanager.util.AppBackupManager
 import com.mohammedalhzmi.masrofmanager.util.AppPermission
 import com.mohammedalhzmi.masrofmanager.util.BranchAssetData
 import com.mohammedalhzmi.masrofmanager.util.OfficialDocumentExporter
+import com.mohammedalhzmi.masrofmanager.util.OfficeDocumentRecord
 import com.mohammedalhzmi.masrofmanager.util.RolePreferences
 
 @Composable
@@ -97,7 +98,7 @@ fun DashboardScreen(
             (selectedTag == null || doc.tags.split(",").map(String::trim).contains(selectedTag)) &&
                 (normalizedQuery.isBlank() || listOf(
                     doc.documentNumber, doc.dateHijri, doc.dateGregorian, doc.beneficiaryName.orEmpty(),
-                    documentTitle(doc.type), doc.tags
+                    documentTitle(doc), doc.purpose.orEmpty(), doc.tags
                 ).any { it.lowercase().contains(normalizedQuery) })
         }
     }
@@ -201,7 +202,8 @@ fun DashboardScreen(
                 onSelected = { checked -> selectedIds = if (checked) selectedIds + doc.id else selectedIds - doc.id },
                 onTransition = { target -> viewModel.transitionDocument(doc, target) },
                 onRestore = { viewModel.restoreDocument(doc) },
-                onEdit = { onEdit("${doc.type.name.lowercase()}:${doc.id}") },
+                isOfficeDocument = OfficeDocumentRecord.isOfficeDocument(doc),
+                onEdit = { onEdit(if (OfficeDocumentRecord.isOfficeDocument(doc)) "office:${doc.id}" else "${doc.type.name.lowercase()}:${doc.id}") },
                 onShare = {
                     val label = if (bookTag == null) "مشاركة المستند PDF" else "مشاركة دفتر المستندات PDF"
                     OfficialDocumentExporter.share(context, OfficialDocumentExporter.exportPdf(context, exportDocs), label)
@@ -272,17 +274,18 @@ private fun DocumentListCard(
     onShare: () -> Unit,
     onDelete: () -> Unit,
     onDeleteBook: () -> Unit,
-    showDeleteBook: Boolean
+    showDeleteBook: Boolean,
+    isOfficeDocument: Boolean
 ) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(selected, onSelected)
                 Column(Modifier.weight(1f)) {
-                    val title = documentTitle(document.type)
-                    val heading = if (document.documentNumber.isBlank()) title else "$title — ${document.documentNumber}"
+                    val title = documentTitle(document)
+                    val heading = if (isOfficeDocument || document.documentNumber.isBlank()) title else "$title — ${document.documentNumber}"
                     Text(heading, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    Text("الحالة: ${statusTitle(document.status)}", style = MaterialTheme.typography.labelMedium, color = statusColor(document.status))
+                    if (!isOfficeDocument) Text("الحالة: ${statusTitle(document.status)}", style = MaterialTheme.typography.labelMedium, color = statusColor(document.status))
                     document.beneficiaryName.orEmpty().takeIf(String::isNotBlank)?.let { Text(it, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis) }
                 }
             }
@@ -294,8 +297,8 @@ private fun DocumentListCard(
                 if (canApprove && !showArchive && document.status == DocumentStatus.APPROVED) TextButton(onClick = { onTransition(DocumentStatus.PAID) }) { Text("تم الصرف") }
                 if (canApprove && !showArchive && (document.status == DocumentStatus.SUBMITTED || document.status == DocumentStatus.APPROVED)) TextButton(onClick = { onTransition(DocumentStatus.CANCELLED) }) { Text("إلغاء") }
                 if (showArchive) TextButton(onClick = onRestore) { Text("استعادة") }
-                else if (canEdit) TextButton(onClick = onEdit) { Text("تعديل") }
-                TextButton(onClick = onShare) { Text("مشاركة") }
+                else if (canEdit) TextButton(onClick = onEdit) { Text(if (isOfficeDocument) "فتح Office" else "تعديل") }
+                if (!isOfficeDocument) TextButton(onClick = onShare) { Text("مشاركة") }
                 if (!showArchive && canDelete) {
                     TextButton(onClick = onDelete) { Text("حذف") }
                     if (showDeleteBook) TextButton(onClick = onDeleteBook) { Text("حذف الدفتر") }
@@ -323,4 +326,6 @@ private fun statusColor(status: DocumentStatus) = when (status) {
     else -> Color(0xff8a651d)
 }
 
-private fun documentTitle(type: DocumentType) = type.displayName()
+private fun documentTitle(document: Document): String = OfficeDocumentRecord.decode(document)?.let { office ->
+    "${office.kind.extensionLabel}: ${office.title}"
+} ?: document.type.displayName()

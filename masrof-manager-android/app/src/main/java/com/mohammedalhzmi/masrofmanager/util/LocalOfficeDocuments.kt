@@ -3,6 +3,8 @@ package com.mohammedalhzmi.masrofmanager.util
 import android.content.Context
 import android.system.Os
 import org.json.JSONObject
+import com.mohammedalhzmi.masrofmanager.data.Document
+import com.mohammedalhzmi.masrofmanager.data.DocumentType
 import java.io.File
 import java.util.UUID
 
@@ -18,8 +20,22 @@ data class LocalOfficeDocument(
     val wordHtml: String = "",
     val cells: Map<String, String> = emptyMap(),
     val fontFamily: String = "cairo_regular",
-    val updatedAt: Long = System.currentTimeMillis()
+    val updatedAt: Long = System.currentTimeMillis(),
+    val roomDocumentId: Long? = null,
+    val bookTag: String = ""
 )
+
+object OfficeDocumentRecord {
+    const val MARKER = "MASROF_OFFICE_V1"
+
+    fun isOfficeDocument(document: Document): Boolean =
+        document.type == DocumentType.BOOK && document.structuredFields == MARKER && !document.details.isNullOrBlank()
+
+    fun decode(document: Document): LocalOfficeDocument? =
+        if (!isOfficeDocument(document)) null else runCatching {
+            LocalOfficeDocumentStore.decode(document.details!!).copy(roomDocumentId = document.id, updatedAt = document.updatedAt)
+        }.getOrNull()
+}
 
 /** Stores editor drafts inside app-private files; this is intentionally offline and separate from Firebase. */
 object LocalOfficeDocumentStore {
@@ -46,16 +62,7 @@ object LocalOfficeDocumentStore {
         require(document.id.matches(Regex("[A-Fa-f0-9-]{36}"))) { "معرّف المستند غير صالح." }
         val folder = directory(context)
         check(folder.exists() || folder.mkdirs()) { "تعذر إنشاء مجلد المستندات المحلية." }
-        val payload = JSONObject().apply {
-            put("formatVersion", FORMAT_VERSION)
-            put("id", document.id)
-            put("title", document.title)
-            put("kind", document.kind.name)
-            put("wordHtml", document.wordHtml)
-            put("fontFamily", document.fontFamily)
-            put("updatedAt", document.updatedAt)
-            put("cells", JSONObject().apply { document.cells.toSortedMap().forEach { (key, value) -> put(key, value) } })
-        }.toString()
+        val payload = encode(document)
         val target = File(folder, "${document.id}.json")
         val temporary = File(folder, "${document.id}.tmp")
         temporary.writeText(payload, Charsets.UTF_8)
@@ -83,6 +90,19 @@ object LocalOfficeDocumentStore {
         temporary.delete()
     }
 
+    fun encode(document: LocalOfficeDocument): String = JSONObject().apply {
+            put("formatVersion", FORMAT_VERSION)
+            put("id", document.id)
+            put("title", document.title)
+            put("kind", document.kind.name)
+            put("wordHtml", document.wordHtml)
+            put("fontFamily", document.fontFamily)
+            put("updatedAt", document.updatedAt)
+            put("roomDocumentId", document.roomDocumentId)
+            put("bookTag", document.bookTag)
+            put("cells", JSONObject().apply { document.cells.toSortedMap().forEach { (key, value) -> put(key, value) } })
+        }.toString()
+
     fun delete(context: Context, id: String): Boolean {
         if (!id.matches(Regex("[A-Fa-f0-9-]{36}"))) return false
         return File(directory(context), "$id.json").delete()
@@ -90,7 +110,7 @@ object LocalOfficeDocumentStore {
 
     private fun directory(context: Context): File = File(context.filesDir, DIRECTORY)
 
-    private fun decode(raw: String): LocalOfficeDocument {
+    fun decode(raw: String): LocalOfficeDocument {
         val json = JSONObject(raw)
         require(json.optInt("formatVersion") in 1..FORMAT_VERSION)
         val cellsObject = json.optJSONObject("cells") ?: JSONObject()
@@ -108,7 +128,9 @@ object LocalOfficeDocumentStore {
             wordHtml = json.optString("wordHtml", ""),
             cells = cells,
             fontFamily = json.optString("fontFamily", "cairo_regular"),
-            updatedAt = json.optLong("updatedAt", 0L)
+            updatedAt = json.optLong("updatedAt", 0L),
+            roomDocumentId = json.optLong("roomDocumentId").takeIf { it > 0L },
+            bookTag = json.optString("bookTag", "")
         )
     }
 }

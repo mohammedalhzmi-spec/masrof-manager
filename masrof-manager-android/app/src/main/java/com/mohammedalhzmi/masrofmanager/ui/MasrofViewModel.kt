@@ -40,6 +40,11 @@ import com.mohammedalhzmi.masrofmanager.cloud.CloudAccessState
 import com.mohammedalhzmi.masrofmanager.cloud.CloudDeviceRequest
 import com.mohammedalhzmi.masrofmanager.cloud.FirebaseCloudSyncService
 import com.mohammedalhzmi.masrofmanager.util.BranchAssetData
+import com.mohammedalhzmi.masrofmanager.util.LocalOfficeDocument
+import com.mohammedalhzmi.masrofmanager.util.LocalOfficeDocumentStore
+import com.mohammedalhzmi.masrofmanager.util.OfficeDocumentRecord
+import java.text.DateFormat
+import java.util.Date
 
 class MasrofViewModel(
     private val repository: MasrofRepository,
@@ -333,6 +338,87 @@ class MasrofViewModel(
             audit("CREATE_DOCUMENT", "${document.documentNumber} — الحالة: ${document.status.name}")
             automaticSyncAfterLocalSave()
         }
+    }
+
+    /** Store Office pages as regular BOOK rows, then use the existing gated compare-and-set cloud sync. */
+    fun saveOfficeDocument(context: Context, office: LocalOfficeDocument, onComplete: (LocalOfficeDocument?, String) -> Unit) {
+        viewModelScope.launch {
+            cloudBusy.value = true
+            var linked: LocalOfficeDocument? = null
+            var localSaved = false
+            try {
+                linked = withContext(Dispatchers.IO) {
+                    val now = System.currentTimeMillis()
+                    val effectiveOffice = office.copy(updatedAt = now)
+                    val payload = LocalOfficeDocumentStore.encode(effectiveOffice)
+                    val number = "OFFICE:${office.id}"
+                    val existing = office.roomDocumentId?.takeIf { it > 0L }?.let { repository.documentById(it) }
+                        ?: repository.officeDocumentByNumber(number)
+                    val bookTag = office.bookTag.trim().takeIf(String::isNotBlank)
+                    val tags = (listOf("OFFICE") + listOfNotNull(bookTag)).distinct().joinToString(",")
+                    val base = existing ?: Document(
+                        type = DocumentType.BOOK,
+                        documentNumber = number,
+                        dateHijri = "",
+                        dateGregorian = DateFormat.getDateInstance(DateFormat.SHORT).format(Date(now)),
+                        amount = null,
+                        amountWords = null,
+                        beneficiaryName = "",
+                        purpose = office.title,
+                        details = payload,
+                        notes = "",
+                        status = DocumentStatus.DRAFT,
+                        tags = tags,
+                        submittedBy = UserSession.current?.fullName.orEmpty(),
+                        createdAt = effectiveOffice.updatedAt,
+                        updatedAt = now,
+                        structuredFields = OfficeDocumentRecord.MARKER
+                    )
+                    val updated = base.copy(
+                        type = DocumentType.BOOK,
+                        documentNumber = number,
+                        purpose = office.title,
+                        details = payload,
+                        tags = tags,
+                        updatedAt = now,
+                        structuredFields = OfficeDocumentRecord.MARKER
+                    )
+                    val rowId = if (existing == null) repository.insert(updated) else {
+                        repository.update(updated)
+                        existing.id
+                    }
+                    val result = effectiveOffice.copy(roomDocumentId = rowId)
+                    LocalOfficeDocumentStore.save(context, result)
+                    result
+                }
+                localSaved = true
+                audit("SAVE_OFFICE_DOCUMENT", "${linked.title} — ${linked.id}")
+                val message = try {
+                    val payloadBytes = LocalOfficeDocumentStore.encode(linked).toByteArray(Charsets.UTF_8).size
+                    require(payloadBytes <= MAX_OFFICE_CLOUD_BYTES) {
+                        "حُفظت النسخة المحلية وفي قاعدة النظام؛ حجمها أكبر من الحد الآمن لإرسال سجل Firestore واحد، لذلك تُركت سحابيًا دون تغيير."
+                    }
+                    val report = withContext(Dispatchers.IO) { cloudSyncService.syncDocuments(repository) }
+                    cloudAccessState.value = cloudSyncService.currentAccessState()
+                    "تم حفظ Office محليًا وفي قائمة المستندات، ومزامنته سحابيًا (رفع ${report.uploaded}، تعارضات ${report.conflicts})."
+                } catch (error: Throwable) {
+                    if (error is CancellationException) throw error
+                    "تم حفظ Office محليًا وفي قاعدة البيانات؛ تعذرت المزامنة الآن وستبقى النسخة المحلية آمنة. ${cloudErrorMessage(error)}"
+                }
+                onComplete(linked, message)
+            } catch (error: Throwable) {
+                if (error is CancellationException) throw error
+                val message = if (localSaved) "تم الحفظ محليًا؛ تعذر ربطه بقائمة المستندات. ${cloudErrorMessage(error)}"
+                    else "تعذر ربط Office بالمستندات. ${cloudErrorMessage(error)}"
+                onComplete(linked, message)
+            } finally {
+                cloudBusy.value = false
+            }
+        }
+    }
+
+    private companion object {
+        const val MAX_OFFICE_CLOUD_BYTES = 700_000
     }
 
     /** Save branch assets locally first, then sync only this row when the cloud gate is ready. */

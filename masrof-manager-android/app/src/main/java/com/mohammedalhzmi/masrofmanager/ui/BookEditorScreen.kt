@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.dp
 import com.mohammedalhzmi.masrofmanager.data.Document
 import com.mohammedalhzmi.masrofmanager.data.DocumentType
 import com.mohammedalhzmi.masrofmanager.util.OfficialDocumentExporter
+import com.mohammedalhzmi.masrofmanager.util.OfficeDocumentRecord
 
 @Composable
 fun BookEditorScreen(
@@ -20,6 +21,7 @@ fun BookEditorScreen(
     bookTag: String,
     onPreview: (String) -> Unit,
     onOpenCanvas: (DocumentType) -> Unit,
+    onOpenOffice: (Long) -> Unit,
     onBack: () -> Unit
 ) {
     val allDocuments by viewModel.allDocuments.collectAsState()
@@ -40,6 +42,12 @@ fun BookEditorScreen(
         Text("$bookTag — ${if (pages.isEmpty()) 0 else pageIndex + 1} من ${pages.size}", style = MaterialTheme.typography.bodySmall)
         if (pages.isEmpty()) {
             Text("لم تُحمّل صفحات الدفتر بعد. ارجع للقائمة ثم افتح الدفتر مرة أخرى.", modifier = Modifier.padding(16.dp))
+        } else if (current != null && OfficeDocumentRecord.isOfficeDocument(current)) {
+            Column(Modifier.weight(1f).fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("هذه الصفحة محفوظة كمستند Office مرتبط بالدفتر.", style = MaterialTheme.typography.titleMedium)
+                Text("يمكن متابعة تحرير النص أو خلايا الجدول في المحرر المحلي، مع بقاء السجل داخل قاعدة النظام.", style = MaterialTheme.typography.bodyMedium)
+                Button(onClick = { onOpenOffice(current.id) }, modifier = Modifier.fillMaxWidth()) { Text("فتح مستند Office للتحرير") }
+            }
         } else if (current != null) {
             Column(
                 Modifier.weight(1f).fillMaxWidth()

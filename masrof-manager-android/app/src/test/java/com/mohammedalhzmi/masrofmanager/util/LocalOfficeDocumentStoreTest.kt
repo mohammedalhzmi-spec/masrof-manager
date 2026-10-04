@@ -38,4 +38,39 @@ class LocalOfficeDocumentStoreTest {
         assertTrue(LocalOfficeDocumentStore.delete(context, created.id))
         assertFalse(LocalOfficeDocumentStore.list(context).any { it.id == created.id })
     }
+
+    @Test
+    fun officePayloadRoundTripsRoomLinkAndNumberedBookTag() {
+        val local = LocalOfficeDocumentStore.create(context, OfficeDocumentKind.EXCEL, "كشف المصروفات")
+            .copy(roomDocumentId = 37L, bookTag = "دفتر:كشف 2026", cells = mapOf("A1" to "اليوم", "B2" to "١٢٣"))
+        val encoded = LocalOfficeDocumentStore.encode(local)
+        val reopened = LocalOfficeDocumentStore.decode(encoded)
+
+        assertEquals(local.id, reopened.id)
+        assertEquals(37L, reopened.roomDocumentId)
+        assertEquals("دفتر:كشف 2026", reopened.bookTag)
+        assertEquals(local.cells, reopened.cells)
+
+        val row = com.mohammedalhzmi.masrofmanager.data.Document(
+            id = 37L,
+            type = com.mohammedalhzmi.masrofmanager.data.DocumentType.BOOK,
+            documentNumber = "OFFICE:${local.id}",
+            dateHijri = "",
+            dateGregorian = "",
+            amount = null,
+            amountWords = null,
+            beneficiaryName = "",
+            purpose = local.title,
+            details = encoded,
+            notes = "",
+            status = com.mohammedalhzmi.masrofmanager.data.DocumentStatus.DRAFT,
+            tags = "OFFICE,دفتر:كشف 2026",
+            updatedAt = local.updatedAt,
+            structuredFields = OfficeDocumentRecord.MARKER
+        )
+        val fromRoom = OfficeDocumentRecord.decode(row)
+        assertTrue(OfficeDocumentRecord.isOfficeDocument(row))
+        assertEquals(37L, fromRoom?.roomDocumentId)
+        assertEquals(local.id, fromRoom?.id)
+    }
 }

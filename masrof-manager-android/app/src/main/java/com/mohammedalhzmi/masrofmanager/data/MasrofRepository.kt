@@ -19,6 +19,7 @@ class MasrofRepository(
     suspend fun allDocumentsForSync() = documentDao.getAllForSync()
     suspend fun documentByCloudId(cloudId: String) = documentDao.findByCloudId(cloudId)
     suspend fun documentById(id: Long) = documentDao.findById(id)
+    suspend fun officeDocumentByNumber(documentNumber: String) = documentDao.findOfficeOrBookByNumber(documentNumber)
     suspend fun delete(document: Document) = documentDao.delete(document)
     suspend fun replaceRemoteDocuments(documents: List<Document>) {
         documentDao.deleteAll()
