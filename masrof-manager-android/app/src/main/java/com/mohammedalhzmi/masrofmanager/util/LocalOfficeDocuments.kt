@@ -37,7 +37,7 @@ object OfficeDocumentRecord {
         }.getOrNull()
 }
 
-/** Stores editor drafts inside app-private files; this is intentionally offline and separate from Firebase. */
+/** Stores private editor working copies locally; Room remains the system record and the sync layer owns cloud transfer. */
 object LocalOfficeDocumentStore {
     private const val DIRECTORY = "office_documents"
     private const val FORMAT_VERSION = 1

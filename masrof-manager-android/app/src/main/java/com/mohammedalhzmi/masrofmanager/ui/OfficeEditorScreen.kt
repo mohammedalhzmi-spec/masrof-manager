@@ -1,6 +1,7 @@
 package com.mohammedalhzmi.masrofmanager.ui
 
 import android.graphics.Typeface
+import android.net.Uri
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -22,6 +23,8 @@ import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -75,12 +78,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.res.ResourcesCompat
+import android.provider.OpenableColumns
 import com.example.R
 import com.mohammedalhzmi.masrofmanager.data.Document
 import com.mohammedalhzmi.masrofmanager.util.LocalOfficeDocument
 import com.mohammedalhzmi.masrofmanager.util.LocalOfficeDocumentStore
 import com.mohammedalhzmi.masrofmanager.util.OfficeDocumentRecord
 import com.mohammedalhzmi.masrofmanager.util.OfficeDocumentKind
+import com.mohammedalhzmi.masrofmanager.util.OoxmlOfficeExchange
 import com.mohammedalhzmi.masrofmanager.util.SpreadsheetFormulaEvaluator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -123,6 +128,63 @@ fun OfficeEditorScreen(viewModel: MasrofViewModel, initialDocumentId: Long? = nu
             .filter { it.startsWith("دفتر:") }.distinct().sorted()
     }
 
+    fun importOffice(uri: Uri) {
+        scope.launch {
+            runCatching {
+                val imported = withContext(Dispatchers.IO) {
+                    val displayName = context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                        if (cursor.moveToFirst()) cursor.getString(0) else null
+                    } ?: uri.lastPathSegment.orEmpty()
+                    val extension = displayName.substringAfterLast('.', "").lowercase()
+                    val mimeType = context.contentResolver.getType(uri)
+                    val input = context.contentResolver.openInputStream(uri) ?: error("تعذر قراءة الملف المحدد.")
+                    input.use { stream ->
+                        when {
+                            extension == "docx" || (extension.isBlank() && mimeType == OoxmlOfficeExchange.DOCX_MIME) -> OoxmlOfficeExchange.importDocx(stream, displayName)
+                            extension == "xlsx" || (extension.isBlank() && mimeType == OoxmlOfficeExchange.XLSX_MIME) -> OoxmlOfficeExchange.importXlsx(stream, displayName)
+                            else -> error("اختر ملفًا بامتداد DOCX أو XLSX.")
+                        }
+                    }.also { result -> LocalOfficeDocumentStore.save(context, result.document) }
+                }
+                savedFiles = withContext(Dispatchers.IO) { LocalOfficeDocumentStore.list(context) }
+                current = imported.document
+                saveMessage = (listOf("تم استيراد الملف وحفظ نسخة قابلة للتحرير داخل التطبيق.") + imported.notices).joinToString(" ")
+                viewModel.saveOfficeDocument(context, imported.document) { linked, message ->
+                    saveMessage = "${imported.notices.joinToString(" ")} $message".trim()
+                    if (linked != null) current = current?.takeIf { it.id == linked.id }?.copy(roomDocumentId = linked.roomDocumentId, updatedAt = linked.updatedAt)
+                    scope.launch { savedFiles = withContext(Dispatchers.IO) { LocalOfficeDocumentStore.list(context) } }
+                }
+            }.onFailure { saveMessage = "تعذر استيراد الملف: ${it.message.orEmpty()}" }
+        }
+    }
+
+    fun exportOffice(uri: Uri?, kind: OfficeDocumentKind) {
+        val documentToExport = current ?: return
+        if (uri == null) return
+        scope.launch {
+            runCatching {
+                val unsupportedFormulas = withContext(Dispatchers.IO) {
+                    val output = context.contentResolver.openOutputStream(uri) ?: error("تعذر إنشاء ملف التصدير.")
+                    output.use { stream ->
+                        when (kind) {
+                            OfficeDocumentKind.WORD -> OoxmlOfficeExchange.exportDocx(documentToExport, stream)
+                            OfficeDocumentKind.EXCEL -> OoxmlOfficeExchange.exportXlsx(documentToExport, stream)
+                        }
+                    }
+                }
+                unsupportedFormulas
+            }.onSuccess { result ->
+                val count = result as? Int ?: 0
+                saveMessage = if (count > 0) "تم التصدير؛ حُفظت $count صيغة غير مدعومة كنص لأسباب السلامة." else "تم تصدير الملف بصيغة ${if (kind == OfficeDocumentKind.WORD) "DOCX" else "XLSX"}."
+            }
+                .onFailure { saveMessage = "تعذر التصدير: ${it.message.orEmpty()}" }
+        }
+    }
+
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let(::importOffice) }
+    val docxExportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(OoxmlOfficeExchange.DOCX_MIME)) { uri -> exportOffice(uri, OfficeDocumentKind.WORD) }
+    val xlsxExportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(OoxmlOfficeExchange.XLSX_MIME)) { uri -> exportOffice(uri, OfficeDocumentKind.EXCEL) }
+
     LaunchedEffect(Unit) {
         savedFiles = withContext(Dispatchers.IO) { LocalOfficeDocumentStore.list(context) }
     }
@@ -157,6 +219,7 @@ fun OfficeEditorScreen(viewModel: MasrofViewModel, initialDocumentId: Long? = nu
             documents = editorDocuments,
             bookTags = bookTags,
             saveMessage = saveMessage,
+            onImport = { importLauncher.launch(arrayOf(OoxmlOfficeExchange.DOCX_MIME, OoxmlOfficeExchange.XLSX_MIME)) },
             onBack = onBack,
             onCreate = { kind, title, bookTag ->
                 scope.launch {
@@ -202,6 +265,13 @@ fun OfficeEditorScreen(viewModel: MasrofViewModel, initialDocumentId: Long? = nu
                 Text(document.kind.extensionLabel, style = MaterialTheme.typography.labelLarge, color = Color(0xff16486d))
                 Text(listOf(saveMessage, localSaveMessage).filter(String::isNotBlank).joinToString(" • "), style = MaterialTheme.typography.labelSmall, color = Color(0xff25704b))
             }
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedButton(onClick = {
+                    val name = document.title.trim().ifBlank { if (document.kind == OfficeDocumentKind.WORD) "مستند" else "جدول" }
+                    if (document.kind == OfficeDocumentKind.WORD) docxExportLauncher.launch("$name.docx")
+                    else xlsxExportLauncher.launch("$name.xlsx")
+                }) { Text(if (document.kind == OfficeDocumentKind.WORD) "تصدير DOCX" else "تصدير XLSX") }
+            }
             when (document.kind) {
                 OfficeDocumentKind.WORD -> WordPageEditor(
                     document = document,
@@ -225,6 +295,7 @@ private fun OfficeEditorHome(
     documents: List<LocalOfficeDocument>,
     bookTags: List<String>,
     saveMessage: String,
+    onImport: () -> Unit,
     onBack: () -> Unit,
     onCreate: (OfficeDocumentKind, String, String) -> Unit,
     onOpen: (LocalOfficeDocument) -> Unit
@@ -239,10 +310,11 @@ private fun OfficeEditorHome(
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onBack) { Text("رجوع") }
-            Text("محرر وورد", style = MaterialTheme.typography.headlineSmall, color = Color(0xff16486d))
+            Text("محرر Office", style = MaterialTheme.typography.headlineSmall, color = Color(0xff16486d))
         }
-        Text("تُحفظ الصفحات محليًا وفي سجل المستندات؛ وتُزامن سحابيًا عند توفر حساب وجهاز معتمدين.", style = MaterialTheme.typography.bodyMedium)
+        Text("تُحفظ الصفحات محليًا وفي سجل المستندات؛ وتُزامن سحابيًا عند توفر حساب وجهاز معتمدين. استيراد/تصدير DOCX وXLSX يدعم النصوص والتنسيق الأساسي والورقة الأولى والصيغ المحلية المدعومة، وليس جميع خصائص Office.", style = MaterialTheme.typography.bodyMedium)
         if (saveMessage.isNotBlank()) Text(saveMessage, style = MaterialTheme.typography.bodySmall, color = Color(0xff25704b))
+        OutlinedButton(onClick = onImport, modifier = Modifier.fillMaxWidth()) { Text("استيراد DOCX أو XLSX") }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OfficeDocumentKind.values().forEach { kind ->
                 if (selectedKind == kind) Button(onClick = { selectedKind = kind; title = if (kind == OfficeDocumentKind.WORD) "مستند جديد" else "جدول بيانات جديد" }, modifier = Modifier.weight(1f)) { Text(kind.extensionLabel) }
@@ -265,7 +337,7 @@ private fun OfficeEditorHome(
             Text("إنشاء صفحة جديدة بيضاء")
         }
         HorizontalDivider()
-        Text("ملفاتي المحلية (${documents.size})", style = MaterialTheme.typography.titleMedium)
+        Text("مستندات Office (${documents.size})", style = MaterialTheme.typography.titleMedium)
         if (documents.isEmpty()) {
             Card(Modifier.fillMaxWidth()) { Text("لا توجد صفحات محفوظة حتى الآن.", Modifier.padding(16.dp)) }
         } else {
@@ -473,6 +545,9 @@ private fun SpreadsheetPageEditor(
     var selectedCell by remember(document.id) { mutableStateOf("A6") }
     var fontMenu by remember { mutableStateOf(false) }
     val cellValue = document.cells[selectedCell].orEmpty()
+    val outOfViewCells = document.cells.keys.count { address ->
+        spreadsheetColumnIndex(address) > 40 || (address.takeLastWhile(Char::isDigit).toIntOrNull() ?: 0) > 1000
+    }
     Column(Modifier.fillMaxSize().padding(horizontal = 10.dp, vertical = 4.dp)) {
         Row(Modifier.fillMaxWidth().background(Color.White).padding(6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(selectedCell, color = Color(0xff16486d), style = MaterialTheme.typography.titleSmall)
@@ -511,6 +586,7 @@ private fun SpreadsheetPageEditor(
             }
             Text("المتاح: العمليات الحسابية و SUM / AVERAGE / MIN / MAX / PRODUCT / ROUND / ABS", modifier = Modifier.align(Alignment.CenterVertically), style = MaterialTheme.typography.labelSmall)
         }
+        if (outOfViewCells > 0) Text("$outOfViewCells خلية محفوظة خارج مساحة العرض (40 عمودًا × 1000 صف)؛ ستبقى ضمن التصدير.", style = MaterialTheme.typography.labelSmall, color = Color(0xff875c12))
         SpreadsheetGrid(document, selectedCell, onSelect = { selectedCell = it }, onCellChange = onCellChange, fontKey = document.fontFamily, modifier = Modifier.weight(1f))
     }
 }
@@ -524,7 +600,11 @@ private fun SpreadsheetGrid(
     fontKey: String,
     modifier: Modifier = Modifier
 ) {
-    val columns = (1..20).map(::columnLabel)
+    val validAddresses = document.cells.keys.filter { it.matches(Regex("[A-Z]{1,3}[1-9][0-9]{0,6}")) }
+    val importedMaxColumn = validAddresses.maxOfOrNull(::spreadsheetColumnIndex) ?: 1
+    val importedMaxRow = validAddresses.maxOfOrNull { it.takeLastWhile(Char::isDigit).toIntOrNull() ?: 1 } ?: 1
+    val columns = (1..maxOf(20, importedMaxColumn.coerceAtMost(40))).map(::columnLabel)
+    val visibleRows = maxOf(100, importedMaxRow.coerceAtMost(1000))
     LazyColumn(modifier = modifier.fillMaxWidth().background(Color.White).border(1.dp, Color(0xffa9b1b8))) {
         item(key = "column_headers") {
             Row(Modifier.horizontalScroll(rememberScrollState()).background(Color(0xffdce8f3))) {
@@ -534,13 +614,14 @@ private fun SpreadsheetGrid(
                 }
             }
         }
-        items((1..100).toList(), key = { "row_$it" }) { row ->
+        items((1..visibleRows).toList(), key = { "row_$it" }) { row ->
             Row(Modifier.horizontalScroll(rememberScrollState())) {
                 Box(Modifier.width(44.dp).height(46.dp).background(Color(0xfff1f4f7)).border(0.5.dp, Color.LightGray), contentAlignment = Alignment.Center) { Text(row.toString(), style = MaterialTheme.typography.labelSmall) }
                 columns.forEachIndexed { index, column ->
                     val address = "$column$row"
                     val raw = document.cells[address].orEmpty()
-                    val shown = if (raw.startsWith("=") && selectedCell != address) SpreadsheetFormulaEvaluator.evaluate(raw, document.cells) else raw
+                    val evaluated = if (raw.startsWith("=") && selectedCell != address) SpreadsheetFormulaEvaluator.evaluate(raw, document.cells) else raw
+                    val shown = if (evaluated.startsWith("#") && raw.startsWith("=")) raw else evaluated
                     BasicTextField(
                         value = shown,
                         onValueChange = { onSelect(address); onCellChange(address, it) },
@@ -568,6 +649,9 @@ private fun columnLabel(index: Int): String {
     }
     return result.reverse().toString()
 }
+
+private fun spreadsheetColumnIndex(address: String): Int = address.dropLastWhile(Char::isDigit)
+    .fold(0) { sum, c -> sum * 26 + (c - 'A' + 1) }
 
 private fun composeFontFamily(key: String): FontFamily {
     val font = ArabicFonts.firstOrNull { it.key == key } ?: ArabicFonts.first()
