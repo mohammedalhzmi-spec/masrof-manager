@@ -22,7 +22,10 @@ data class LocalOfficeDocument(
     val fontFamily: String = "cairo_regular",
     val updatedAt: Long = System.currentTimeMillis(),
     val roomDocumentId: Long? = null,
-    val bookTag: String = ""
+    val bookTag: String = "",
+    val pageSize: String = "A4",
+    val orientation: String = "PORTRAIT",
+    val pageBackground: String = "#FFFFFF"
 )
 
 object OfficeDocumentRecord {
@@ -100,6 +103,9 @@ object LocalOfficeDocumentStore {
             put("updatedAt", document.updatedAt)
             put("roomDocumentId", document.roomDocumentId)
             put("bookTag", document.bookTag)
+            put("pageSize", document.pageSize)
+            put("orientation", document.orientation)
+            put("pageBackground", document.pageBackground)
             put("cells", JSONObject().apply { document.cells.toSortedMap().forEach { (key, value) -> put(key, value) } })
         }.toString()
 
@@ -130,7 +136,10 @@ object LocalOfficeDocumentStore {
             fontFamily = json.optString("fontFamily", "cairo_regular"),
             updatedAt = json.optLong("updatedAt", 0L),
             roomDocumentId = json.optLong("roomDocumentId").takeIf { it > 0L },
-            bookTag = json.optString("bookTag", "")
+            bookTag = json.optString("bookTag", ""),
+            pageSize = json.optString("pageSize", "A4"),
+            orientation = json.optString("orientation", "PORTRAIT"),
+            pageBackground = json.optString("pageBackground", "#FFFFFF")
         )
     }
 }

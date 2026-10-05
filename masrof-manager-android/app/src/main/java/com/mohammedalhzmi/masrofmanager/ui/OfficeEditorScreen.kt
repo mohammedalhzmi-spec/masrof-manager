@@ -1,12 +1,16 @@
 package com.mohammedalhzmi.masrofmanager.ui
 
 import android.graphics.Typeface
+import android.graphics.BitmapFactory
+import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.text.Editable
 import android.text.Html
+import android.text.Html.ImageGetter
 import android.text.Spannable
 import android.text.Spanned
 import android.text.TextWatcher
@@ -93,6 +97,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.DateFormat
 import java.util.Date
+import android.util.Base64
+import java.io.ByteArrayOutputStream
 
 private data class ArabicFontChoice(val key: String, val label: String, val resourceId: Int)
 
@@ -113,6 +119,8 @@ fun OfficeEditorScreen(viewModel: MasrofViewModel, initialDocumentId: Long? = nu
     var current by remember { mutableStateOf<LocalOfficeDocument?>(null) }
     var saveMessage by remember { mutableStateOf("") }
     var localSaveMessage by remember { mutableStateOf("") }
+    var imageToInsert by remember { mutableStateOf<String?>(null) }
+    var imageWidthToInsert by remember { mutableStateOf(420) }
     val roomDocuments by viewModel.allDocuments.collectAsState()
     val editorDocuments = remember(savedFiles, roomDocuments) {
         val byId = linkedMapOf<String, LocalOfficeDocument>()
@@ -182,6 +190,21 @@ fun OfficeEditorScreen(viewModel: MasrofViewModel, initialDocumentId: Long? = nu
     }
 
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let(::importOffice) }
+    val imageLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        scope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    val mime = context.contentResolver.getType(uri) ?: "image/png"
+                    val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                        ?: error("تعذر قراءة الصورة المحددة.")
+                    require(bytes.size <= 4 * 1024 * 1024) { "حجم الصورة أكبر من 4 ميجابايت." }
+                    "data:$mime;base64,${Base64.encodeToString(bytes, Base64.NO_WRAP)}"
+                }
+            }.onSuccess { imageToInsert = it; saveMessage = "تم تحميل الصورة؛ اضغط حفظ لإدراجها في الصفحة." }
+                .onFailure { saveMessage = "تعذر تحميل الصورة: ${it.message.orEmpty()}" }
+        }
+    }
     val docxExportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(OoxmlOfficeExchange.DOCX_MIME)) { uri -> exportOffice(uri, OfficeDocumentKind.WORD) }
     val xlsxExportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(OoxmlOfficeExchange.XLSX_MIME)) { uri -> exportOffice(uri, OfficeDocumentKind.EXCEL) }
 
@@ -276,7 +299,14 @@ fun OfficeEditorScreen(viewModel: MasrofViewModel, initialDocumentId: Long? = nu
                 OfficeDocumentKind.WORD -> WordPageEditor(
                     document = document,
                     onContentChange = { html -> current = current?.copy(wordHtml = html, updatedAt = System.currentTimeMillis()) },
-                    onFontChange = { font -> current = current?.copy(fontFamily = font, updatedAt = System.currentTimeMillis()) }
+                    onFontChange = { font -> current = current?.copy(fontFamily = font, updatedAt = System.currentTimeMillis()) },
+                    imageToInsert = imageToInsert,
+                    imageWidthToInsert = imageWidthToInsert,
+                    onImageConsumed = { imageToInsert = null },
+                    onPickImage = { width -> imageWidthToInsert = width; imageLauncher.launch(arrayOf("image/*")) },
+                    onPageSettingsChange = { size, orientation, background ->
+                        current = current?.copy(pageSize = size, orientation = orientation, pageBackground = background, updatedAt = System.currentTimeMillis())
+                    }
                 )
                 OfficeDocumentKind.EXCEL -> SpreadsheetPageEditor(
                     document = document,
@@ -362,22 +392,53 @@ private fun OfficeEditorHome(
 private fun WordPageEditor(
     document: LocalOfficeDocument,
     onContentChange: (String) -> Unit,
-    onFontChange: (String) -> Unit
+    onFontChange: (String) -> Unit,
+    imageToInsert: String?,
+    imageWidthToInsert: Int,
+    onImageConsumed: () -> Unit,
+    onPickImage: (Int) -> Unit,
+    onPageSettingsChange: (String, String, String) -> Unit
 ) {
     val context = LocalContext.current
     val editorState = remember(document.id) { mutableStateOf<EditText?>(null) }
+    var showTools by remember(document.id) { mutableStateOf(false) }
+    LaunchedEffect(imageToInsert) {
+        val data = imageToInsert ?: return@LaunchedEffect
+        val editor = editorState.value ?: return@LaunchedEffect
+        val html = "<p><img src=\"$data\" width=\"$imageWidthToInsert\" /></p>"
+        val updated = document.wordHtml + html
+        onContentChange(updated)
+        editor.setText(Html.fromHtml(updated, Html.FROM_HTML_MODE_LEGACY, LocalOfficeImageGetter(editor.context), null), TextView.BufferType.EDITABLE)
+        onImageConsumed()
+    }
     Column(Modifier.fillMaxSize().padding(horizontal = 10.dp, vertical = 4.dp)) {
-        WordToolbar(
+        Row(
+            Modifier.fillMaxWidth().background(Color.White).padding(horizontal = 8.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
+            TextButton(onClick = { editorState.value?.clearFocus() }) { Text("✕", fontSize = 24.sp) }
+            Text("20", modifier = Modifier.border(1.dp, Color(0xffb7bec5), RoundedCornerShape(4.dp)).padding(horizontal = 10.dp, vertical = 5.dp), fontSize = 16.sp)
+            TextButton(enabled = false, onClick = { }) { Text("↶", fontSize = 24.sp, color = Color(0xffc4c8cc)) }
+            TextButton(enabled = false, onClick = { }) { Text("↷", fontSize = 24.sp, color = Color(0xffc4c8cc)) }
+            TextButton(onClick = { editorState.value?.clearFocus() }) { Text("حفظ", fontSize = 18.sp) }
+            TextButton(onClick = { editorState.value?.clearFocus() }) { Text("تم", fontSize = 18.sp) }
+            TextButton(onClick = { showTools = !showTools }) { Text(if (showTools) "إغلاق الأدوات" else "☰ الأدوات", fontSize = 15.sp) }
+        }
+        if (showTools) WordToolbar(
             editor = editorState.value,
             fontKey = document.fontFamily,
-            onFontChange = onFontChange
+            onFontChange = onFontChange,
+            onPickImage = onPickImage,
+            onClose = { showTools = false }
         )
+        if (showTools) PageSettingsToolbar(document, onPageSettingsChange)
         AndroidView(
             modifier = Modifier.fillMaxWidth().weight(1f).padding(top = 6.dp, bottom = 8.dp)
                 .border(1.dp, Color(0xffc7cdd3), RoundedCornerShape(4.dp)),
-            factory = { viewContext ->
+                factory = { viewContext ->
                 EditText(viewContext).apply {
-                    setBackgroundColor(android.graphics.Color.WHITE)
+                    setBackgroundColor(runCatching { android.graphics.Color.parseColor(document.pageBackground) }.getOrDefault(android.graphics.Color.WHITE))
                     setPadding(26, 26, 26, 24)
                     minLines = 24
                     gravity = Gravity.TOP or Gravity.RIGHT
@@ -388,7 +449,7 @@ private fun WordPageEditor(
                         android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE or
                         android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
                     imeOptions = EditorInfo.IME_FLAG_NO_EXTRACT_UI
-                    setText(Html.fromHtml(document.wordHtml, Html.FROM_HTML_MODE_LEGACY), TextView.BufferType.EDITABLE)
+                    setText(Html.fromHtml(document.wordHtml, Html.FROM_HTML_MODE_LEGACY, LocalOfficeImageGetter(viewContext), null), TextView.BufferType.EDITABLE)
                     typeface = fontTypeface(context, document.fontFamily)
                     tag = document.wordHtml
                     editorState.value = this
@@ -406,9 +467,10 @@ private fun WordPageEditor(
             update = { view ->
                 editorState.value = view
                 view.typeface = fontTypeface(context, document.fontFamily)
+                view.setBackgroundColor(runCatching { android.graphics.Color.parseColor(document.pageBackground) }.getOrDefault(android.graphics.Color.WHITE))
                 val stored = view.tag as? String
                 if (stored != document.wordHtml && !view.hasFocus()) {
-                    view.setText(Html.fromHtml(document.wordHtml, Html.FROM_HTML_MODE_LEGACY), TextView.BufferType.EDITABLE)
+                    view.setText(Html.fromHtml(document.wordHtml, Html.FROM_HTML_MODE_LEGACY, LocalOfficeImageGetter(context), null), TextView.BufferType.EDITABLE)
                     view.tag = document.wordHtml
                 }
             }
@@ -416,48 +478,91 @@ private fun WordPageEditor(
     }
 }
 
+private class LocalOfficeImageGetter(private val context: Context) : ImageGetter {
+    override fun getDrawable(source: String?): Drawable? {
+        val value = source ?: return null
+        if (!value.startsWith("data:image/")) return null
+        return runCatching {
+            val encoded = value.substringAfter("base64,", "")
+            val bitmap = BitmapFactory.decodeByteArray(Base64.decode(encoded, Base64.DEFAULT), 0, Base64.decode(encoded, Base64.DEFAULT).size)
+            val drawable = BitmapDrawable(context.resources, bitmap)
+            val maxWidth = (context.resources.displayMetrics.widthPixels * 0.82f).toInt().coerceAtLeast(240)
+            val ratio = maxWidth.toFloat() / bitmap.width.coerceAtLeast(1)
+            drawable.setBounds(0, 0, maxWidth, (bitmap.height * ratio).toInt().coerceAtLeast(1))
+            drawable
+        }.getOrNull()
+    }
+}
+
 @Composable
-private fun WordToolbar(editor: EditText?, fontKey: String, onFontChange: (String) -> Unit) {
-    val context = LocalContext.current
-    var fontMenu by remember { mutableStateOf(false) }
+private fun PageSettingsToolbar(document: LocalOfficeDocument, onChange: (String, String, String) -> Unit) {
     var sizeMenu by remember { mutableStateOf(false) }
-    Row(
-        Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(6.dp)).horizontalScroll(rememberScrollState()).padding(4.dp),
-        horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically
-    ) {
-        TextButton(onClick = { applySelectedSpan(context, editor, StyleSpan(Typeface.BOLD)) }) { Text("عريض B") }
-        TextButton(onClick = { applySelectedSpan(context, editor, StyleSpan(Typeface.ITALIC)) }) { Text("مائل I") }
-        TextButton(onClick = { applySelectedSpan(context, editor, UnderlineSpan()) }) { Text("تسطير") }
-        TextButton(onClick = { applySelectedSpan(context, editor, ForegroundColorSpan(Color(0xff16486d).toArgb())) }) { Text("لون") }
-        TextButton(onClick = { applySelectedSpan(context, editor, BackgroundColorSpan(Color(0xffffef9b).toArgb())) }) { Text("تمييز") }
-        TextButton(onClick = { applySelectedSpan(context, editor, AbsoluteSizeSpan(24, true)) }) { Text("حجم 24") }
-        TextButton(onClick = { copySelection(context, editor, removeAfterCopy = false) }) { Text("نسخ") }
-        TextButton(onClick = { copySelection(context, editor, removeAfterCopy = true) }) { Text("قص") }
-        TextButton(onClick = { pasteClipboard(context, editor) }) { Text("لصق") }
-        TextButton(onClick = {
-            applySelectedSpan(context, editor, StyleSpan(Typeface.BOLD))
-            applySelectedSpan(context, editor, AbsoluteSizeSpan(30, true))
-        }) { Text("عنوان") }
-        TextButton(onClick = { alignParagraph(editor, android.text.Layout.Alignment.ALIGN_OPPOSITE) }) { Text("يمين") }
-        TextButton(onClick = { alignParagraph(editor, android.text.Layout.Alignment.ALIGN_CENTER) }) { Text("وسط") }
-        TextButton(onClick = { alignParagraph(editor, android.text.Layout.Alignment.ALIGN_NORMAL) }) { Text("يسار") }
-        TextButton(onClick = { insertBullet(editor) }) { Text("• قائمة") }
-        TextButton(onClick = { insertNumberedItem(editor) }) { Text("١. قائمة") }
-        TextButton(onClick = { insertAtCursor(editor, "\n────────────────────\n") }) { Text("فاصل") }
-        TextButton(onClick = { insertAtCursor(editor, "\n${DateFormat.getDateInstance(DateFormat.SHORT).format(Date())}\n") }) { Text("التاريخ") }
+    var directionMenu by remember { mutableStateOf(false) }
+    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).background(Color.White).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
         Box {
-            TextButton(onClick = { fontMenu = true }) { Text("الخط") }
-            DropdownMenu(expanded = fontMenu, onDismissRequest = { fontMenu = false }) {
-                ArabicFonts.forEach { font ->
-                    DropdownMenuItem(text = { Text(font.label) }, onClick = { onFontChange(font.key); fontMenu = false })
-                }
+            OutlinedButton(onClick = { sizeMenu = true }) { Text("الصفحة ${document.pageSize}") }
+            DropdownMenu(sizeMenu, { sizeMenu = false }) {
+                listOf("A4", "A5", "A3").forEach { size -> DropdownMenuItem(text = { Text(size) }, onClick = { onChange(size, document.orientation, document.pageBackground); sizeMenu = false }) }
             }
         }
         Box {
-            TextButton(onClick = { sizeMenu = true }) { Text("حجم الخط") }
-            DropdownMenu(expanded = sizeMenu, onDismissRequest = { sizeMenu = false }) {
-                listOf(14, 16, 18, 24, 32).forEach { size ->
-                    DropdownMenuItem(text = { Text("$size") }, onClick = { applySelectedSpan(context, editor, AbsoluteSizeSpan(size, true)); sizeMenu = false })
+            OutlinedButton(onClick = { directionMenu = true }) { Text(if (document.orientation == "LANDSCAPE") "أفقي" else "رأسي") }
+            DropdownMenu(directionMenu, { directionMenu = false }) {
+                listOf("PORTRAIT" to "رأسي", "LANDSCAPE" to "أفقي").forEach { (value, label) -> DropdownMenuItem(text = { Text(label) }, onClick = { onChange(document.pageSize, value, document.pageBackground); directionMenu = false }) }
+            }
+        }
+        Text("خلفية الصفحة", style = MaterialTheme.typography.labelMedium)
+        listOf("#FFFFFF" to Color.White, "#FFFDF2" to Color(0xfffffdf2), "#F2F7FF" to Color(0xfff2f7ff), "#F5F5F5" to Color(0xfff5f5f5)).forEach { (hex, color) ->
+            Button(onClick = { onChange(document.pageSize, document.orientation, hex) }, modifier = Modifier.width(44.dp).height(34.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp), colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = color)) { Text("") }
+        }
+    }
+}
+
+@Composable
+private fun WordToolbar(editor: EditText?, fontKey: String, onFontChange: (String) -> Unit, onPickImage: (Int) -> Unit, onClose: () -> Unit) {
+    val context = LocalContext.current
+    var fontMenu by remember { mutableStateOf(false) }
+    var sizeMenu by remember { mutableStateOf(false) }
+    var tab by remember { mutableStateOf("قلم") }
+    Column(Modifier.fillMaxWidth().background(Color(0xffe2e2e2), RoundedCornerShape(6.dp))) {
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("إدراج", "عرض", "مراجعة", "قلم").forEach { item ->
+                TextButton(onClick = { tab = item }) { Text(item, color = if (tab == item) Color(0xff1675b8) else Color.DarkGray, fontSize = 16.sp) }
+            }
+            Text("⌄", modifier = Modifier.align(Alignment.CenterVertically), fontSize = 24.sp)
+            TextButton(onClick = onClose) { Text("إخفاء") }
+        }
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).background(Color.White).padding(5.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+            when (tab) {
+                "قلم" -> {
+                    TextButton(onClick = { applySelectedSpan(context, editor, StyleSpan(Typeface.BOLD)) }) { Text("B") }
+                    TextButton(onClick = { applySelectedSpan(context, editor, StyleSpan(Typeface.ITALIC)) }) { Text("I") }
+                    TextButton(onClick = { applySelectedSpan(context, editor, UnderlineSpan()) }) { Text("U") }
+                    TextButton(onClick = { applySelectedSpan(context, editor, ForegroundColorSpan(Color(0xff1675b8).toArgb())) }) { Text("لون النص") }
+                    TextButton(onClick = { applySelectedSpan(context, editor, BackgroundColorSpan(Color(0xffffef9b).toArgb())) }) { Text("تمييز") }
+                    Box { TextButton(onClick = { fontMenu = true }) { Text("Arial / الخط") }; DropdownMenu(fontMenu, { fontMenu = false }) { ArabicFonts.forEach { font -> DropdownMenuItem(text = { Text(font.label) }, onClick = { onFontChange(font.key); fontMenu = false }) } } }
+                    Box { TextButton(onClick = { sizeMenu = true }) { Text("الحجم") }; DropdownMenu(sizeMenu, { sizeMenu = false }) { listOf(11, 14, 16, 20, 24, 32).forEach { size -> DropdownMenuItem(text = { Text("$size") }, onClick = { applySelectedSpan(context, editor, AbsoluteSizeSpan(size, true)); sizeMenu = false }) } } }
+                }
+                "عرض" -> {
+                    TextButton(onClick = { alignParagraph(editor, android.text.Layout.Alignment.ALIGN_OPPOSITE) }) { Text("يمين") }
+                    TextButton(onClick = { alignParagraph(editor, android.text.Layout.Alignment.ALIGN_CENTER) }) { Text("وسط") }
+                    TextButton(onClick = { alignParagraph(editor, android.text.Layout.Alignment.ALIGN_NORMAL) }) { Text("يسار") }
+                    TextButton(onClick = { insertBullet(editor) }) { Text("• قائمة") }
+                    TextButton(onClick = { insertNumberedItem(editor) }) { Text("١. قائمة") }
+                }
+                "مراجعة" -> {
+                    TextButton(onClick = { copySelection(context, editor, false) }) { Text("نسخ") }
+                    TextButton(onClick = { copySelection(context, editor, true) }) { Text("قص") }
+                    TextButton(onClick = { pasteClipboard(context, editor) }) { Text("لصق") }
+                    TextButton(onClick = { editor?.selectAll() }) { Text("تحديد الكل") }
+                    TextButton(onClick = { editor?.text?.clear() }) { Text("مسح الصفحة") }
+                }
+                else -> {
+                    TextButton(onClick = { onPickImage(240) }) { Text("صورة صغيرة") }
+                    TextButton(onClick = { onPickImage(420) }) { Text("صورة متوسطة") }
+                    TextButton(onClick = { onPickImage(620) }) { Text("صورة كبيرة") }
+                    TextButton(onClick = { insertAtCursor(editor, "\n────────────────────\n") }) { Text("فاصل") }
+                    TextButton(onClick = { insertAtCursor(editor, "\n${DateFormat.getDateInstance(DateFormat.SHORT).format(Date())}\n") }) { Text("التاريخ") }
                 }
             }
         }
