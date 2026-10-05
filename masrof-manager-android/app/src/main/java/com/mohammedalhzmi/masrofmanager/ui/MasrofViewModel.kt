@@ -454,6 +454,24 @@ class MasrofViewModel(
         }
     }
 
+    /** Soft-delete a branch asset locally and in Firestore; preserves the audit trail. */
+    fun deleteBranchAsset(document: Document, onComplete: (Boolean, String) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                require(BranchAssetData.isRecord(document)) { "السجل المحدد ليس من ممتلكات الفرع." }
+                val now = System.currentTimeMillis()
+                val archived = document.copy(isArchived = true, archivedAt = now, updatedAt = now)
+                repository.update(archived)
+                val cloudResult = cloudSyncService.syncBranchAsset(archived.id, repository)
+                audit("DELETE_BRANCH_ASSET", "${document.documentNumber} — حذف آمن/أرشفة")
+                onComplete(true, "تم حذف السجل من قائمة الممتلكات مع حفظه كسجل أرشيفي. ${cloudResult.message}")
+            } catch (error: Throwable) {
+                if (error is CancellationException) throw error
+                onComplete(false, "تمت المحافظة على السجل لعدم اكتمال الحذف السحابي: ${cloudErrorMessage(error)}")
+            }
+        }
+    }
+
     fun transitionDocument(document: Document, target: DocumentStatus) {
         viewModelScope.launch(Dispatchers.IO) {
             val role = UserSession.current?.role ?: AppRole.ADMIN

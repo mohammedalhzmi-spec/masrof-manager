@@ -51,6 +51,8 @@ import com.mohammedalhzmi.masrofmanager.data.DocumentType
 import com.mohammedalhzmi.masrofmanager.util.BranchAssetData
 import com.mohammedalhzmi.masrofmanager.util.BranchAssetReportKind
 import com.mohammedalhzmi.masrofmanager.util.BranchAssetsPrintAdapter
+import com.mohammedalhzmi.masrofmanager.util.LocalOfficeDocument
+import com.mohammedalhzmi.masrofmanager.util.OfficeDocumentKind
 import java.util.Calendar
 import java.util.UUID
 
@@ -96,7 +98,7 @@ fun BranchAssetsScreen(
                     Button(onClick = { editingEquipment = null; equipmentDialog = true }) { Text("إضافة معدة") }
                 }
                 Text("اضغط على صف المعدة لتعديل بياناتها. اسحب الجدول أفقيًا لرؤية جميع الحقول.", style = MaterialTheme.typography.bodySmall)
-                EquipmentTable(equipment, onRowClick = { row -> editingEquipment = row.document; equipmentDialog = true })
+                EquipmentTable(equipment, onRowClick = { row -> editingEquipment = row.document; equipmentDialog = true }, onDelete = { row -> viewModel.deleteBranchAsset(row.document) { _, message -> Toast.makeText(context, message, Toast.LENGTH_LONG).show() } })
                 OutlinedButton(onClick = { onAnnualInventory(BranchAssetReportKind.EQUIPMENT.name) }, modifier = Modifier.fillMaxWidth()) {
                     Text("جرد سنوي للمعدات")
                 }
@@ -110,7 +112,7 @@ fun BranchAssetsScreen(
                     Button(onClick = { editingSupply = null; supplyDialog = true }) { Text("إضافة مستلزم") }
                 }
                 Text("اضغط على صف المستلزم لتعديل بياناته. اسحب الجدول أفقيًا عند الحاجة.", style = MaterialTheme.typography.bodySmall)
-                SupplyTable(supplies) { row -> editingSupply = row.document; supplyDialog = true }
+                SupplyTable(supplies, onRowClick = { row -> editingSupply = row.document; supplyDialog = true }, onDelete = { row -> viewModel.deleteBranchAsset(row.document) { _, message -> Toast.makeText(context, message, Toast.LENGTH_LONG).show() } })
                 OutlinedButton(onClick = { onAnnualInventory(BranchAssetReportKind.SUPPLIES.name) }, modifier = Modifier.fillMaxWidth()) {
                     Text("جرد سنوي للمستلزمات")
                 }
@@ -231,8 +233,8 @@ fun BranchAssetsAnnualInventoryScreen(
         )
         Text("$title للعام: ${year.ifBlank { "...." }} م", style = MaterialTheme.typography.titleMedium)
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (selectedTab == 0) EquipmentTable(equipment, onRowClick = null, includeResponsible = false)
-            else SupplyTable(supplies, onRowClick = null)
+            if (selectedTab == 0) EquipmentTable(equipment, onRowClick = null, onDelete = null, includeResponsible = false)
+            else SupplyTable(supplies, onRowClick = null, onDelete = null)
         }
         Button(
             onClick = {
@@ -250,11 +252,40 @@ fun BranchAssetsAnnualInventoryScreen(
             },
             modifier = Modifier.fillMaxWidth()
         ) { Text("طباعة / حفظ PDF") }
+        OutlinedButton(
+            onClick = {
+                val snapshot = if (kind == BranchAssetReportKind.EQUIPMENT) equipmentSnapshotHtml(year.ifBlank { "...." }, equipment.map { it.value })
+                else supplySnapshotHtml(year.ifBlank { "...." }, supplies.map { it.value })
+                val titleText = "$title للعام ${year.ifBlank { "...." }}"
+                viewModel.saveOfficeDocument(context, LocalOfficeDocument(UUID.randomUUID().toString(), titleText, OfficeDocumentKind.WORD, wordHtml = snapshot)) { _, message ->
+                    Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                }
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("حفظ نسخة جرد سنوية مستقلة للتحرير") }
     }
 }
 
+private fun htmlCell(value: String): String = value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
+
+private fun equipmentSnapshotHtml(year: String, rows: List<BranchAssetData.Equipment>): String {
+    val headers = listOf("اسم المعدة", "موديل المعدة", "حالة المعدة", "الرقم الإداري", "رقم المكينة", "رقم القعادة", "سنة الحصول عليها", "المسؤول")
+    val body = rows.joinToString("") { row ->
+        listOf(row.name, row.model, row.condition, row.administrativeNumber, row.machineNumber, row.chassisNumber, row.yearObtained, row.responsiblePerson).joinToString("", prefix = "<tr>", postfix = "</tr>") { "<td>${htmlCell(it)}</td>" }
+    }
+    return "<h1>الجرد السنوي لمعدات فرع صندوق النظافة والتحسين مديرية الحزم للعام: ${htmlCell(year)} م</h1><table border=\"1\"><tr>${headers.joinToString("") { "<th>${htmlCell(it)}</th>" }}</tr>$body</table>"
+}
+
+private fun supplySnapshotHtml(year: String, rows: List<BranchAssetData.Supply>): String {
+    val headers = listOf("اليوم", "التاريخ", "الاسم", "النوع", "القيمة")
+    val body = rows.joinToString("") { row ->
+        listOf(row.day, row.date, row.name, row.kind, row.valueYER).joinToString("", prefix = "<tr>", postfix = "</tr>") { "<td>${htmlCell(it)}</td>" }
+    }
+    return "<h1>الجرد السنوي لمستلزمات فرع صندوق النظافة والتحسين مديرية الحزم للعام: ${htmlCell(year)} م</h1><table border=\"1\"><tr>${headers.joinToString("") { "<th>${htmlCell(it)}</th>" }}</tr>$body</table>"
+}
+
 @Composable
-private fun EquipmentTable(rows: List<EquipmentRow>, onRowClick: ((EquipmentRow) -> Unit)?, includeResponsible: Boolean = true) {
+private fun EquipmentTable(rows: List<EquipmentRow>, onRowClick: ((EquipmentRow) -> Unit)?, onDelete: ((EquipmentRow) -> Unit)?, includeResponsible: Boolean = true) {
     val widths = if (includeResponsible) listOf(118.dp, 118.dp, 110.dp, 104.dp, 104.dp, 95.dp, 110.dp, 128.dp)
     else listOf(118.dp, 118.dp, 110.dp, 104.dp, 104.dp, 95.dp, 110.dp)
     val labels = if (includeResponsible) listOf("اسم المعدة", "موديل المعدة", "حالة المعدة", "الرقم الإداري", "رقم المكينة", "رقم القعادة", "سنة الحصول عليها", "المسؤول")
@@ -264,30 +295,32 @@ private fun EquipmentTable(rows: List<EquipmentRow>, onRowClick: ((EquipmentRow)
             labels.forEachIndexed { index, label -> AssetCell(label, widths[index], header = true) }
         }
         if (rows.isEmpty()) {
-            Row { labels.indices.forEach { index -> AssetCell(if (index == 0) "لا توجد معدات بعد" else "", widths[index]) } }
+            Row { labels.indices.forEach { index -> AssetCell(if (index == 0) "لا توجد معدات بعد" else "", widths[index]) }; if (onDelete != null) AssetCell("", 90.dp) }
         } else rows.forEach { row ->
             Row(Modifier.clickable(enabled = onRowClick != null) { onRowClick?.invoke(row) }) {
                 val values = listOf(row.value.name, row.value.model, row.value.condition, row.value.administrativeNumber,
                     row.value.machineNumber, row.value.chassisNumber, row.value.yearObtained) +
                     if (includeResponsible) listOf(row.value.responsiblePerson) else emptyList()
                 values.forEachIndexed { index, value -> AssetCell(value, widths[index]) }
+                if (onDelete != null) TextButton(onClick = { onDelete.invoke(row) }) { Text("حذف") }
             }
         }
     }
 }
 
 @Composable
-private fun SupplyTable(rows: List<SupplyRow>, onRowClick: ((SupplyRow) -> Unit)?) {
+private fun SupplyTable(rows: List<SupplyRow>, onRowClick: ((SupplyRow) -> Unit)?, onDelete: ((SupplyRow) -> Unit)?) {
     val widths = listOf(100.dp, 122.dp, 160.dp, 140.dp, 130.dp)
     val labels = listOf("اليوم", "التاريخ", "الاسم", "النوع", "القيمة")
     Column(Modifier.horizontalScroll(rememberScrollState())) {
         Row { labels.forEachIndexed { index, label -> AssetCell(label, widths[index], header = true) } }
         if (rows.isEmpty()) {
-            Row { labels.indices.forEach { index -> AssetCell(if (index == 0) "لا توجد مستلزمات بعد" else "", widths[index]) } }
+            Row { labels.indices.forEach { index -> AssetCell(if (index == 0) "لا توجد مستلزمات بعد" else "", widths[index]) }; if (onDelete != null) AssetCell("", 90.dp) }
         } else rows.forEach { row ->
             Row(Modifier.clickable(enabled = onRowClick != null) { onRowClick?.invoke(row) }) {
                 val values = listOf(row.value.day, row.value.date, row.value.name, row.value.kind, row.value.valueYER)
                 values.forEachIndexed { index, value -> AssetCell(value, widths[index]) }
+                if (onDelete != null) TextButton(onClick = { onDelete.invoke(row) }) { Text("حذف") }
             }
         }
     }
