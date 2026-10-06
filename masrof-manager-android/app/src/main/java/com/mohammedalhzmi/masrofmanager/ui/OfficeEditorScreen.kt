@@ -1,6 +1,7 @@
 package com.mohammedalhzmi.masrofmanager.ui
 
 import android.graphics.Typeface
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
@@ -26,6 +27,12 @@ import android.view.inputmethod.EditorInfo
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
+import android.webkit.JavascriptInterface
+import android.webkit.WebResourceRequest
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import android.os.Handler
+import android.os.Looper
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -53,6 +60,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -67,6 +75,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -81,6 +90,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import org.json.JSONObject
 import androidx.core.content.res.ResourcesCompat
 import android.provider.OpenableColumns
 import com.example.R
@@ -140,19 +150,15 @@ fun OfficeEditorScreen(viewModel: MasrofViewModel, initialDocumentId: Long? = nu
         scope.launch {
             runCatching {
                 val imported = withContext(Dispatchers.IO) {
-                    val displayName = context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
-                        if (cursor.moveToFirst()) cursor.getString(0) else null
-                    } ?: uri.lastPathSegment.orEmpty()
-                    val extension = displayName.substringAfterLast('.', "").lowercase()
-                    val mimeType = context.contentResolver.getType(uri)
-                    val input = context.contentResolver.openInputStream(uri) ?: error("تعذر قراءة الملف المحدد.")
-                    input.use { stream ->
-                        when {
-                            extension == "docx" || (extension.isBlank() && mimeType == OoxmlOfficeExchange.DOCX_MIME) -> OoxmlOfficeExchange.importDocx(stream, displayName)
-                            extension == "xlsx" || (extension.isBlank() && mimeType == OoxmlOfficeExchange.XLSX_MIME) -> OoxmlOfficeExchange.importXlsx(stream, displayName)
-                            else -> error("اختر ملفًا بامتداد DOCX أو XLSX.")
+                    val displayName = runCatching {
+                        context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                            if (cursor.moveToFirst()) cursor.getString(0) else null
                         }
-                    }.also { result -> LocalOfficeDocumentStore.save(context, result.document) }
+                    }.getOrNull()?.takeIf(String::isNotBlank) ?: Uri.decode(uri.lastPathSegment.orEmpty()).ifBlank { "مستند مستورد" }
+                    val mimeType = runCatching { context.contentResolver.getType(uri) }.getOrNull()
+                    val input = context.contentResolver.openInputStream(uri) ?: error("تعذر قراءة الملف المحدد.")
+                    OoxmlOfficeExchange.importOffice(input, displayName, mimeType)
+                        .also { result -> LocalOfficeDocumentStore.save(context, result.document) }
                 }
                 savedFiles = withContext(Dispatchers.IO) { LocalOfficeDocumentStore.list(context) }
                 current = imported.document
@@ -195,11 +201,36 @@ fun OfficeEditorScreen(viewModel: MasrofViewModel, initialDocumentId: Long? = nu
         scope.launch {
             runCatching {
                 withContext(Dispatchers.IO) {
-                    val mime = context.contentResolver.getType(uri) ?: "image/png"
-                    val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                        ?: error("تعذر قراءة الصورة المحددة.")
-                    require(bytes.size <= 4 * 1024 * 1024) { "حجم الصورة أكبر من 4 ميجابايت." }
-                    "data:$mime;base64,${Base64.encodeToString(bytes, Base64.NO_WRAP)}"
+                    val source = context.contentResolver.openInputStream(uri) ?: error("تعذر قراءة الصورة المحددة.")
+                    val raw = source.use { stream ->
+                        val output = ByteArrayOutputStream()
+                        val buffer = ByteArray(8192)
+                        var total = 0
+                        while (true) {
+                            val count = stream.read(buffer)
+                            if (count < 0) break
+                            total += count
+                            require(total <= 4 * 1024 * 1024) { "حجم الصورة أكبر من 4 ميجابايت." }
+                            output.write(buffer, 0, count)
+                        }
+                        output.toByteArray()
+                    }
+                    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    BitmapFactory.decodeByteArray(raw, 0, raw.size, bounds)
+                    require(bounds.outWidth in 1..100_000 && bounds.outHeight in 1..100_000) { "صيغة الصورة غير مدعومة أو أبعادها غير صالحة." }
+                    val targetWidth = imageWidthToInsert.coerceIn(160, 1000)
+                    val sample = generateSequence(1) { it * 2 }.takeWhile { it <= 128 }
+                        .lastOrNull { bounds.outWidth / it >= targetWidth * 2 || (bounds.outWidth / it.toLong()) * (bounds.outHeight / it.toLong()) > 16_000_000L } ?: 1
+                    val decoded = BitmapFactory.decodeByteArray(raw, 0, raw.size, BitmapFactory.Options().apply { inSampleSize = sample })
+                        ?: error("تعذر فك ترميز الصورة المحددة.")
+                    val scale = minOf(targetWidth.toFloat() / decoded.width, 2200f / decoded.height, 1f)
+                    val resized = if (scale < 1f) Bitmap.createScaledBitmap(decoded, (decoded.width * scale).toInt().coerceAtLeast(1), (decoded.height * scale).toInt().coerceAtLeast(1), true) else decoded
+                    val output = ByteArrayOutputStream()
+                    require(resized.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, output)) { "تعذر تجهيز الصورة للإدراج." }
+                    require(output.size() <= 4 * 1024 * 1024) { "الصورة أكبر من حد الإدراج بعد تجهيزها." }
+                    if (resized !== decoded) resized.recycle()
+                    if (decoded !== resized) decoded.recycle()
+                    "data:image/png;base64,${Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP)}"
                 }
             }.onSuccess { imageToInsert = it; saveMessage = "تم تحميل الصورة؛ اضغط حفظ لإدراجها في الصفحة." }
                 .onFailure { saveMessage = "تعذر تحميل الصورة: ${it.message.orEmpty()}" }
@@ -242,7 +273,7 @@ fun OfficeEditorScreen(viewModel: MasrofViewModel, initialDocumentId: Long? = nu
             documents = editorDocuments,
             bookTags = bookTags,
             saveMessage = saveMessage,
-            onImport = { importLauncher.launch(arrayOf(OoxmlOfficeExchange.DOCX_MIME, OoxmlOfficeExchange.XLSX_MIME)) },
+            onImport = { importLauncher.launch(arrayOf("*/*")) },
             onBack = onBack,
             onCreate = { kind, title, bookTag ->
                 scope.launch {
@@ -303,6 +334,13 @@ fun OfficeEditorScreen(viewModel: MasrofViewModel, initialDocumentId: Long? = nu
                     imageToInsert = imageToInsert,
                     imageWidthToInsert = imageWidthToInsert,
                     onImageConsumed = { imageToInsert = null },
+                    onSave = {
+                        viewModel.saveOfficeDocument(context, current ?: document) { linked, message ->
+                            saveMessage = message
+                            if (linked != null) current = current?.takeIf { it.id == linked.id }?.copy(roomDocumentId = linked.roomDocumentId, updatedAt = linked.updatedAt)
+                            scope.launch { savedFiles = withContext(Dispatchers.IO) { LocalOfficeDocumentStore.list(context) } }
+                        }
+                    },
                     onPickImage = { width -> imageWidthToInsert = width; imageLauncher.launch(arrayOf("image/*")) },
                     onPageSettingsChange = { size, orientation, background ->
                         current = current?.copy(pageSize = size, orientation = orientation, pageBackground = background, updatedAt = System.currentTimeMillis())
@@ -396,22 +434,23 @@ private fun WordPageEditor(
     imageToInsert: String?,
     imageWidthToInsert: Int,
     onImageConsumed: () -> Unit,
+    onSave: () -> Unit,
     onPickImage: (Int) -> Unit,
     onPageSettingsChange: (String, String, String) -> Unit
 ) {
     val context = LocalContext.current
-    val editorState = remember(document.id) { mutableStateOf<EditText?>(null) }
+    val onContentChangeState by rememberUpdatedState(onContentChange)
+    val editorState = remember(document.id) { mutableStateOf<WebView?>(null) }
     var showTools by remember(document.id) { mutableStateOf(false) }
-    LaunchedEffect(imageToInsert) {
+        LaunchedEffect(imageToInsert, editorState.value) {
         val data = imageToInsert ?: return@LaunchedEffect
         val editor = editorState.value ?: return@LaunchedEffect
-        val html = "<p><img src=\"$data\" width=\"$imageWidthToInsert\" /></p>"
-        val updated = document.wordHtml + html
-        onContentChange(updated)
-        editor.setText(Html.fromHtml(updated, Html.FROM_HTML_MODE_LEGACY, LocalOfficeImageGetter(editor.context), null), TextView.BufferType.EDITABLE)
+        val html = "<img src=\"$data\" alt=\"صورة\" style=\"width:${imageWidthToInsert.coerceIn(160, 1000)}px;height:auto\" />"
+        editor.evaluateJavascript("window.OfficeEditor && window.OfficeEditor.insertHtml(${JSONObject.quote(html)});", null)
         onImageConsumed()
     }
-    Column(Modifier.fillMaxSize().padding(horizontal = 10.dp, vertical = 4.dp)) {
+    Box(Modifier.fillMaxSize()) {
+      Column(Modifier.fillMaxSize().padding(horizontal = 10.dp, vertical = 4.dp)) {
         Row(
             Modifier.fillMaxWidth().background(Color.White).padding(horizontal = 8.dp, vertical = 5.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -419,17 +458,17 @@ private fun WordPageEditor(
         ) {
             TextButton(onClick = { editorState.value?.clearFocus() }) { Text("✕", fontSize = 24.sp) }
             Text("20", modifier = Modifier.border(1.dp, Color(0xffb7bec5), RoundedCornerShape(4.dp)).padding(horizontal = 10.dp, vertical = 5.dp), fontSize = 16.sp)
-            TextButton(enabled = false, onClick = { }) { Text("↶", fontSize = 24.sp, color = Color(0xffc4c8cc)) }
-            TextButton(enabled = false, onClick = { }) { Text("↷", fontSize = 24.sp, color = Color(0xffc4c8cc)) }
-            TextButton(onClick = { editorState.value?.clearFocus() }) { Text("حفظ", fontSize = 18.sp) }
+            TextButton(onClick = { executeOfficeCommand(editorState.value, "undo") }) { Text("↶", fontSize = 24.sp, color = Color(0xff536170)) }
+            TextButton(onClick = { executeOfficeCommand(editorState.value, "redo") }) { Text("↷", fontSize = 24.sp, color = Color(0xff536170)) }
+            TextButton(onClick = onSave) { Text("حفظ", fontSize = 18.sp) }
             TextButton(onClick = { editorState.value?.clearFocus() }) { Text("تم", fontSize = 18.sp) }
-            TextButton(onClick = { showTools = !showTools }) { Text(if (showTools) "إغلاق الأدوات" else "☰ الأدوات", fontSize = 15.sp) }
         }
         if (showTools) WordToolbar(
             editor = editorState.value,
             fontKey = document.fontFamily,
             onFontChange = onFontChange,
             onPickImage = onPickImage,
+            onInsertTable = { insertOfficeTable(editorState.value, 3, 3) },
             onClose = { showTools = false }
         )
         if (showTools) PageSettingsToolbar(document, onPageSettingsChange)
@@ -437,61 +476,112 @@ private fun WordPageEditor(
             modifier = Modifier.fillMaxWidth().weight(1f).padding(top = 6.dp, bottom = 8.dp)
                 .border(1.dp, Color(0xffc7cdd3), RoundedCornerShape(4.dp)),
                 factory = { viewContext ->
-                EditText(viewContext).apply {
+                WebView(viewContext).apply {
+                    settings.javaScriptEnabled = true
+                    settings.domStorageEnabled = false
+                    settings.allowFileAccess = false
+                    settings.allowContentAccess = false
+                    settings.blockNetworkLoads = true
+                    settings.javaScriptCanOpenWindowsAutomatically = false
+                    settings.setSupportMultipleWindows(false)
+                    webViewClient = object : WebViewClient() {
+                        override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean = true
+                    }
                     setBackgroundColor(runCatching { android.graphics.Color.parseColor(document.pageBackground) }.getOrDefault(android.graphics.Color.WHITE))
-                    setPadding(26, 26, 26, 24)
-                    minLines = 24
-                    gravity = Gravity.TOP or Gravity.RIGHT
-                    textDirection = View.TEXT_DIRECTION_RTL
-                    textAlignment = View.TEXT_ALIGNMENT_VIEW_START
-                    textSize = 18f
-                    inputType = android.text.InputType.TYPE_CLASS_TEXT or
-                        android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE or
-                        android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
-                    imeOptions = EditorInfo.IME_FLAG_NO_EXTRACT_UI
-                    setText(Html.fromHtml(document.wordHtml, Html.FROM_HTML_MODE_LEGACY, LocalOfficeImageGetter(viewContext), null), TextView.BufferType.EDITABLE)
-                    typeface = fontTypeface(context, document.fontFamily)
+                    addJavascriptInterface(OfficeEditorBridge(this, context) { html -> onContentChangeState(html) }, "OfficeBridge")
                     tag = document.wordHtml
                     editorState.value = this
-                    addTextChangedListener(object : TextWatcher {
-                        override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
-                        override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
-                        override fun afterTextChanged(s: Editable?) {
-                            val html = Html.toHtml(s ?: return, Html.TO_HTML_PARAGRAPH_LINES_INDIVIDUAL)
-                            tag = html
-                            onContentChange(html)
-                        }
-                    })
+                    loadDataWithBaseURL(null, officeEditorHtml(document, context), "text/html", "UTF-8", null)
                 }
             },
             update = { view ->
                 editorState.value = view
-                view.typeface = fontTypeface(context, document.fontFamily)
                 view.setBackgroundColor(runCatching { android.graphics.Color.parseColor(document.pageBackground) }.getOrDefault(android.graphics.Color.WHITE))
                 val stored = view.tag as? String
                 if (stored != document.wordHtml && !view.hasFocus()) {
-                    view.setText(Html.fromHtml(document.wordHtml, Html.FROM_HTML_MODE_LEGACY, LocalOfficeImageGetter(context), null), TextView.BufferType.EDITABLE)
                     view.tag = document.wordHtml
+                    view.loadDataWithBaseURL(null, officeEditorHtml(document, context), "text/html", "UTF-8", null)
+                } else {
+                    view.evaluateJavascript("window.OfficeEditor && window.OfficeEditor.updatePage(${JSONObject.quote(document.pageBackground)},${JSONObject.quote(document.orientation)},${JSONObject.quote(document.pageSize)},${JSONObject.quote(officeWebFontName(document.fontFamily))});", null)
                 }
             }
         )
+      }
+      FloatingActionButton(
+          onClick = { showTools = !showTools },
+          modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 16.dp),
+          containerColor = Color(0xffe2e2e2),
+          contentColor = Color(0xff334155)
+      ) { Text(if (showTools) "×" else "▦", fontSize = 26.sp) }
     }
 }
 
-private class LocalOfficeImageGetter(private val context: Context) : ImageGetter {
-    override fun getDrawable(source: String?): Drawable? {
-        val value = source ?: return null
-        if (!value.startsWith("data:image/")) return null
-        return runCatching {
-            val encoded = value.substringAfter("base64,", "")
-            val bitmap = BitmapFactory.decodeByteArray(Base64.decode(encoded, Base64.DEFAULT), 0, Base64.decode(encoded, Base64.DEFAULT).size)
-            val drawable = BitmapDrawable(context.resources, bitmap)
-            val maxWidth = (context.resources.displayMetrics.widthPixels * 0.82f).toInt().coerceAtLeast(240)
-            val ratio = maxWidth.toFloat() / bitmap.width.coerceAtLeast(1)
-            drawable.setBounds(0, 0, maxWidth, (bitmap.height * ratio).toInt().coerceAtLeast(1))
-            drawable
-        }.getOrNull()
+private class OfficeEditorBridge(
+    private val webView: WebView,
+    context: Context,
+    private val onChange: (String) -> Unit
+) {
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+
+    @JavascriptInterface
+    fun onContentChanged(html: String) {
+        if (html.length > 24 * 1024 * 1024) return
+        mainHandler.post { webView.tag = html; onChange(html) }
     }
+
+    @JavascriptInterface
+    fun copySelection(text: String) {
+        mainHandler.post {
+            if (text.isNotEmpty()) clipboard.setPrimaryClip(ClipData.newPlainText("office_selection", text))
+        }
+    }
+}
+
+private fun officeEditorHtml(document: LocalOfficeDocument, context: Context): String {
+    val content = sanitizeOfficeHtml(document.wordHtml)
+    val background = document.pageBackground.takeIf { it.matches(Regex("#[0-9A-Fa-f]{6}")) } ?: "#FFFFFF"
+    val orientation = document.orientation.takeIf { it == "LANDSCAPE" } ?: "PORTRAIT"
+    val size = document.pageSize.takeIf { it in setOf("A4", "A5", "A3") } ?: "A4"
+    val font = when (document.fontFamily) {
+        "amiri_regular" -> "Amiri, serif"
+        "tajawal_regular" -> "Tajawal, sans-serif"
+        "noto_naskh_regular" -> "Noto Naskh Arabic, serif"
+        "scheherazade_regular" -> "Scheherazade New, serif"
+        "el_messiri_regular" -> "El Messiri, sans-serif"
+        else -> "Cairo, sans-serif"
+    }
+    val fontName = officeWebFontName(document.fontFamily)
+    val fontBytes = ArabicFonts.firstOrNull { it.key == document.fontFamily }?.let { choice ->
+        runCatching { context.resources.openRawResource(choice.resourceId).use { it.readBytes() } }.getOrNull()
+    }
+    val fontFace = fontBytes?.takeIf { it.size <= 2 * 1024 * 1024 }?.let {
+        "@font-face{font-family:'$fontName';src:url(data:font/ttf;base64,${Base64.encodeToString(it, Base64.NO_WRAP)}) format('truetype');font-weight:normal;font-style:normal;}"
+    }.orEmpty()
+    return """<!doctype html><html lang="ar"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<style>$fontFace html,body{margin:0;min-height:100%;background:#eef2f5}body{font-family:'$fontName',${font.substringAfter(", ")};font-size:18px;line-height:1.75;color:#18222d}.page{box-sizing:border-box;width:100%;min-height:96vh;margin:0 auto;padding:24px 20px;background:$background;outline:none;overflow-wrap:anywhere}#office-page:focus{outline:none}img{max-width:100%;height:auto;vertical-align:middle}table{border-collapse:collapse;width:100%;table-layout:auto;margin:12px 0}td,th{border:1px solid #7b8794;padding:6px;min-width:34px;vertical-align:top}ul,ol{padding-inline-start:2em}blockquote{border-inline-start:3px solid #96a5b4;margin-inline:12px;padding-inline:10px}</style></head>
+<body><main id="office-page" class="page" contenteditable="true" dir="rtl" spellcheck="true">$content</main>
+<script>(function(){var e=document.getElementById('office-page');function report(){if(window.OfficeBridge)window.OfficeBridge.onContentChanged(e.innerHTML)}
+document.addEventListener('input',report);document.addEventListener('click',function(ev){var a=ev.target.closest('a');if(a)ev.preventDefault()});
+window.OfficeEditor={command:function(c,v){e.focus();document.execCommand(c,false,v==null?null:v);report()},insertHtml:function(h){e.focus();document.execCommand('insertHTML',false,h);report()},insertText:function(t){e.focus();document.execCommand('insertText',false,t);report()},selectedText:function(){return window.getSelection()?window.getSelection().toString():''},clear:function(){e.innerHTML='';report()},tableAction:function(action){var s=window.getSelection(),n=s&&s.anchorNode?s.anchorNode.parentElement:null,c=n&&n.closest('td,th');if(!c)return;var r=c.closest('tr'),t=c.closest('table');if(action==='add-row'){var nr=r.cloneNode(false);for(var i=0;i<r.cells.length;i++){var nc=r.cells[i].cloneNode(false);nc.innerHTML='<br>';nr.appendChild(nc)}r.parentNode.insertBefore(nr,r.nextSibling)}else if(action==='add-column'){var idx=c.cellIndex;Array.from(t.rows).forEach(function(row){var nc=row.insertCell(Math.min(idx+1,row.cells.length));nc.innerHTML='<br>'})}else if(action==='delete-row'){if(t.rows.length>1)r.remove()}else if(action==='delete-column'){var idx=c.cellIndex;Array.from(t.rows).forEach(function(row){if(row.cells.length>1&&row.cells[idx])row.deleteCell(idx)})}report()},updatePage:function(bg,orientation,size,font){e.style.background=/^#[0-9a-fA-F]{6}$/.test(bg)?bg:'#FFFFFF';e.style.fontFamily=font+',sans-serif';e.dataset.orientation=orientation;e.dataset.size=size;var h={A4:1122,A5:794,A3:1588}[size]||1122;e.style.minHeight=(orientation==='LANDSCAPE'?Math.round(h*0.707):h)+'px'}};window.OfficeEditor.updatePage('$background','$orientation','$size',${JSONObject.quote(officeWebFontName(document.fontFamily))});})();</script></body></html>"""
+}
+
+private fun sanitizeOfficeHtml(html: String): String {
+    var safe = html
+        .replace(Regex("(?is)<(script|iframe|object|embed|svg|math|form|input|video|audio)\\b[^>]*>.*?</\\1\\s*>"), "")
+        .replace(Regex("(?is)<(script|iframe|object|embed|svg|math|form|input|video|audio)\\b[^>]*/?>"), "")
+        .replace(Regex("(?is)<!--.*?-->"), "")
+        .replace(Regex("(?i)\\s+on[a-z]+\\s*=\\s*(\"[^\"]*\"|'[^']*'|[^\\s>]+)"), "")
+        .replace(Regex("(?i)javascript\\s*:"), "")
+    val imgTag = Regex("(?is)<img\\b[^>]*>")
+    safe = imgTag.replace(safe) { match ->
+        val tag = match.value
+        val src = Regex("(?i)\\bsrc\\s*=\\s*(['\"])(.*?)\\1").find(tag)?.groupValues?.get(2).orEmpty()
+        if (src.startsWith("data:image/png;base64,") || src.startsWith("data:image/jpeg;base64,") ||
+            src.startsWith("data:image/gif;base64,") || src.startsWith("data:image/webp;base64,") ||
+            src.startsWith("data:image/bmp;base64,")) tag else ""
+    }
+    return safe
 }
 
 @Composable
@@ -519,7 +609,7 @@ private fun PageSettingsToolbar(document: LocalOfficeDocument, onChange: (String
 }
 
 @Composable
-private fun WordToolbar(editor: EditText?, fontKey: String, onFontChange: (String) -> Unit, onPickImage: (Int) -> Unit, onClose: () -> Unit) {
+private fun WordToolbar(editor: WebView?, fontKey: String, onFontChange: (String) -> Unit, onPickImage: (Int) -> Unit, onInsertTable: () -> Unit, onClose: () -> Unit) {
     val context = LocalContext.current
     var fontMenu by remember { mutableStateOf(false) }
     var sizeMenu by remember { mutableStateOf(false) }
@@ -535,107 +625,113 @@ private fun WordToolbar(editor: EditText?, fontKey: String, onFontChange: (Strin
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).background(Color.White).padding(5.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
             when (tab) {
                 "قلم" -> {
-                    TextButton(onClick = { applySelectedSpan(context, editor, StyleSpan(Typeface.BOLD)) }) { Text("B") }
-                    TextButton(onClick = { applySelectedSpan(context, editor, StyleSpan(Typeface.ITALIC)) }) { Text("I") }
-                    TextButton(onClick = { applySelectedSpan(context, editor, UnderlineSpan()) }) { Text("U") }
-                    TextButton(onClick = { applySelectedSpan(context, editor, ForegroundColorSpan(Color(0xff1675b8).toArgb())) }) { Text("لون النص") }
-                    TextButton(onClick = { applySelectedSpan(context, editor, BackgroundColorSpan(Color(0xffffef9b).toArgb())) }) { Text("تمييز") }
-                    Box { TextButton(onClick = { fontMenu = true }) { Text("Arial / الخط") }; DropdownMenu(fontMenu, { fontMenu = false }) { ArabicFonts.forEach { font -> DropdownMenuItem(text = { Text(font.label) }, onClick = { onFontChange(font.key); fontMenu = false }) } } }
-                    Box { TextButton(onClick = { sizeMenu = true }) { Text("الحجم") }; DropdownMenu(sizeMenu, { sizeMenu = false }) { listOf(11, 14, 16, 20, 24, 32).forEach { size -> DropdownMenuItem(text = { Text("$size") }, onClick = { applySelectedSpan(context, editor, AbsoluteSizeSpan(size, true)); sizeMenu = false }) } } }
+                    TextButton(onClick = { executeOfficeCommand(editor, "bold") }) { Text("B") }
+                    TextButton(onClick = { executeOfficeCommand(editor, "italic") }) { Text("I") }
+                    TextButton(onClick = { executeOfficeCommand(editor, "underline") }) { Text("U") }
+                    TextButton(onClick = { executeOfficeCommand(editor, "foreColor", "#1675b8") }) { Text("لون النص") }
+                    TextButton(onClick = { executeOfficeCommand(editor, "hiliteColor", "#fff09b") }) { Text("تمييز") }
+                    Box { TextButton(onClick = { fontMenu = true }) { Text("الخط: ${ArabicFonts.firstOrNull { it.key == fontKey }?.label ?: "عربي"}") }; DropdownMenu(fontMenu, { fontMenu = false }) { ArabicFonts.forEach { font -> DropdownMenuItem(text = { Text(font.label) }, onClick = { installLocalOfficeFont(context, editor, font); onFontChange(font.key); executeOfficeCommand(editor, "fontName", officeWebFontName(font.key)); fontMenu = false }) } } }
+                    Box { TextButton(onClick = { sizeMenu = true }) { Text("الحجم") }; DropdownMenu(sizeMenu, { sizeMenu = false }) { listOf(11, 14, 16, 20, 24, 32).forEach { size -> DropdownMenuItem(text = { Text("$size") }, onClick = { executeOfficeCommand(editor, "fontSize", htmlFontSize(size)); sizeMenu = false }) } } }
                 }
                 "عرض" -> {
-                    TextButton(onClick = { alignParagraph(editor, android.text.Layout.Alignment.ALIGN_OPPOSITE) }) { Text("يمين") }
-                    TextButton(onClick = { alignParagraph(editor, android.text.Layout.Alignment.ALIGN_CENTER) }) { Text("وسط") }
-                    TextButton(onClick = { alignParagraph(editor, android.text.Layout.Alignment.ALIGN_NORMAL) }) { Text("يسار") }
-                    TextButton(onClick = { insertBullet(editor) }) { Text("• قائمة") }
-                    TextButton(onClick = { insertNumberedItem(editor) }) { Text("١. قائمة") }
+                    TextButton(onClick = { executeOfficeCommand(editor, "justifyRight") }) { Text("يمين") }
+                    TextButton(onClick = { executeOfficeCommand(editor, "justifyCenter") }) { Text("وسط") }
+                    TextButton(onClick = { executeOfficeCommand(editor, "justifyLeft") }) { Text("يسار") }
+                    TextButton(onClick = { executeOfficeCommand(editor, "insertUnorderedList") }) { Text("• قائمة") }
+                    TextButton(onClick = { executeOfficeCommand(editor, "insertOrderedList") }) { Text("١. قائمة") }
                 }
                 "مراجعة" -> {
                     TextButton(onClick = { copySelection(context, editor, false) }) { Text("نسخ") }
                     TextButton(onClick = { copySelection(context, editor, true) }) { Text("قص") }
                     TextButton(onClick = { pasteClipboard(context, editor) }) { Text("لصق") }
-                    TextButton(onClick = { editor?.selectAll() }) { Text("تحديد الكل") }
-                    TextButton(onClick = { editor?.text?.clear() }) { Text("مسح الصفحة") }
+                    TextButton(onClick = { executeOfficeJavascript(editor, "document.getElementById('office-page').focus();document.execCommand('selectAll')") }) { Text("تحديد الكل") }
+                    TextButton(onClick = { executeOfficeJavascript(editor, "window.OfficeEditor.clear()") }) { Text("مسح الصفحة") }
                 }
                 else -> {
+                    TextButton(onClick = onInsertTable) { Text("إدراج جدول ٣×٣") }
+                    TextButton(onClick = { runOfficeTableAction(editor, "add-row") }) { Text("إضافة صف") }
+                    TextButton(onClick = { runOfficeTableAction(editor, "add-column") }) { Text("إضافة عمود") }
+                    TextButton(onClick = { runOfficeTableAction(editor, "delete-row") }) { Text("حذف الصف") }
+                    TextButton(onClick = { runOfficeTableAction(editor, "delete-column") }) { Text("حذف العمود") }
                     TextButton(onClick = { onPickImage(240) }) { Text("صورة صغيرة") }
                     TextButton(onClick = { onPickImage(420) }) { Text("صورة متوسطة") }
                     TextButton(onClick = { onPickImage(620) }) { Text("صورة كبيرة") }
-                    TextButton(onClick = { insertAtCursor(editor, "\n────────────────────\n") }) { Text("فاصل") }
-                    TextButton(onClick = { insertAtCursor(editor, "\n${DateFormat.getDateInstance(DateFormat.SHORT).format(Date())}\n") }) { Text("التاريخ") }
+                    TextButton(onClick = { insertAtCursor(editor, "<hr>") }) { Text("فاصل") }
+                    TextButton(onClick = { insertAtCursor(editor, "<p>${DateFormat.getDateInstance(DateFormat.SHORT).format(Date())}</p>") }) { Text("التاريخ") }
                 }
             }
         }
     }
 }
 
-private fun copySelection(context: Context, editor: EditText?, removeAfterCopy: Boolean) {
-    editor ?: return
-    val start = minOf(editor.selectionStart, editor.selectionEnd).coerceAtLeast(0)
-    val end = maxOf(editor.selectionStart, editor.selectionEnd).coerceAtLeast(0)
-    if (start == end) {
-        Toast.makeText(context, "حدد نصًا أولًا.", Toast.LENGTH_SHORT).show()
-        return
-    }
-    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    clipboard.setPrimaryClip(ClipData.newPlainText("office_selection", editor.text.subSequence(start, end)))
-    if (removeAfterCopy) editor.text.delete(start, end)
+private fun executeOfficeCommand(editor: WebView?, command: String, value: String? = null) {
+    val arg = value?.let(JSONObject::quote) ?: "null"
+    executeOfficeJavascript(editor, "window.OfficeEditor && window.OfficeEditor.command(${JSONObject.quote(command)},$arg)")
 }
 
-private fun pasteClipboard(context: Context, editor: EditText?) {
+private fun executeOfficeJavascript(editor: WebView?, script: String) {
+    editor?.evaluateJavascript(script, null)
+}
+
+private fun copySelection(context: Context, editor: WebView?, removeAfterCopy: Boolean) {
+    editor ?: return
+    executeOfficeJavascript(editor, "window.OfficeBridge && window.OfficeBridge.copySelection(window.OfficeEditor.selectedText())")
+    if (removeAfterCopy) executeOfficeCommand(editor, "delete")
+}
+
+private fun pasteClipboard(context: Context, editor: WebView?) {
     editor ?: return
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     val value = clipboard.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString().orEmpty()
-    if (value.isNotEmpty()) insertAtCursor(editor, value)
+    if (value.isNotEmpty()) executeOfficeJavascript(editor, "window.OfficeEditor && window.OfficeEditor.insertText(${JSONObject.quote(value)})")
 }
 
-private fun insertAtCursor(editor: EditText?, value: String) {
-    editor ?: return
-    val start = minOf(editor.selectionStart, editor.selectionEnd).coerceAtLeast(0)
-    val end = maxOf(editor.selectionStart, editor.selectionEnd).coerceAtLeast(0)
-    editor.text.replace(start, end, value)
+private fun insertAtCursor(editor: WebView?, html: String) {
+    executeOfficeJavascript(editor, "window.OfficeEditor && window.OfficeEditor.insertHtml(${JSONObject.quote(html)})")
 }
 
-private fun applySelectedSpan(context: android.content.Context, editor: EditText?, span: Any) {
-    if (editor == null) return
-    val start = minOf(editor.selectionStart, editor.selectionEnd).coerceAtLeast(0)
-    val end = maxOf(editor.selectionStart, editor.selectionEnd).coerceAtLeast(0)
-    if (start == end) {
-        Toast.makeText(context, "حدد النص أولًا لتطبيق الأداة.", Toast.LENGTH_SHORT).show()
-        return
+private fun insertOfficeTable(editor: WebView?, rows: Int, columns: Int) {
+    val table = buildString {
+        append("<table border=\"1\"><tbody>")
+        repeat(rows.coerceIn(1, 12)) {
+            append("<tr>")
+            repeat(columns.coerceIn(1, 10)) { append("<td><br></td>") }
+            append("</tr>")
+        }
+        append("</tbody></table><p><br></p>")
     }
-    (editor.text as? Spannable)?.setSpan(span, start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+    insertAtCursor(editor, table)
 }
 
-private fun alignParagraph(editor: EditText?, alignment: android.text.Layout.Alignment) {
-    editor ?: return
-    val text = editor.text as? Spannable ?: return
-    val cursor = editor.selectionStart.coerceIn(0, text.length)
-    val selectionEnd = editor.selectionEnd.coerceIn(0, text.length)
-    val start = if (cursor == 0) 0 else text.toString().lastIndexOf('\n', cursor - 1).let { it + 1 }
-    val endNewline = text.toString().indexOf('\n', maxOf(cursor, selectionEnd))
-    val end = if (endNewline < 0) text.length else endNewline + 1
-    if (end > start) text.setSpan(AlignmentSpan.Standard(alignment), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+private fun runOfficeTableAction(editor: WebView?, action: String) {
+    executeOfficeJavascript(editor, "window.OfficeEditor && window.OfficeEditor.tableAction(${JSONObject.quote(action)})")
 }
 
-private fun insertBullet(editor: EditText?) {
-    editor ?: return
-    val text = editor.text
-    val cursor = editor.selectionStart.coerceIn(0, text.length)
-    val lineStart = if (cursor == 0) 0 else text.toString().lastIndexOf('\n', cursor - 1) + 1
-    text.insert(lineStart, "• ")
-    editor.setSelection((cursor + 2).coerceAtMost(text.length))
+private fun officeWebFontName(key: String): String = when (key) {
+    "amiri_regular" -> "Amiri"
+    "tajawal_regular" -> "Tajawal"
+    "noto_naskh_regular" -> "Noto Naskh Arabic"
+    "scheherazade_regular" -> "Scheherazade New"
+    "el_messiri_regular" -> "El Messiri"
+    else -> "Cairo"
 }
 
-private fun insertNumberedItem(editor: EditText?) {
+private fun installLocalOfficeFont(context: Context, editor: WebView?, choice: ArabicFontChoice) {
     editor ?: return
-    val text = editor.text
-    val cursor = editor.selectionStart.coerceIn(0, text.length)
-    val lineStart = if (cursor == 0) 0 else text.toString().lastIndexOf('\n', cursor - 1) + 1
-    val number = text.toString().substring(0, lineStart).count { it == '\n' } + 1
-    val prefix = "$number. "
-    text.insert(lineStart, prefix)
-    editor.setSelection((cursor + prefix.length).coerceAtMost(text.length))
+    val bytes = runCatching { context.resources.openRawResource(choice.resourceId).use { it.readBytes() } }.getOrNull() ?: return
+    if (bytes.size > 2 * 1024 * 1024) return
+    val css = "@font-face{font-family:'${officeWebFontName(choice.key)}';src:url(data:font/ttf;base64,${Base64.encodeToString(bytes, Base64.NO_WRAP)}) format('truetype');font-weight:normal;font-style:normal;}"
+    val script = "(function(){var s=document.getElementById('office-local-font');if(!s){s=document.createElement('style');s.id='office-local-font';document.head.appendChild(s)}s.textContent=${JSONObject.quote(css)};document.getElementById('office-page').style.fontFamily=${JSONObject.quote(officeWebFontName(choice.key))}})()"
+    executeOfficeJavascript(editor, script)
+}
+
+private fun htmlFontSize(size: Int): String = when {
+    size <= 11 -> "2"
+    size <= 14 -> "3"
+    size <= 16 -> "4"
+    size <= 20 -> "5"
+    size <= 24 -> "6"
+    else -> "7"
 }
 
 private fun fontTypeface(context: android.content.Context, key: String): Typeface =
