@@ -9,6 +9,7 @@ import android.net.Uri
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.text.Editable
 import android.text.Html
 import android.text.Html.ImageGetter
@@ -31,6 +32,9 @@ import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.graphics.Canvas
+import android.print.PrintAttributes
+import android.print.PrintManager
 import android.os.Handler
 import android.os.Looper
 import androidx.activity.compose.BackHandler
@@ -44,6 +48,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -56,6 +61,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
@@ -107,6 +113,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.DateFormat
 import java.util.Date
+import java.util.UUID
 import android.util.Base64
 import java.io.ByteArrayOutputStream
 
@@ -236,6 +243,18 @@ fun OfficeEditorScreen(viewModel: MasrofViewModel, initialDocumentId: Long? = nu
                 .onFailure { saveMessage = "تعذر تحميل الصورة: ${it.message.orEmpty()}" }
         }
     }
+    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()) { bitmap ->
+        if (bitmap != null) {
+            val output = ByteArrayOutputStream()
+            val saved = bitmap.compress(Bitmap.CompressFormat.JPEG, 86, output)
+            bitmap.recycle()
+            if (saved && output.size() <= 4 * 1024 * 1024) {
+                imageWidthToInsert = 420
+                imageToInsert = "data:image/jpeg;base64,${Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP)}"
+                saveMessage = "تم التقاط الصورة؛ أُدرجت في الصفحة."
+            } else saveMessage = "تعذر تجهيز الصورة أو تجاوزت الحد المسموح."
+        }
+    }
     val docxExportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(OoxmlOfficeExchange.DOCX_MIME)) { uri -> exportOffice(uri, OfficeDocumentKind.WORD) }
     val xlsxExportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(OoxmlOfficeExchange.XLSX_MIME)) { uri -> exportOffice(uri, OfficeDocumentKind.EXCEL) }
 
@@ -293,7 +312,7 @@ fun OfficeEditorScreen(viewModel: MasrofViewModel, initialDocumentId: Long? = nu
             onOpen = { current = it }
         )
     } else {
-        Column(Modifier.fillMaxSize().background(Color(0xffeef2f5))) {
+        Column(Modifier.fillMaxSize().background(Color.White)) {
             Row(
                 modifier = Modifier.fillMaxWidth().background(Color.White).padding(horizontal = 10.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -329,6 +348,7 @@ fun OfficeEditorScreen(viewModel: MasrofViewModel, initialDocumentId: Long? = nu
             when (document.kind) {
                 OfficeDocumentKind.WORD -> WordPageEditor(
                     document = document,
+                    officeDocuments = editorDocuments,
                     onContentChange = { html -> current = current?.copy(wordHtml = html, updatedAt = System.currentTimeMillis()) },
                     onFontChange = { font -> current = current?.copy(fontFamily = font, updatedAt = System.currentTimeMillis()) },
                     imageToInsert = imageToInsert,
@@ -341,7 +361,37 @@ fun OfficeEditorScreen(viewModel: MasrofViewModel, initialDocumentId: Long? = nu
                             scope.launch { savedFiles = withContext(Dispatchers.IO) { LocalOfficeDocumentStore.list(context) } }
                         }
                     },
+                    onSaveAs = { newTitle ->
+                        val duplicate = (current ?: document).copy(
+                            id = UUID.randomUUID().toString(),
+                            title = newTitle.trim().take(120),
+                            roomDocumentId = null,
+                            updatedAt = System.currentTimeMillis()
+                        )
+                        current = duplicate
+                        scope.launch {
+                            runCatching { withContext(Dispatchers.IO) { LocalOfficeDocumentStore.save(context, duplicate) } }
+                                .onSuccess {
+                                    savedFiles = withContext(Dispatchers.IO) { LocalOfficeDocumentStore.list(context) }
+                                    viewModel.saveOfficeDocument(context, duplicate) { linked, message ->
+                                        saveMessage = message
+                                        if (linked != null) current = current?.takeIf { it.id == linked.id }?.copy(roomDocumentId = linked.roomDocumentId, updatedAt = linked.updatedAt)
+                                        scope.launch { savedFiles = withContext(Dispatchers.IO) { LocalOfficeDocumentStore.list(context) } }
+                                    }
+                                }
+                                .onFailure { saveMessage = "تعذر حفظ النسخة الجديدة: ${it.message.orEmpty()}" }
+                        }
+                    },
+                    onOpenLinkedDocument = { linkedId ->
+                        val target = editorDocuments.firstOrNull { it.id == linkedId }
+                        if (target == null) Toast.makeText(context, "المستند المرتبط غير موجود محليًا.", Toast.LENGTH_SHORT).show()
+                        else viewModel.saveOfficeDocument(context, current ?: document) { _, message ->
+                            saveMessage = message
+                            current = target
+                        }
+                    },
                     onPickImage = { width -> imageWidthToInsert = width; imageLauncher.launch(arrayOf("image/*")) },
+                    onTakePhoto = { cameraLauncher.launch(null) },
                     onPageSettingsChange = { size, orientation, background ->
                         current = current?.copy(pageSize = size, orientation = orientation, pageBackground = background, updatedAt = System.currentTimeMillis())
                     }
@@ -429,13 +479,17 @@ private fun OfficeEditorHome(
 @Composable
 private fun WordPageEditor(
     document: LocalOfficeDocument,
+    officeDocuments: List<LocalOfficeDocument>,
     onContentChange: (String) -> Unit,
     onFontChange: (String) -> Unit,
     imageToInsert: String?,
     imageWidthToInsert: Int,
     onImageConsumed: () -> Unit,
     onSave: () -> Unit,
+    onSaveAs: (String) -> Unit,
+    onOpenLinkedDocument: (String) -> Unit,
     onPickImage: (Int) -> Unit,
+    onTakePhoto: () -> Unit,
     onPageSettingsChange: (String, String, String) -> Unit
 ) {
     val context = LocalContext.current
@@ -449,8 +503,8 @@ private fun WordPageEditor(
         editor.evaluateJavascript("window.OfficeEditor && window.OfficeEditor.insertHtml(${JSONObject.quote(html)});", null)
         onImageConsumed()
     }
-    Box(Modifier.fillMaxSize()) {
-      Column(Modifier.fillMaxSize().padding(horizontal = 10.dp, vertical = 4.dp)) {
+    Box(Modifier.fillMaxSize().background(Color.White)) {
+      Column(Modifier.fillMaxSize().background(Color.White).padding(horizontal = 10.dp, vertical = 4.dp)) {
         Row(
             Modifier.fillMaxWidth().background(Color.White).padding(horizontal = 8.dp, vertical = 5.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -464,17 +518,21 @@ private fun WordPageEditor(
             TextButton(onClick = { editorState.value?.clearFocus() }) { Text("تم", fontSize = 18.sp) }
         }
         if (showTools) WordToolbar(
+            document = document,
+            officeDocuments = officeDocuments,
             editor = editorState.value,
             fontKey = document.fontFamily,
             onFontChange = onFontChange,
             onPickImage = onPickImage,
-            onInsertTable = { insertOfficeTable(editorState.value, 3, 3) },
+            onTakePhoto = onTakePhoto,
+            onInsertTable = { rows, columns, style -> insertOfficeTable(editorState.value, rows, columns, style) },
+            onSaveAs = onSaveAs,
+            onOpenLinkedDocument = onOpenLinkedDocument,
             onClose = { showTools = false }
         )
         if (showTools) PageSettingsToolbar(document, onPageSettingsChange)
         AndroidView(
-            modifier = Modifier.fillMaxWidth().weight(1f).padding(top = 6.dp, bottom = 8.dp)
-                .border(1.dp, Color(0xffc7cdd3), RoundedCornerShape(4.dp)),
+            modifier = Modifier.fillMaxWidth().weight(1f).padding(top = 6.dp, bottom = 8.dp).background(Color.White),
                 factory = { viewContext ->
                 WebView(viewContext).apply {
                     settings.javaScriptEnabled = true
@@ -488,7 +546,7 @@ private fun WordPageEditor(
                         override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean = true
                     }
                     setBackgroundColor(runCatching { android.graphics.Color.parseColor(document.pageBackground) }.getOrDefault(android.graphics.Color.WHITE))
-                    addJavascriptInterface(OfficeEditorBridge(this, context) { html -> onContentChangeState(html) }, "OfficeBridge")
+                    addJavascriptInterface(OfficeEditorBridge(this, context, { html -> onContentChangeState(html) }, onOpenLinkedDocument), "OfficeBridge")
                     tag = document.wordHtml
                     editorState.value = this
                     loadDataWithBaseURL(null, officeEditorHtml(document, context), "text/html", "UTF-8", null)
@@ -518,8 +576,9 @@ private fun WordPageEditor(
 
 private class OfficeEditorBridge(
     private val webView: WebView,
-    context: Context,
-    private val onChange: (String) -> Unit
+    private val context: Context,
+    private val onChange: (String) -> Unit,
+    private val onOpenLinkedDocument: (String) -> Unit
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -533,8 +592,19 @@ private class OfficeEditorBridge(
     @JavascriptInterface
     fun copySelection(text: String) {
         mainHandler.post {
-            if (text.isNotEmpty()) clipboard.setPrimaryClip(ClipData.newPlainText("office_selection", text))
+            if (text.isNotEmpty()) {
+                clipboard.setPrimaryClip(ClipData.newPlainText("office_selection", text))
+                Toast.makeText(context, "تم نسخ النص المحدد إلى الحافظة", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(context, "حدد النص داخل الصفحة أولًا. هذا الخيار لا يتعرف ضوئيًا على نص الصور.", Toast.LENGTH_LONG).show()
+            }
         }
+    }
+
+    @JavascriptInterface
+    fun openLinkedDocument(id: String) {
+        if (!id.matches(Regex("[A-Fa-f0-9-]{36}"))) return
+        mainHandler.post { onOpenLinkedDocument(id) }
     }
 }
 
@@ -559,10 +629,10 @@ private fun officeEditorHtml(document: LocalOfficeDocument, context: Context): S
         "@font-face{font-family:'$fontName';src:url(data:font/ttf;base64,${Base64.encodeToString(it, Base64.NO_WRAP)}) format('truetype');font-weight:normal;font-style:normal;}"
     }.orEmpty()
     return """<!doctype html><html lang="ar"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<style>$fontFace html,body{margin:0;min-height:100%;background:#eef2f5}body{font-family:'$fontName',${font.substringAfter(", ")};font-size:18px;line-height:1.75;color:#18222d}.page{box-sizing:border-box;width:100%;min-height:96vh;margin:0 auto;padding:24px 20px;background:$background;outline:none;overflow-wrap:anywhere}#office-page:focus{outline:none}img{max-width:100%;height:auto;vertical-align:middle}table{border-collapse:collapse;width:100%;table-layout:auto;margin:12px 0}td,th{border:1px solid #7b8794;padding:6px;min-width:34px;vertical-align:top}ul,ol{padding-inline-start:2em}blockquote{border-inline-start:3px solid #96a5b4;margin-inline:12px;padding-inline:10px}</style></head>
+<style>$fontFace html,body{margin:0;min-height:100%;background:#FFFFFF}body{font-family:'$fontName',${font.substringAfter(", ")};font-size:18px;line-height:1.75;color:#18222d}.page{box-sizing:border-box;width:100%;min-height:100vh;margin:0;padding:14px 12px;background:$background;outline:none;overflow-wrap:anywhere}#office-page:focus{outline:none}img{max-width:100%;height:auto;vertical-align:middle}table{border-collapse:collapse;width:100%;table-layout:auto;margin:12px 0}td,th{border:1px solid #7b8794;padding:6px;min-width:34px;vertical-align:top}ul,ol{padding-inline-start:2em}blockquote{border-inline-start:3px solid #96a5b4;margin-inline:12px;padding-inline:10px}</style></head>
 <body><main id="office-page" class="page" contenteditable="true" dir="rtl" spellcheck="true">$content</main>
 <script>(function(){var e=document.getElementById('office-page');function report(){if(window.OfficeBridge)window.OfficeBridge.onContentChanged(e.innerHTML)}
-document.addEventListener('input',report);document.addEventListener('click',function(ev){var a=ev.target.closest('a');if(a)ev.preventDefault()});
+document.addEventListener('input',report);document.addEventListener('click',function(ev){var a=ev.target.closest('a');if(a){ev.preventDefault();var m=(a.getAttribute('href')||'').match(/^office-doc:([a-fA-F0-9-]{36})$/);if(m&&window.OfficeBridge)window.OfficeBridge.openLinkedDocument(m[1])}});
 window.OfficeEditor={command:function(c,v){e.focus();document.execCommand(c,false,v==null?null:v);report()},insertHtml:function(h){e.focus();document.execCommand('insertHTML',false,h);report()},insertText:function(t){e.focus();document.execCommand('insertText',false,t);report()},selectedText:function(){return window.getSelection()?window.getSelection().toString():''},clear:function(){e.innerHTML='';report()},tableAction:function(action){var s=window.getSelection(),n=s&&s.anchorNode?s.anchorNode.parentElement:null,c=n&&n.closest('td,th');if(!c)return;var r=c.closest('tr'),t=c.closest('table');if(action==='add-row'){var nr=r.cloneNode(false);for(var i=0;i<r.cells.length;i++){var nc=r.cells[i].cloneNode(false);nc.innerHTML='<br>';nr.appendChild(nc)}r.parentNode.insertBefore(nr,r.nextSibling)}else if(action==='add-column'){var idx=c.cellIndex;Array.from(t.rows).forEach(function(row){var nc=row.insertCell(Math.min(idx+1,row.cells.length));nc.innerHTML='<br>'})}else if(action==='delete-row'){if(t.rows.length>1)r.remove()}else if(action==='delete-column'){var idx=c.cellIndex;Array.from(t.rows).forEach(function(row){if(row.cells.length>1&&row.cells[idx])row.deleteCell(idx)})}report()},updatePage:function(bg,orientation,size,font){e.style.background=/^#[0-9a-fA-F]{6}$/.test(bg)?bg:'#FFFFFF';e.style.fontFamily=font+',sans-serif';e.dataset.orientation=orientation;e.dataset.size=size;var h={A4:1122,A5:794,A3:1588}[size]||1122;e.style.minHeight=(orientation==='LANDSCAPE'?Math.round(h*0.707):h)+'px'}};window.OfficeEditor.updatePage('$background','$orientation','$size',${JSONObject.quote(officeWebFontName(document.fontFamily))});})();</script></body></html>"""
 }
 
@@ -609,21 +679,128 @@ private fun PageSettingsToolbar(document: LocalOfficeDocument, onChange: (String
 }
 
 @Composable
-private fun WordToolbar(editor: WebView?, fontKey: String, onFontChange: (String) -> Unit, onPickImage: (Int) -> Unit, onInsertTable: () -> Unit, onClose: () -> Unit) {
+private fun WordToolbar(document: LocalOfficeDocument, officeDocuments: List<LocalOfficeDocument>, editor: WebView?, fontKey: String, onFontChange: (String) -> Unit, onPickImage: (Int) -> Unit, onTakePhoto: () -> Unit, onInsertTable: (Int, Int, String) -> Unit, onSaveAs: (String) -> Unit, onOpenLinkedDocument: (String) -> Unit, onClose: () -> Unit) {
     val context = LocalContext.current
     var fontMenu by remember { mutableStateOf(false) }
     var sizeMenu by remember { mutableStateOf(false) }
+    var shapeMenu by remember { mutableStateOf(false) }
+    var imageSizeMenu by remember { mutableStateOf(false) }
+    var tableMenu by remember { mutableStateOf(false) }
+    var showCommentDialog by remember { mutableStateOf(false) }
+    var showSignatureDialog by remember { mutableStateOf(false) }
+    var showTableSizeDialog by remember { mutableStateOf(false) }
+    var showSaveAsDialog by remember { mutableStateOf(false) }
+    var showLinkedDocumentsMenu by remember { mutableStateOf(false) }
+    var commentText by remember { mutableStateOf("") }
+    var signerName by remember { mutableStateOf("") }
+    var saveAsTitle by remember(document.id) { mutableStateOf(document.title) }
+    var tableRows by remember { mutableStateOf("3") }
+    var tableColumns by remember { mutableStateOf("3") }
     var tab by remember { mutableStateOf("قلم") }
+    val textExportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
+        if (uri != null) runCatching { saveOfficeText(context, uri, document.title, document.wordHtml) }
+            .onSuccess { Toast.makeText(context, "تم استخراج نص الصفحة وحفظه.", Toast.LENGTH_SHORT).show() }
+            .onFailure { Toast.makeText(context, "تعذر حفظ النص: ${it.message.orEmpty()}", Toast.LENGTH_LONG).show() }
+    }
+    val imageExportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("image/png")) { uri ->
+        if (uri != null) exportWebViewSnapshot(context, editor, uri)
+    }
     Column(Modifier.fillMaxWidth().background(Color(0xffe2e2e2), RoundedCornerShape(6.dp))) {
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("إدراج", "عرض", "مراجعة", "قلم").forEach { item ->
+            listOf("رئيسية", "ملف", "إدراج", "عرض", "مراجعة", "قلم").forEach { item ->
                 TextButton(onClick = { tab = item }) { Text(item, color = if (tab == item) Color(0xff1675b8) else Color.DarkGray, fontSize = 16.sp) }
             }
             Text("⌄", modifier = Modifier.align(Alignment.CenterVertically), fontSize = 24.sp)
             TextButton(onClick = onClose) { Text("إخفاء") }
         }
-        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).background(Color.White).padding(5.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (tab == "ملف") {
+            Column(Modifier.fillMaxWidth().background(Color.White).padding(horizontal = 10.dp, vertical = 2.dp)) {
+                InsertToolRow(icon = "▣", title = "حفظ باسم", onClick = { saveAsTitle = document.title; showSaveAsDialog = true })
+                InsertToolRow(icon = "♧", title = "تصدير إلى ملف PDF", onClick = { printOfficeWebView(context, editor, document.title) })
+                InsertToolRow(icon = "↗", title = "خيارات مشاركة ك", onClick = { shareOfficePage(context, document.title, document.wordHtml) }, trailing = {
+                    TextButton(onClick = { shareOfficePage(context, document.title, document.wordHtml) }) { Text("•••") }
+                    TextButton(onClick = { shareOfficePage(context, document.title, document.wordHtml, "com.facebook.orca") }) { Text("M", color = Color(0xff168de2)) }
+                    TextButton(onClick = { shareOfficePage(context, document.title, document.wordHtml, "com.whatsapp") }) { Text("W", color = Color(0xff46b85a)) }
+                    TextButton(onClick = { shareOfficePage(context, document.title, document.wordHtml, "com.google.android.gm") }) { Text("✉", color = Color(0xffed5268)) }
+                })
+                InsertToolRow(icon = "▧", title = "تصدير الصور", onClick = { imageExportLauncher.launch("${document.title.ifBlank { "صفحة" }}.png") })
+                InsertToolRow(icon = "▣", title = "إرسال إلى الكمبيوتر", onClick = { shareOfficePage(context, document.title, document.wordHtml) })
+                InsertToolRow(icon = "⇧", title = "استخراج الصفحة", onClick = { textExportLauncher.launch("${document.title.ifBlank { "صفحة" }}.txt") })
+                InsertToolRow(icon = "▧", title = "ربط المستندات", onClick = { showLinkedDocumentsMenu = true }, trailing = {
+                    Box {
+                        TextButton(onClick = { showLinkedDocumentsMenu = true }) { Text("اختيار مستند") }
+                        DropdownMenu(expanded = showLinkedDocumentsMenu, onDismissRequest = { showLinkedDocumentsMenu = false }) {
+                            val linked = officeDocuments.filter { it.id != document.id }
+                            if (linked.isEmpty()) DropdownMenuItem(text = { Text("لا توجد مستندات أخرى") }, onClick = { showLinkedDocumentsMenu = false })
+                            linked.take(30).forEach { target ->
+                                DropdownMenuItem(text = { Text(target.title) }, onClick = {
+                                    val title = target.title.escapeOfficeHtml()
+                                    insertAtCursor(editor, "<p><a href=\"office-doc:${target.id}\" style=\"color:#1675b8;text-decoration:underline\">$title</a></p>")
+                                    showLinkedDocumentsMenu = false
+                                })
+                            }
+                        }
+                    }
+                })
+            }
+        } else if (tab == "إدراج") {
+            Column(Modifier.fillMaxWidth().background(Color.White).padding(horizontal = 10.dp, vertical = 2.dp)) {
+                InsertToolRow(icon = "▧", title = "صورة", onClick = { onPickImage(420) }, trailing = {
+                    TextButton(onClick = onTakePhoto) { Text("◎", fontSize = 22.sp, color = Color(0xff58636d)) }
+                    TextButton(onClick = { onPickImage(420) }) { Text("▧", fontSize = 22.sp, color = Color(0xff23a987)) }
+                    Box {
+                        TextButton(onClick = { imageSizeMenu = true }) { Text("•••") }
+                        DropdownMenu(expanded = imageSizeMenu, onDismissRequest = { imageSizeMenu = false }) {
+                            listOf(240 to "صغيرة", 420 to "متوسطة", 620 to "كبيرة").forEach { (width, label) ->
+                                DropdownMenuItem(text = { Text("صورة $label") }, onClick = { onPickImage(width); imageSizeMenu = false })
+                            }
+                        }
+                    }
+                })
+                InsertToolRow(icon = "☷", title = "استخراج النص", onClick = { copySelection(context, editor, false) })
+                InsertToolRow(icon = "▣", title = "مربع نص", onClick = {
+                    insertAtCursor(editor, "<div style=\"border:1.5px solid #536170;padding:14px;margin:10px 0;min-height:48px;background:#fff\"><p>اكتب النص هنا</p></div><p><br></p>")
+                })
+                InsertToolRow(icon = "◇", title = "الشكل", onClick = { shapeMenu = true }, trailing = {
+                    TextButton(onClick = { insertAtCursor(editor, "<span style=\"display:inline-block;width:30px;height:30px;border:2px solid #444;border-radius:50%;margin:4px\"></span>") }) { Text("○") }
+                    TextButton(onClick = { insertAtCursor(editor, "<span style=\"display:inline-block;width:42px;height:2px;background:#444;margin:15px 5px\"></span>") }) { Text("↘") }
+                    TextButton(onClick = { insertAtCursor(editor, "<span style=\"display:inline-block;width:30px;height:30px;border:2px solid #444;margin:4px\"></span>") }) { Text("□") }
+                    Box {
+                        TextButton(onClick = { shapeMenu = true }) { Text("•••") }
+                        DropdownMenu(expanded = shapeMenu, onDismissRequest = { shapeMenu = false }) {
+                            DropdownMenuItem(text = { Text("مستطيل") }, onClick = { insertAtCursor(editor, "<div style=\"border:2px solid #455a64;width:180px;min-height:70px;margin:6px\"><br></div>"); shapeMenu = false })
+                            DropdownMenuItem(text = { Text("دائرة") }, onClick = { insertAtCursor(editor, "<span style=\"display:inline-block;width:72px;height:72px;border:2px solid #455a64;border-radius:50%;margin:6px\"></span>"); shapeMenu = false })
+                            DropdownMenuItem(text = { Text("سهم") }, onClick = { insertAtCursor(editor, "<span style=\"font-size:32px;margin:6px\">➜</span>"); shapeMenu = false })
+                            DropdownMenuItem(text = { Text("خط") }, onClick = { insertAtCursor(editor, "<hr style=\"border:0;border-top:2px solid #455a64\">"); shapeMenu = false })
+                        }
+                    }
+                })
+                InsertToolRow(icon = "✍", title = "التوقيع", onClick = { showSignatureDialog = true })
+                InsertToolRow(icon = "▱", title = "التعليق", onClick = { showCommentDialog = true })
+                InsertToolRow(icon = "▦", title = "جدول", onClick = { onInsertTable(3, 3, "plain") }, trailing = {
+                    TextButton(onClick = { onInsertTable(3, 3, "plain") }) { Text("▦", color = Color.DarkGray, fontSize = 22.sp) }
+                    TextButton(onClick = { onInsertTable(3, 3, "blue") }) { Text("▦", color = Color(0xff1687e8), fontSize = 22.sp) }
+                    TextButton(onClick = { onInsertTable(3, 3, "red") }) { Text("▦", color = Color(0xffd64b50), fontSize = 22.sp) }
+                    Box {
+                        TextButton(onClick = { tableMenu = true }) { Text("•••") }
+                        DropdownMenu(expanded = tableMenu, onDismissRequest = { tableMenu = false }) {
+                            DropdownMenuItem(text = { Text("جدول ٣ × ٣") }, onClick = { onInsertTable(3, 3, "plain"); tableMenu = false })
+                            DropdownMenuItem(text = { Text("جدول أزرق") }, onClick = { onInsertTable(4, 4, "blue"); tableMenu = false })
+                            DropdownMenuItem(text = { Text("جدول أحمر") }, onClick = { onInsertTable(4, 4, "red"); tableMenu = false })
+                            DropdownMenuItem(text = { Text("تحديد الحجم") }, onClick = { tableMenu = false; showTableSizeDialog = true })
+                        }
+                    }
+                })
+            }
+        } else Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).background(Color.White).padding(5.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
             when (tab) {
+                "رئيسية" -> {
+                    TextButton(onClick = { executeOfficeCommand(editor, "bold") }) { Text("B", fontSize = 18.sp) }
+                    TextButton(onClick = { executeOfficeCommand(editor, "italic") }) { Text("I", fontSize = 18.sp) }
+                    TextButton(onClick = { executeOfficeCommand(editor, "underline") }) { Text("U", fontSize = 18.sp) }
+                    TextButton(onClick = { executeOfficeCommand(editor, "justifyRight") }) { Text("محاذاة") }
+                    TextButton(onClick = { executeOfficeCommand(editor, "insertUnorderedList") }) { Text("قائمة") }
+                }
                 "قلم" -> {
                     TextButton(onClick = { executeOfficeCommand(editor, "bold") }) { Text("B") }
                     TextButton(onClick = { executeOfficeCommand(editor, "italic") }) { Text("I") }
@@ -647,20 +824,143 @@ private fun WordToolbar(editor: WebView?, fontKey: String, onFontChange: (String
                     TextButton(onClick = { executeOfficeJavascript(editor, "document.getElementById('office-page').focus();document.execCommand('selectAll')") }) { Text("تحديد الكل") }
                     TextButton(onClick = { executeOfficeJavascript(editor, "window.OfficeEditor.clear()") }) { Text("مسح الصفحة") }
                 }
-                else -> {
-                    TextButton(onClick = onInsertTable) { Text("إدراج جدول ٣×٣") }
-                    TextButton(onClick = { runOfficeTableAction(editor, "add-row") }) { Text("إضافة صف") }
-                    TextButton(onClick = { runOfficeTableAction(editor, "add-column") }) { Text("إضافة عمود") }
-                    TextButton(onClick = { runOfficeTableAction(editor, "delete-row") }) { Text("حذف الصف") }
-                    TextButton(onClick = { runOfficeTableAction(editor, "delete-column") }) { Text("حذف العمود") }
-                    TextButton(onClick = { onPickImage(240) }) { Text("صورة صغيرة") }
-                    TextButton(onClick = { onPickImage(420) }) { Text("صورة متوسطة") }
-                    TextButton(onClick = { onPickImage(620) }) { Text("صورة كبيرة") }
-                    TextButton(onClick = { insertAtCursor(editor, "<hr>") }) { Text("فاصل") }
-                    TextButton(onClick = { insertAtCursor(editor, "<p>${DateFormat.getDateInstance(DateFormat.SHORT).format(Date())}</p>") }) { Text("التاريخ") }
-                }
+                else -> Unit
             }
         }
+    }
+    if (showSaveAsDialog) AlertDialog(
+        onDismissRequest = { showSaveAsDialog = false },
+        title = { Text("حفظ المستند باسم") },
+        text = { OutlinedTextField(value = saveAsTitle, onValueChange = { saveAsTitle = it }, label = { Text("اسم المستند") }, singleLine = true) },
+        confirmButton = { TextButton(onClick = {
+            val name = saveAsTitle.trim().take(120)
+            if (name.isNotBlank()) onSaveAs(name)
+            showSaveAsDialog = false
+        }) { Text("حفظ") } },
+        dismissButton = { TextButton(onClick = { showSaveAsDialog = false }) { Text("إلغاء") } }
+    )
+    if (showCommentDialog) AlertDialog(
+        onDismissRequest = { showCommentDialog = false },
+        title = { Text("إضافة تعليق") },
+        text = { OutlinedTextField(value = commentText, onValueChange = { commentText = it }, label = { Text("نص التعليق") }, minLines = 2) },
+        confirmButton = { TextButton(onClick = {
+            val safe = commentText.trim().take(500).escapeOfficeHtml()
+            if (safe.isNotBlank()) insertAtCursor(editor, "<div style=\"border-right:3px solid #ef9a3a;background:#fff8e8;padding:10px;margin:10px 0\"><b>تعليق:</b> $safe</div>")
+            commentText = ""; showCommentDialog = false
+        }) { Text("إدراج") } },
+        dismissButton = { TextButton(onClick = { showCommentDialog = false }) { Text("إلغاء") } }
+    )
+    if (showSignatureDialog) AlertDialog(
+        onDismissRequest = { showSignatureDialog = false },
+        title = { Text("إدراج التوقيع") },
+        text = { OutlinedTextField(value = signerName, onValueChange = { signerName = it }, label = { Text("اسم الموقّع") }, singleLine = true) },
+        confirmButton = { TextButton(onClick = {
+            val name = signerName.trim().take(100).ifBlank { "الموقّع" }.escapeOfficeHtml()
+            val date = DateFormat.getDateInstance(DateFormat.SHORT).format(Date())
+            insertAtCursor(editor, "<div style=\"margin:18px 0;text-align:right\"><div style=\"font-size:23px;font-style:italic;font-family:cursive\">$name</div><div style=\"border-bottom:1px solid #555;width:220px;margin-top:4px\"></div><small>التاريخ: $date</small></div>")
+            signerName = ""; showSignatureDialog = false
+        }) { Text("إدراج") } },
+        dismissButton = { TextButton(onClick = { showSignatureDialog = false }) { Text("إلغاء") } }
+    )
+    if (showTableSizeDialog) AlertDialog(
+        onDismissRequest = { showTableSizeDialog = false },
+        title = { Text("حجم الجدول") },
+        text = { Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(value = tableRows, onValueChange = { tableRows = it.filter(Char::isDigit).take(2) }, label = { Text("الصفوف (١–١٢)") }, modifier = Modifier.weight(1f), singleLine = true)
+            OutlinedTextField(value = tableColumns, onValueChange = { tableColumns = it.filter(Char::isDigit).take(2) }, label = { Text("الأعمدة (١–١٠)") }, modifier = Modifier.weight(1f), singleLine = true)
+        } },
+        confirmButton = { TextButton(onClick = {
+            onInsertTable(tableRows.toIntOrNull()?.coerceIn(1, 12) ?: 3, tableColumns.toIntOrNull()?.coerceIn(1, 10) ?: 3, "plain")
+            showTableSizeDialog = false
+        }) { Text("إنشاء") } },
+        dismissButton = { TextButton(onClick = { showTableSizeDialog = false }) { Text("إلغاء") } }
+    )
+}
+
+@Composable
+private fun InsertToolRow(icon: String, title: String, onClick: () -> Unit, trailing: (@Composable () -> Unit)? = null) {
+    Row(
+        Modifier.fillMaxWidth().height(52.dp).clickable(onClick = onClick).padding(horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (trailing != null) trailing() else Spacer(Modifier.width(4.dp))
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(title, fontSize = 16.sp, color = Color(0xff222222))
+            Text(icon, fontSize = 23.sp, color = Color(0xff51565a), modifier = Modifier.width(34.dp))
+        }
+    }
+    HorizontalDivider(color = Color(0xffeeeeee))
+}
+
+private fun String.escapeOfficeHtml(): String = replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&#39;")
+
+private fun saveOfficeText(context: Context, uri: Uri, title: String, html: String) {
+    val text = Html.fromHtml(html, Html.FROM_HTML_MODE_LEGACY).toString()
+    context.contentResolver.openOutputStream(uri)?.bufferedWriter(Charsets.UTF_8)?.use { writer ->
+        writer.write("$title\n\n$text")
+    } ?: error("تعذر فتح ملف النص للحفظ.")
+}
+
+private fun shareOfficePage(context: Context, title: String, html: String, targetPackage: String? = null) {
+    val text = Html.fromHtml(html, Html.FROM_HTML_MODE_LEGACY).toString().take(100_000)
+    val send = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_SUBJECT, title)
+        putExtra(Intent.EXTRA_TITLE, title)
+        putExtra(Intent.EXTRA_TEXT, text)
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    val launched = targetPackage?.let { packageName ->
+        runCatching { context.startActivity(Intent(send).setPackage(packageName)); true }.getOrDefault(false)
+    } ?: false
+    if (!launched) runCatching { context.startActivity(Intent.createChooser(send, "مشاركة المستند")) }
+        .onFailure { Toast.makeText(context, "تعذر فتح خيارات المشاركة.", Toast.LENGTH_SHORT).show() }
+}
+
+private fun printOfficeWebView(context: Context, editor: WebView?, title: String) {
+    if (editor == null) {
+        Toast.makeText(context, "المحرر غير جاهز للطباعة.", Toast.LENGTH_SHORT).show()
+        return
+    }
+    runCatching {
+        val manager = context.getSystemService(Context.PRINT_SERVICE) as PrintManager
+        manager.print(
+            title.ifBlank { "Office" },
+            editor.createPrintDocumentAdapter(title.ifBlank { "Office" }),
+            PrintAttributes.Builder().setMediaSize(PrintAttributes.MediaSize.ISO_A4).setMinMargins(PrintAttributes.Margins.NO_MARGINS).build()
+        )
+    }.onFailure { Toast.makeText(context, "تعذر فتح الطباعة: ${it.message.orEmpty()}", Toast.LENGTH_LONG).show() }
+}
+
+private fun exportWebViewSnapshot(context: Context, editor: WebView?, uri: Uri) {
+    if (editor == null) {
+        Toast.makeText(context, "المحرر غير جاهز لتصدير الصورة.", Toast.LENGTH_SHORT).show()
+        return
+    }
+    editor.post {
+        runCatching {
+            val sourceWidth = editor.width.coerceIn(1, 4096)
+            val sourceHeight = editor.height.coerceIn(1, 8192)
+            val scale = minOf(1f, 2800f / sourceWidth, 3200f / sourceHeight)
+            val width = (sourceWidth * scale).toInt().coerceAtLeast(1)
+            val height = (sourceHeight * scale).toInt().coerceAtLeast(1)
+            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bitmap)
+            canvas.scale(scale, scale)
+            editor.draw(canvas)
+            Thread {
+                runCatching {
+                    context.contentResolver.openOutputStream(uri)?.use { output ->
+                        check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)) { "تعذر ترميز صورة الصفحة." }
+                    } ?: error("تعذر فتح ملف الصورة.")
+                }.onSuccess { Handler(Looper.getMainLooper()).post { Toast.makeText(context, "تم تصدير صورة الجزء الظاهر من الصفحة.", Toast.LENGTH_SHORT).show() } }
+                    .onFailure { error -> Handler(Looper.getMainLooper()).post { Toast.makeText(context, "تعذر تصدير الصورة: ${error.message.orEmpty()}", Toast.LENGTH_LONG).show() } }
+                bitmap.recycle()
+            }.start()
+        }.onFailure { Toast.makeText(context, "تعذر تجهيز صورة الصفحة: ${it.message.orEmpty()}", Toast.LENGTH_LONG).show() }
     }
 }
 
@@ -690,12 +990,17 @@ private fun insertAtCursor(editor: WebView?, html: String) {
     executeOfficeJavascript(editor, "window.OfficeEditor && window.OfficeEditor.insertHtml(${JSONObject.quote(html)})")
 }
 
-private fun insertOfficeTable(editor: WebView?, rows: Int, columns: Int) {
+private fun insertOfficeTable(editor: WebView?, rows: Int, columns: Int, style: String = "plain") {
+    val border = when (style) { "blue" -> "#2785d0"; "red" -> "#d64b50"; else -> "#59636d" }
+    val heading = when (style) { "blue" -> "#d9ecff"; "red" -> "#ffe0e0"; else -> "#f3f4f6" }
     val table = buildString {
-        append("<table border=\"1\"><tbody>")
-        repeat(rows.coerceIn(1, 12)) {
+        append("<table border=\"1\" style=\"width:100%;border-collapse:collapse;border:1px solid $border\"><tbody>")
+        repeat(rows.coerceIn(1, 12)) { rowIndex ->
             append("<tr>")
-            repeat(columns.coerceIn(1, 10)) { append("<td><br></td>") }
+            repeat(columns.coerceIn(1, 10)) {
+                val background = if (rowIndex == 0) "background-color:$heading;" else ""
+                append("<td style=\"border:1px solid $border;padding:7px;$background\"><br></td>")
+            }
             append("</tr>")
         }
         append("</tbody></table><p><br></p>")
