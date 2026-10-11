@@ -52,6 +52,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -313,7 +314,7 @@ fun OfficeEditorScreen(viewModel: MasrofViewModel, initialDocumentId: Long? = nu
         )
     } else {
         Column(Modifier.fillMaxSize().background(Color.White)) {
-            Row(
+            if (document.kind == OfficeDocumentKind.EXCEL) Row(
                 modifier = Modifier.fillMaxWidth().background(Color.White).padding(horizontal = 10.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -334,21 +335,23 @@ fun OfficeEditorScreen(viewModel: MasrofViewModel, initialDocumentId: Long? = nu
                     }
                 }) { Text("حفظ") }
             }
-            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(document.kind.extensionLabel, style = MaterialTheme.typography.labelLarge, color = Color(0xff16486d))
-                Text(listOf(saveMessage, localSaveMessage).filter(String::isNotBlank).joinToString(" • "), style = MaterialTheme.typography.labelSmall, color = Color(0xff25704b))
-            }
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                OutlinedButton(onClick = {
-                    val name = document.title.trim().ifBlank { if (document.kind == OfficeDocumentKind.WORD) "مستند" else "جدول" }
-                    if (document.kind == OfficeDocumentKind.WORD) docxExportLauncher.launch("$name.docx")
-                    else xlsxExportLauncher.launch("$name.xlsx")
-                }) { Text(if (document.kind == OfficeDocumentKind.WORD) "تصدير DOCX" else "تصدير XLSX") }
+            if (document.kind == OfficeDocumentKind.EXCEL) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(document.kind.extensionLabel, style = MaterialTheme.typography.labelLarge, color = Color(0xff16486d))
+                    Text(listOf(saveMessage, localSaveMessage).filter(String::isNotBlank).joinToString(" • "), style = MaterialTheme.typography.labelSmall, color = Color(0xff25704b))
+                }
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OutlinedButton(onClick = {
+                        val name = document.title.trim().ifBlank { "جدول" }
+                        xlsxExportLauncher.launch("$name.xlsx")
+                    }) { Text("تصدير XLSX") }
+                }
             }
             when (document.kind) {
                 OfficeDocumentKind.WORD -> WordPageEditor(
                     document = document,
                     officeDocuments = editorDocuments,
+                    onExit = openHome,
                     onContentChange = { html -> current = current?.copy(wordHtml = html, updatedAt = System.currentTimeMillis()) },
                     onFontChange = { font -> current = current?.copy(fontFamily = font, updatedAt = System.currentTimeMillis()) },
                     imageToInsert = imageToInsert,
@@ -381,6 +384,19 @@ fun OfficeEditorScreen(viewModel: MasrofViewModel, initialDocumentId: Long? = nu
                                 }
                                 .onFailure { saveMessage = "تعذر حفظ النسخة الجديدة: ${it.message.orEmpty()}" }
                         }
+                    },
+                    onRename = { newTitle ->
+                        val renamed = (current ?: document).copy(title = newTitle.trim().take(120), updatedAt = System.currentTimeMillis())
+                        current = renamed
+                        viewModel.saveOfficeDocument(context, renamed) { linked, message ->
+                            saveMessage = message
+                            if (linked != null) current = current?.takeIf { it.id == linked.id }?.copy(roomDocumentId = linked.roomDocumentId, updatedAt = linked.updatedAt)
+                            scope.launch { savedFiles = withContext(Dispatchers.IO) { LocalOfficeDocumentStore.list(context) } }
+                        }
+                    },
+                    onExportDocx = {
+                        val name = document.title.trim().ifBlank { "مستند" }
+                        docxExportLauncher.launch("$name.docx")
                     },
                     onOpenLinkedDocument = { linkedId ->
                         val target = editorDocuments.firstOrNull { it.id == linkedId }
@@ -480,6 +496,7 @@ private fun OfficeEditorHome(
 private fun WordPageEditor(
     document: LocalOfficeDocument,
     officeDocuments: List<LocalOfficeDocument>,
+    onExit: () -> Unit,
     onContentChange: (String) -> Unit,
     onFontChange: (String) -> Unit,
     imageToInsert: String?,
@@ -487,6 +504,8 @@ private fun WordPageEditor(
     onImageConsumed: () -> Unit,
     onSave: () -> Unit,
     onSaveAs: (String) -> Unit,
+    onRename: (String) -> Unit,
+    onExportDocx: () -> Unit,
     onOpenLinkedDocument: (String) -> Unit,
     onPickImage: (Int) -> Unit,
     onTakePhoto: () -> Unit,
@@ -495,11 +514,11 @@ private fun WordPageEditor(
     val context = LocalContext.current
     val onContentChangeState by rememberUpdatedState(onContentChange)
     val editorState = remember(document.id) { mutableStateOf<WebView?>(null) }
-    var showTools by remember(document.id) { mutableStateOf(false) }
+    var showTools by remember(document.id) { mutableStateOf(true) }
         LaunchedEffect(imageToInsert, editorState.value) {
         val data = imageToInsert ?: return@LaunchedEffect
         val editor = editorState.value ?: return@LaunchedEffect
-        val html = "<img src=\"$data\" alt=\"صورة\" style=\"width:${imageWidthToInsert.coerceIn(160, 1000)}px;height:auto\" />"
+        val html = "<img class=\"office-object\" data-office-object=\"true\" src=\"$data\" alt=\"صورة\" style=\"width:${imageWidthToInsert.coerceIn(160, 1000)}px;height:auto\" />"
         editor.evaluateJavascript("window.OfficeEditor && window.OfficeEditor.insertHtml(${JSONObject.quote(html)});", null)
         onImageConsumed()
     }
@@ -510,27 +529,14 @@ private fun WordPageEditor(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(5.dp)
         ) {
-            TextButton(onClick = { editorState.value?.clearFocus() }) { Text("✕", fontSize = 24.sp) }
-            Text("20", modifier = Modifier.border(1.dp, Color(0xffb7bec5), RoundedCornerShape(4.dp)).padding(horizontal = 10.dp, vertical = 5.dp), fontSize = 16.sp)
+            TextButton(onClick = onExit) { Text("✕", fontSize = 24.sp) }
+            Text("1", modifier = Modifier.border(1.dp, Color(0xffb7bec5), RoundedCornerShape(4.dp)).padding(horizontal = 10.dp, vertical = 5.dp), fontSize = 16.sp)
+            Text(document.title, modifier = Modifier.weight(1f), maxLines = 1, fontSize = 14.sp, color = Color.DarkGray)
             TextButton(onClick = { executeOfficeCommand(editorState.value, "undo") }) { Text("↶", fontSize = 24.sp, color = Color(0xff536170)) }
             TextButton(onClick = { executeOfficeCommand(editorState.value, "redo") }) { Text("↷", fontSize = 24.sp, color = Color(0xff536170)) }
             TextButton(onClick = onSave) { Text("حفظ", fontSize = 18.sp) }
             TextButton(onClick = { editorState.value?.clearFocus() }) { Text("تم", fontSize = 18.sp) }
         }
-        if (showTools) WordToolbar(
-            document = document,
-            officeDocuments = officeDocuments,
-            editor = editorState.value,
-            fontKey = document.fontFamily,
-            onFontChange = onFontChange,
-            onPickImage = onPickImage,
-            onTakePhoto = onTakePhoto,
-            onInsertTable = { rows, columns, style -> insertOfficeTable(editorState.value, rows, columns, style) },
-            onSaveAs = onSaveAs,
-            onOpenLinkedDocument = onOpenLinkedDocument,
-            onClose = { showTools = false }
-        )
-        if (showTools) PageSettingsToolbar(document, onPageSettingsChange)
         AndroidView(
             modifier = Modifier.fillMaxWidth().weight(1f).padding(top = 6.dp, bottom = 8.dp).background(Color.White),
                 factory = { viewContext ->
@@ -564,13 +570,30 @@ private fun WordPageEditor(
                 }
             }
         )
+        if (showTools) WordToolbar(
+            document = document,
+            officeDocuments = officeDocuments,
+            editor = editorState.value,
+            fontKey = document.fontFamily,
+            onFontChange = onFontChange,
+            onPickImage = onPickImage,
+            onTakePhoto = onTakePhoto,
+            onInsertTable = { rows, columns, style -> insertOfficeTable(editorState.value, rows, columns, style) },
+            onSave = onSave,
+            onSaveAs = onSaveAs,
+            onRename = onRename,
+            onExportDocx = onExportDocx,
+            onOpenLinkedDocument = onOpenLinkedDocument,
+            onPageSettingsChange = onPageSettingsChange,
+            onClose = { showTools = false }
+        )
       }
-      FloatingActionButton(
-          onClick = { showTools = !showTools },
-          modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 16.dp),
+      if (!showTools) FloatingActionButton(
+          onClick = { showTools = true },
+          modifier = Modifier.align(Alignment.BottomEnd).padding(end = 8.dp, bottom = 10.dp).width(44.dp).height(48.dp),
           containerColor = Color(0xffe2e2e2),
           contentColor = Color(0xff334155)
-      ) { Text(if (showTools) "×" else "▦", fontSize = 26.sp) }
+      ) { Text("▦", fontSize = 23.sp) }
     }
 }
 
@@ -629,11 +652,9 @@ private fun officeEditorHtml(document: LocalOfficeDocument, context: Context): S
         "@font-face{font-family:'$fontName';src:url(data:font/ttf;base64,${Base64.encodeToString(it, Base64.NO_WRAP)}) format('truetype');font-weight:normal;font-style:normal;}"
     }.orEmpty()
     return """<!doctype html><html lang="ar"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<style>$fontFace html,body{margin:0;min-height:100%;background:#FFFFFF}body{font-family:'$fontName',${font.substringAfter(", ")};font-size:18px;line-height:1.75;color:#18222d}.page{box-sizing:border-box;width:100%;min-height:100vh;margin:0;padding:14px 12px;background:$background;outline:none;overflow-wrap:anywhere}#office-page:focus{outline:none}img{max-width:100%;height:auto;vertical-align:middle}table{border-collapse:collapse;width:100%;table-layout:auto;margin:12px 0}td,th{border:1px solid #7b8794;padding:6px;min-width:34px;vertical-align:top}ul,ol{padding-inline-start:2em}blockquote{border-inline-start:3px solid #96a5b4;margin-inline:12px;padding-inline:10px}</style></head>
+<style>$fontFace html,body{margin:0;min-height:100%;background:#FFFFFF}body{font-family:'$fontName',${font.substringAfter(", ")};font-size:18px;line-height:1.75;color:#18222d}.page{box-sizing:border-box;width:100%;min-height:100vh;margin:0;padding:8px;background:$background;outline:none;overflow-wrap:anywhere}#office-page:focus{outline:none}img{max-width:100%;height:auto;vertical-align:middle}table{border-collapse:collapse;width:100%;table-layout:auto;margin:12px 0}td,th{border:1px solid #7b8794;padding:6px;min-width:34px;vertical-align:top}.office-selected{outline:2px solid #1687e8!important;outline-offset:2px}.office-selected img{touch-action:none}#office-object-ui{position:fixed;z-index:99999;display:none;box-sizing:border-box;border:2px dashed #1687e8;pointer-events:none}#office-object-ui button{position:absolute;pointer-events:auto;min-width:40px;min-height:36px;border:1px solid #176ba9;border-radius:8px;background:#fff;color:#16486d;font-size:20px;font-weight:bold;box-shadow:0 1px 4px #666}#office-object-ui .move{top:-38px;right:0;width:68px;touch-action:none}#office-object-ui .remove{top:-38px;left:0}#office-object-ui .resize{right:-2px;bottom:-2px;width:42px;height:42px;background:#d8efff;touch-action:none}ul,ol{padding-inline-start:2em}blockquote{border-inline-start:3px solid #96a5b4;margin-inline:12px;padding-inline:10px}</style></head>
 <body><main id="office-page" class="page" contenteditable="true" dir="rtl" spellcheck="true">$content</main>
-<script>(function(){var e=document.getElementById('office-page');function report(){if(window.OfficeBridge)window.OfficeBridge.onContentChanged(e.innerHTML)}
-document.addEventListener('input',report);document.addEventListener('click',function(ev){var a=ev.target.closest('a');if(a){ev.preventDefault();var m=(a.getAttribute('href')||'').match(/^office-doc:([a-fA-F0-9-]{36})$/);if(m&&window.OfficeBridge)window.OfficeBridge.openLinkedDocument(m[1])}});
-window.OfficeEditor={command:function(c,v){e.focus();document.execCommand(c,false,v==null?null:v);report()},insertHtml:function(h){e.focus();document.execCommand('insertHTML',false,h);report()},insertText:function(t){e.focus();document.execCommand('insertText',false,t);report()},selectedText:function(){return window.getSelection()?window.getSelection().toString():''},clear:function(){e.innerHTML='';report()},tableAction:function(action){var s=window.getSelection(),n=s&&s.anchorNode?s.anchorNode.parentElement:null,c=n&&n.closest('td,th');if(!c)return;var r=c.closest('tr'),t=c.closest('table');if(action==='add-row'){var nr=r.cloneNode(false);for(var i=0;i<r.cells.length;i++){var nc=r.cells[i].cloneNode(false);nc.innerHTML='<br>';nr.appendChild(nc)}r.parentNode.insertBefore(nr,r.nextSibling)}else if(action==='add-column'){var idx=c.cellIndex;Array.from(t.rows).forEach(function(row){var nc=row.insertCell(Math.min(idx+1,row.cells.length));nc.innerHTML='<br>'})}else if(action==='delete-row'){if(t.rows.length>1)r.remove()}else if(action==='delete-column'){var idx=c.cellIndex;Array.from(t.rows).forEach(function(row){if(row.cells.length>1&&row.cells[idx])row.deleteCell(idx)})}report()},updatePage:function(bg,orientation,size,font){e.style.background=/^#[0-9a-fA-F]{6}$/.test(bg)?bg:'#FFFFFF';e.style.fontFamily=font+',sans-serif';e.dataset.orientation=orientation;e.dataset.size=size;var h={A4:1122,A5:794,A3:1588}[size]||1122;e.style.minHeight=(orientation==='LANDSCAPE'?Math.round(h*0.707):h)+'px'}};window.OfficeEditor.updatePage('$background','$orientation','$size',${JSONObject.quote(officeWebFontName(document.fontFamily))});})();</script></body></html>"""
+<script>(function(){var e=document.getElementById('office-page'),selected=null,drag=null;var ui=document.createElement('div');ui.id='office-object-ui';ui.contentEditable='false';ui.innerHTML='<button class="move" data-op="move" aria-label="تحريك">↕ اسحب</button><button class="remove" data-op="remove" aria-label="حذف">×</button><button class="resize" data-op="resize" aria-label="تغيير الحجم">◢</button>';document.body.appendChild(ui);function report(){if(window.OfficeBridge){var active=selected;if(active)active.classList.remove('office-selected');window.OfficeBridge.onContentChanged(e.innerHTML);if(active&&active.isConnected)active.classList.add('office-selected')}}function bounds(){if(!selected||!selected.isConnected){ui.style.display='none';selected=null;return}var r=selected.getBoundingClientRect();ui.style.display='block';ui.style.left=r.left+'px';ui.style.top=r.top+'px';ui.style.width=Math.max(r.width,42)+'px';ui.style.height=Math.max(r.height,42)+'px'}function choose(o){if(selected)selected.classList.remove('office-selected');selected=o;if(selected){selected.classList.add('office-selected');bounds()}else ui.style.display='none'}function start(op,ev){if(!selected)return;ev.preventDefault();ev.stopPropagation();var r=selected.getBoundingClientRect();drag={op:op,x:ev.clientX,y:ev.clientY,left:parseFloat(selected.style.left)||0,top:parseFloat(selected.style.top)||0,width:r.width,height:r.height};try{ev.target.setPointerCapture(ev.pointerId)}catch(ignore){}}ui.addEventListener('pointerdown',function(ev){var op=ev.target.getAttribute('data-op');if(op==='move'||op==='resize')start(op,ev)});ui.addEventListener('pointermove',function(ev){if(!drag||!selected)return;ev.preventDefault();var dx=ev.clientX-drag.x,dy=ev.clientY-drag.y;if(drag.op==='move'){selected.style.position='relative';selected.style.left=(drag.left+dx)+'px';selected.style.top=(drag.top+dy)+'px'}else{selected.style.maxWidth='none';selected.style.width=Math.max(60,drag.width+dx)+'px';selected.style.height=Math.max(36,drag.height+dy)+'px'}bounds()});ui.addEventListener('pointerup',function(){if(drag){drag=null;report();bounds()}});ui.addEventListener('pointercancel',function(){if(drag){drag=null;report();bounds()}});ui.addEventListener('click',function(ev){if(ev.target.getAttribute('data-op')==='remove'&&selected){selected.remove();selected=null;ui.style.display='none';report()}});Array.prototype.forEach.call(e.querySelectorAll('div,span,hr'),function(o){if(o.tagName==='HR'||/border|inline-block/.test(o.getAttribute('style')||''))o.setAttribute('data-office-object','true')});function findObject(n){return n&&n.closest?n.closest('[data-office-object="true"],img,table'):null}document.addEventListener('click',function(ev){var a=ev.target.closest('a');if(a){ev.preventDefault();var m=(a.getAttribute('href')||'').match(/^office-doc:([a-fA-F0-9-]{36})$/);if(m&&window.OfficeBridge)window.OfficeBridge.openLinkedDocument(m[1]);return}var o=findObject(ev.target);if(o&&e.contains(o))choose(o)});document.addEventListener('scroll',bounds,true);window.addEventListener('resize',bounds);function objectAction(action){if(!selected||!selected.isConnected)return;var step=20;if(action==='delete'){selected.remove();selected=null;ui.style.display='none';report();return}var r=selected.getBoundingClientRect();if(action==='larger'||action==='smaller'){selected.style.maxWidth='none';selected.style.width=Math.max(60,r.width+(action==='larger'?step:-step))+'px';selected.style.height=Math.max(36,r.height+(action==='larger'?step:-step))+'px'}else{selected.style.position='relative';selected.style.left=((parseFloat(selected.style.left)||0)+(action==='left'?-step:action==='right'?step:0))+'px';selected.style.top=((parseFloat(selected.style.top)||0)+(action==='up'?-step:action==='down'?step:0))+'px'}bounds();report()}window.OfficeEditor={command:function(c,v){e.focus();document.execCommand(c,false,v==null?null:v);report()},insertHtml:function(h){e.focus();document.execCommand('insertHTML',false,h);report()},insertText:function(t){e.focus();document.execCommand('insertText',false,t);report()},selectedText:function(){return window.getSelection()?window.getSelection().toString():''},clear:function(){e.innerHTML='';choose(null);report()},objectAction:objectAction,tableAction:function(action){var s=window.getSelection(),n=s&&s.anchorNode?s.anchorNode.parentElement:null,c=n&&n.closest('td,th');if(!c)return;var r=c.closest('tr'),t=c.closest('table');if(action==='add-row'){var nr=r.cloneNode(false);for(var i=0;i<r.cells.length;i++){var nc=r.cells[i].cloneNode(false);nc.innerHTML='<br>';nr.appendChild(nc)}r.parentNode.insertBefore(nr,r.nextSibling)}else if(action==='add-column'){var idx=c.cellIndex;Array.from(t.rows).forEach(function(row){var nc=row.insertCell(Math.min(idx+1,row.cells.length));nc.innerHTML='<br>'})}else if(action==='delete-row'){if(t.rows.length>1)r.remove()}else if(action==='delete-column'){var idx=c.cellIndex;Array.from(t.rows).forEach(function(row){if(row.cells.length>1&&row.cells[idx])row.deleteCell(idx)})}report()},updatePage:function(bg,orientation,size,font){e.style.background=/^#[0-9a-fA-F]{6}$/.test(bg)?bg:'#FFFFFF';e.style.fontFamily=font+',sans-serif';e.dataset.orientation=orientation;e.dataset.size=size;var h={A4:1122,A5:794,A3:1588}[size]||1122;e.style.minHeight=(orientation==='LANDSCAPE'?Math.round(h*0.707):h)+'px'}};window.OfficeEditor.updatePage('$background','$orientation','$size',${JSONObject.quote(officeWebFontName(document.fontFamily))});})();</script></body></html>"""
 }
 
 private fun sanitizeOfficeHtml(html: String): String {
@@ -679,7 +700,7 @@ private fun PageSettingsToolbar(document: LocalOfficeDocument, onChange: (String
 }
 
 @Composable
-private fun WordToolbar(document: LocalOfficeDocument, officeDocuments: List<LocalOfficeDocument>, editor: WebView?, fontKey: String, onFontChange: (String) -> Unit, onPickImage: (Int) -> Unit, onTakePhoto: () -> Unit, onInsertTable: (Int, Int, String) -> Unit, onSaveAs: (String) -> Unit, onOpenLinkedDocument: (String) -> Unit, onClose: () -> Unit) {
+private fun WordToolbar(document: LocalOfficeDocument, officeDocuments: List<LocalOfficeDocument>, editor: WebView?, fontKey: String, onFontChange: (String) -> Unit, onPickImage: (Int) -> Unit, onTakePhoto: () -> Unit, onInsertTable: (Int, Int, String) -> Unit, onSave: () -> Unit, onSaveAs: (String) -> Unit, onRename: (String) -> Unit, onExportDocx: () -> Unit, onOpenLinkedDocument: (String) -> Unit, onPageSettingsChange: (String, String, String) -> Unit, onClose: () -> Unit) {
     val context = LocalContext.current
     var fontMenu by remember { mutableStateOf(false) }
     var sizeMenu by remember { mutableStateOf(false) }
@@ -690,13 +711,15 @@ private fun WordToolbar(document: LocalOfficeDocument, officeDocuments: List<Loc
     var showSignatureDialog by remember { mutableStateOf(false) }
     var showTableSizeDialog by remember { mutableStateOf(false) }
     var showSaveAsDialog by remember { mutableStateOf(false) }
+    var showRenameDialog by remember { mutableStateOf(false) }
     var showLinkedDocumentsMenu by remember { mutableStateOf(false) }
     var commentText by remember { mutableStateOf("") }
     var signerName by remember { mutableStateOf("") }
     var saveAsTitle by remember(document.id) { mutableStateOf(document.title) }
+    var renameTitle by remember(document.id) { mutableStateOf(document.title) }
     var tableRows by remember { mutableStateOf("3") }
     var tableColumns by remember { mutableStateOf("3") }
-    var tab by remember { mutableStateOf("قلم") }
+    var tab by remember { mutableStateOf("رئيسية") }
     val textExportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
         if (uri != null) runCatching { saveOfficeText(context, uri, document.title, document.wordHtml) }
             .onSuccess { Toast.makeText(context, "تم استخراج نص الصفحة وحفظه.", Toast.LENGTH_SHORT).show() }
@@ -711,11 +734,14 @@ private fun WordToolbar(document: LocalOfficeDocument, officeDocuments: List<Loc
                 TextButton(onClick = { tab = item }) { Text(item, color = if (tab == item) Color(0xff1675b8) else Color.DarkGray, fontSize = 16.sp) }
             }
             Text("⌄", modifier = Modifier.align(Alignment.CenterVertically), fontSize = 24.sp)
-            TextButton(onClick = onClose) { Text("إخفاء") }
+            TextButton(onClick = onClose) { Text("×", fontSize = 26.sp, color = Color.DarkGray) }
         }
         if (tab == "ملف") {
-            Column(Modifier.fillMaxWidth().background(Color.White).padding(horizontal = 10.dp, vertical = 2.dp)) {
+            Column(Modifier.fillMaxWidth().heightIn(max = 320.dp).verticalScroll(rememberScrollState()).background(Color.White).padding(horizontal = 10.dp, vertical = 2.dp)) {
+                InsertToolRow(icon = "▣", title = "حفظ", onClick = onSave)
+                InsertToolRow(icon = "✎", title = "إعادة تسمية", onClick = { renameTitle = document.title; showRenameDialog = true })
                 InsertToolRow(icon = "▣", title = "حفظ باسم", onClick = { saveAsTitle = document.title; showSaveAsDialog = true })
+                InsertToolRow(icon = "DOCX", title = "تصدير DOCX", onClick = onExportDocx)
                 InsertToolRow(icon = "♧", title = "تصدير إلى ملف PDF", onClick = { printOfficeWebView(context, editor, document.title) })
                 InsertToolRow(icon = "↗", title = "خيارات مشاركة ك", onClick = { shareOfficePage(context, document.title, document.wordHtml) }, trailing = {
                     TextButton(onClick = { shareOfficePage(context, document.title, document.wordHtml) }) { Text("•••") }
@@ -744,7 +770,16 @@ private fun WordToolbar(document: LocalOfficeDocument, officeDocuments: List<Loc
                 })
             }
         } else if (tab == "إدراج") {
-            Column(Modifier.fillMaxWidth().background(Color.White).padding(horizontal = 10.dp, vertical = 2.dp)) {
+            Column(Modifier.fillMaxWidth().heightIn(max = 320.dp).verticalScroll(rememberScrollState()).background(Color.White).padding(horizontal = 10.dp, vertical = 2.dp)) {
+                InsertToolRow(icon = "↕", title = "تحريك / تغيير الحجم", onClick = {}, trailing = {
+                    TextButton(onClick = { executeOfficeJavascript(editor, "window.OfficeEditor && window.OfficeEditor.objectAction('left')") }) { Text("←") }
+                    TextButton(onClick = { executeOfficeJavascript(editor, "window.OfficeEditor && window.OfficeEditor.objectAction('up')") }) { Text("↑") }
+                    TextButton(onClick = { executeOfficeJavascript(editor, "window.OfficeEditor && window.OfficeEditor.objectAction('down')") }) { Text("↓") }
+                    TextButton(onClick = { executeOfficeJavascript(editor, "window.OfficeEditor && window.OfficeEditor.objectAction('right')") }) { Text("→") }
+                    TextButton(onClick = { executeOfficeJavascript(editor, "window.OfficeEditor && window.OfficeEditor.objectAction('larger')") }) { Text("+") }
+                    TextButton(onClick = { executeOfficeJavascript(editor, "window.OfficeEditor && window.OfficeEditor.objectAction('smaller')") }) { Text("−") }
+                    TextButton(onClick = { executeOfficeJavascript(editor, "window.OfficeEditor && window.OfficeEditor.objectAction('delete')") }) { Text("×", color = Color.Red) }
+                })
                 InsertToolRow(icon = "▧", title = "صورة", onClick = { onPickImage(420) }, trailing = {
                     TextButton(onClick = onTakePhoto) { Text("◎", fontSize = 22.sp, color = Color(0xff58636d)) }
                     TextButton(onClick = { onPickImage(420) }) { Text("▧", fontSize = 22.sp, color = Color(0xff23a987)) }
@@ -759,19 +794,19 @@ private fun WordToolbar(document: LocalOfficeDocument, officeDocuments: List<Loc
                 })
                 InsertToolRow(icon = "☷", title = "استخراج النص", onClick = { copySelection(context, editor, false) })
                 InsertToolRow(icon = "▣", title = "مربع نص", onClick = {
-                    insertAtCursor(editor, "<div style=\"border:1.5px solid #536170;padding:14px;margin:10px 0;min-height:48px;background:#fff\"><p>اكتب النص هنا</p></div><p><br></p>")
+                    insertAtCursor(editor, "<div class=\"office-object\" data-office-object=\"true\" contenteditable=\"true\" style=\"display:block;border:1.5px solid #536170;padding:14px;margin:10px 0;min-height:70px;width:260px;background:#fff\"><p>اكتب النص هنا</p></div><p><br></p>")
                 })
                 InsertToolRow(icon = "◇", title = "الشكل", onClick = { shapeMenu = true }, trailing = {
-                    TextButton(onClick = { insertAtCursor(editor, "<span style=\"display:inline-block;width:30px;height:30px;border:2px solid #444;border-radius:50%;margin:4px\"></span>") }) { Text("○") }
-                    TextButton(onClick = { insertAtCursor(editor, "<span style=\"display:inline-block;width:42px;height:2px;background:#444;margin:15px 5px\"></span>") }) { Text("↘") }
-                    TextButton(onClick = { insertAtCursor(editor, "<span style=\"display:inline-block;width:30px;height:30px;border:2px solid #444;margin:4px\"></span>") }) { Text("□") }
+                    TextButton(onClick = { insertAtCursor(editor, "<span class=\"office-object\" data-office-object=\"true\" style=\"display:inline-block;width:70px;height:70px;border:2px solid #444;border-radius:50%;margin:4px\"></span>") }) { Text("○") }
+                    TextButton(onClick = { insertAtCursor(editor, "<span class=\"office-object\" data-office-object=\"true\" style=\"display:inline-block;width:72px;height:4px;background:#444;margin:15px 5px\">➜</span>") }) { Text("↘") }
+                    TextButton(onClick = { insertAtCursor(editor, "<span class=\"office-object\" data-office-object=\"true\" style=\"display:inline-block;width:70px;height:70px;border:2px solid #444;margin:4px\"></span>") }) { Text("□") }
                     Box {
                         TextButton(onClick = { shapeMenu = true }) { Text("•••") }
                         DropdownMenu(expanded = shapeMenu, onDismissRequest = { shapeMenu = false }) {
-                            DropdownMenuItem(text = { Text("مستطيل") }, onClick = { insertAtCursor(editor, "<div style=\"border:2px solid #455a64;width:180px;min-height:70px;margin:6px\"><br></div>"); shapeMenu = false })
-                            DropdownMenuItem(text = { Text("دائرة") }, onClick = { insertAtCursor(editor, "<span style=\"display:inline-block;width:72px;height:72px;border:2px solid #455a64;border-radius:50%;margin:6px\"></span>"); shapeMenu = false })
-                            DropdownMenuItem(text = { Text("سهم") }, onClick = { insertAtCursor(editor, "<span style=\"font-size:32px;margin:6px\">➜</span>"); shapeMenu = false })
-                            DropdownMenuItem(text = { Text("خط") }, onClick = { insertAtCursor(editor, "<hr style=\"border:0;border-top:2px solid #455a64\">"); shapeMenu = false })
+                            DropdownMenuItem(text = { Text("مستطيل") }, onClick = { insertAtCursor(editor, "<div class=\"office-object\" data-office-object=\"true\" style=\"display:block;border:2px solid #455a64;width:180px;height:70px;margin:6px\"><br></div>"); shapeMenu = false })
+                            DropdownMenuItem(text = { Text("دائرة") }, onClick = { insertAtCursor(editor, "<span class=\"office-object\" data-office-object=\"true\" style=\"display:inline-block;width:72px;height:72px;border:2px solid #455a64;border-radius:50%;margin:6px\"></span>"); shapeMenu = false })
+                            DropdownMenuItem(text = { Text("سهم") }, onClick = { insertAtCursor(editor, "<span class=\"office-object\" data-office-object=\"true\" style=\"display:inline-block;font-size:32px;margin:6px\">➜</span>"); shapeMenu = false })
+                            DropdownMenuItem(text = { Text("خط") }, onClick = { insertAtCursor(editor, "<hr class=\"office-object\" data-office-object=\"true\" style=\"border:0;border-top:2px solid #455a64\">"); shapeMenu = false })
                         }
                     }
                 })
@@ -827,7 +862,15 @@ private fun WordToolbar(document: LocalOfficeDocument, officeDocuments: List<Loc
                 else -> Unit
             }
         }
+        if (tab == "عرض") PageSettingsToolbar(document, onPageSettingsChange)
     }
+    if (showRenameDialog) AlertDialog(
+        onDismissRequest = { showRenameDialog = false },
+        title = { Text("إعادة تسمية الملف") },
+        text = { OutlinedTextField(value = renameTitle, onValueChange = { renameTitle = it }, label = { Text("الاسم الجديد") }, singleLine = true) },
+        confirmButton = { TextButton(onClick = { val name = renameTitle.trim().take(120); if (name.isNotBlank()) onRename(name); showRenameDialog = false }) { Text("حفظ الاسم") } },
+        dismissButton = { TextButton(onClick = { showRenameDialog = false }) { Text("إلغاء") } }
+    )
     if (showSaveAsDialog) AlertDialog(
         onDismissRequest = { showSaveAsDialog = false },
         title = { Text("حفظ المستند باسم") },
@@ -845,7 +888,7 @@ private fun WordToolbar(document: LocalOfficeDocument, officeDocuments: List<Loc
         text = { OutlinedTextField(value = commentText, onValueChange = { commentText = it }, label = { Text("نص التعليق") }, minLines = 2) },
         confirmButton = { TextButton(onClick = {
             val safe = commentText.trim().take(500).escapeOfficeHtml()
-            if (safe.isNotBlank()) insertAtCursor(editor, "<div style=\"border-right:3px solid #ef9a3a;background:#fff8e8;padding:10px;margin:10px 0\"><b>تعليق:</b> $safe</div>")
+            if (safe.isNotBlank()) insertAtCursor(editor, "<div class=\"office-object\" data-office-object=\"true\" contenteditable=\"true\" style=\"display:block;border-right:3px solid #ef9a3a;background:#fff8e8;padding:10px;margin:10px 0;width:280px\"><b>تعليق:</b> $safe</div><p><br></p>")
             commentText = ""; showCommentDialog = false
         }) { Text("إدراج") } },
         dismissButton = { TextButton(onClick = { showCommentDialog = false }) { Text("إلغاء") } }
@@ -857,7 +900,7 @@ private fun WordToolbar(document: LocalOfficeDocument, officeDocuments: List<Loc
         confirmButton = { TextButton(onClick = {
             val name = signerName.trim().take(100).ifBlank { "الموقّع" }.escapeOfficeHtml()
             val date = DateFormat.getDateInstance(DateFormat.SHORT).format(Date())
-            insertAtCursor(editor, "<div style=\"margin:18px 0;text-align:right\"><div style=\"font-size:23px;font-style:italic;font-family:cursive\">$name</div><div style=\"border-bottom:1px solid #555;width:220px;margin-top:4px\"></div><small>التاريخ: $date</small></div>")
+            insertAtCursor(editor, "<div class=\"office-object\" data-office-object=\"true\" contenteditable=\"true\" style=\"display:inline-block;min-width:240px;margin:18px 0;text-align:right\"><div style=\"font-size:23px;font-style:italic;font-family:cursive\">$name</div><div style=\"border-bottom:1px solid #555;width:220px;margin-top:4px\"></div><small>التاريخ: $date</small></div>")
             signerName = ""; showSignatureDialog = false
         }) { Text("إدراج") } },
         dismissButton = { TextButton(onClick = { showSignatureDialog = false }) { Text("إلغاء") } }
@@ -884,7 +927,7 @@ private fun InsertToolRow(icon: String, title: String, onClick: () -> Unit, trai
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (trailing != null) trailing() else Spacer(Modifier.width(4.dp))
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -994,7 +1037,7 @@ private fun insertOfficeTable(editor: WebView?, rows: Int, columns: Int, style: 
     val border = when (style) { "blue" -> "#2785d0"; "red" -> "#d64b50"; else -> "#59636d" }
     val heading = when (style) { "blue" -> "#d9ecff"; "red" -> "#ffe0e0"; else -> "#f3f4f6" }
     val table = buildString {
-        append("<table border=\"1\" style=\"width:100%;border-collapse:collapse;border:1px solid $border\"><tbody>")
+        append("<table class=\"office-object\" data-office-object=\"true\" border=\"1\" style=\"width:100%;border-collapse:collapse;border:1px solid $border\"><tbody>")
         repeat(rows.coerceIn(1, 12)) { rowIndex ->
             append("<tr>")
             repeat(columns.coerceIn(1, 10)) {
