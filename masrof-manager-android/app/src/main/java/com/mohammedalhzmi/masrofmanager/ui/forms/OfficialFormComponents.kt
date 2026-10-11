@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -33,15 +34,15 @@ import com.example.R
 fun OfficialFormShell(title: String, content: @Composable () -> Unit) {
     Column(
         modifier = Modifier.padding(16.dp).verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
         Text(title, style = MaterialTheme.typography.headlineMedium)
         Text("نموذج رسمي مرقم — جميع الحقول تحفظ داخل المستند وتظهر في المعاينة والطباعة", style = MaterialTheme.typography.bodySmall)
         Card(modifier = Modifier.fillMaxWidth().border(1.dp, Color(0xffb48a3a)), colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = Color(0xfffffefd))) {
-            Column(modifier = Modifier.padding(14.dp)) {
+            Column(modifier = Modifier.padding(8.dp)) {
                 Text("صفحة المستند الأصلية — اكتب البيانات مباشرة داخل الحقول", style = MaterialTheme.typography.labelLarge, color = Color(0xff8a651d))
-                Spacer(modifier = Modifier.height(6.dp))
-                Column(modifier = Modifier.fillMaxWidth().background(Color.White).border(1.dp, Color(0xffe5e7eb)).padding(10.dp)) {
+                Spacer(modifier = Modifier.height(3.dp))
+                Column(modifier = Modifier.fillMaxWidth().background(Color.White).border(1.dp, Color(0xffe5e7eb)).padding(6.dp)) {
                     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text("الرقم : ............")
@@ -60,8 +61,8 @@ fun OfficialFormShell(title: String, content: @Composable () -> Unit) {
                             Text("فرع مديرية الحزم", style = MaterialTheme.typography.labelSmall)
                         }
                     }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Column(modifier = Modifier.fillMaxWidth().border(1.dp, Color(0xffb48a3a)).padding(8.dp)) { content() }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Column(modifier = Modifier.fillMaxWidth().border(1.dp, Color(0xffb48a3a)).padding(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) { content() }
                 }
             }
         }
@@ -69,12 +70,19 @@ fun OfficialFormShell(title: String, content: @Composable () -> Unit) {
 }
 
 @Composable
-fun OfficialField(value: String, label: String, onValueChange: (String) -> Unit, minLines: Int = 1, keyboardType: KeyboardType = KeyboardType.Text) {
+fun OfficialField(
+    value: String,
+    label: String,
+    onValueChange: (String) -> Unit,
+    minLines: Int = 1,
+    keyboardType: KeyboardType = KeyboardType.Text,
+    modifier: Modifier = Modifier.fillMaxWidth().wrapContentHeight(unbounded = true)
+) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         label = { Text(label) },
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier,
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
         minLines = minLines,
         singleLine = minLines == 1
