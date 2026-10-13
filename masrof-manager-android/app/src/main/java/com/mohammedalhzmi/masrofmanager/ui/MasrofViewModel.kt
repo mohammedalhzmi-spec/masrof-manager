@@ -127,39 +127,12 @@ class MasrofViewModel(
     suspend fun authenticate(context: Context, username: String, password: String, remember: Boolean): AuthenticatedUser? {
         val identifier = username.trim()
         val lookupIdentifier = if (identifier.contains("@")) identifier.lowercase() else identifier
-        val isEmail = identifier.contains("@")
-        val cloudUser = if (isEmail) {
-            runCatching { cloudSyncService.signIn(identifier, password) }
-                .onSuccess { cloudAccessState.value = it }
-                .onFailure { cloudOperationMessage.value = cloudErrorMessage(it) }
-                .getOrNull()
-                ?.takeIf { it.uid != null }
-        } else null
+        val user = repository.findActiveUser(lookupIdentifier)
 
-        // Email login is intentionally cloud-first. Do not silently authenticate a
-        // nonexistent Firebase account from the local Room database.
-        if (isEmail && cloudUser == null) return null
-
-        var user = repository.findActiveUser(lookupIdentifier)
-        if (cloudUser != null) {
-            val cloudRole = when (cloudUser.role) {
-                "SYSTEM_ADMIN" -> AppRole.ADMIN
-                "FINANCE_DIRECTOR" -> AppRole.FINANCE_MANAGER
-                "ACCOUNTANT" -> AppRole.ACCOUNTANT
-                else -> AppRole.USER
-            }
-            val synced = (user ?: UserEntity(username = lookupIdentifier, passwordHash = "", fullName = cloudUser.email ?: identifier, role = cloudRole.name))
-                .copy(
-                    username = user?.username ?: lookupIdentifier,
-                    passwordHash = AuthSecurity.hash(password),
-                    role = cloudRole.name,
-                    active = true
-                )
-            if (user == null) repository.insertUser(synced) else repository.updateUser(synced)
-            user = repository.findActiveUser(synced.username)
-        }
-
-        if (user != null && (!isEmail || AuthSecurity.verify(password, user.passwordHash))) {
+        // Main application login is intentionally local-only. Firebase remains
+        // available for explicit cloud sync actions, but it must not block access
+        // to the locally stored application account.
+        if (user != null && AuthSecurity.verify(password, user.passwordHash)) {
             val auth = AuthenticatedUser(user.id, user.username, user.fullName, runCatching { AppRole.valueOf(user.role) }.getOrDefault(AppRole.USER))
             UserSession.current = auth
             if (remember) RememberedLogin.save(context, user.username) else RememberedLogin.clear(context)
@@ -322,6 +295,9 @@ class MasrofViewModel(
         }
         if (error.message?.contains("google-services.json", ignoreCase = true) == true) {
             return "إعداد Firebase غير موجود؛ أضف ملف google-services.json الصحيح ثم أعد البناء."
+        }
+        if (error.message?.contains("غير منشورة", ignoreCase = true) == true) {
+            return error.message.orEmpty()
         }
         if (error is IllegalArgumentException && !error.message.isNullOrBlank()) return error.message.orEmpty()
         if (error.message?.contains("network", ignoreCase = true) == true) {

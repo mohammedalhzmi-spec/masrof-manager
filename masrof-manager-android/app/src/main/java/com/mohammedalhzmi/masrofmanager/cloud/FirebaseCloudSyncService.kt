@@ -466,7 +466,18 @@ class FirebaseCloudSyncService(context: Context) {
     }
 
     private suspend fun callFunction(name: String, data: Map<String, Any?>): Map<String, Any?> {
-        val result = functions().getHttpsCallable(name).call(data).awaitResult()
+        val result = try {
+            functions().getHttpsCallable(name).call(data).awaitResult()
+        } catch (error: com.google.firebase.functions.FirebaseFunctionsException) {
+            if (error.code == com.google.firebase.functions.FirebaseFunctionsException.Code.NOT_FOUND) {
+                throw IllegalStateException(
+                    "وظيفة Firebase ($name) غير منشورة في المشروع أو المنطقة الحالية. " +
+                        "انشر وظائف Android من مجلد firebase-backend ثم أعد المحاولة.",
+                    error
+                )
+            }
+            throw error
+        }
         return result.data as? Map<String, Any?>
             ?: throw IllegalStateException("استجابة خدمة السحابة غير صالحة.")
     }

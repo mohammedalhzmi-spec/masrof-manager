@@ -652,9 +652,9 @@ private fun officeEditorHtml(document: LocalOfficeDocument, context: Context): S
         "@font-face{font-family:'$fontName';src:url(data:font/ttf;base64,${Base64.encodeToString(it, Base64.NO_WRAP)}) format('truetype');font-weight:normal;font-style:normal;}"
     }.orEmpty()
     return """<!doctype html><html lang="ar"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<style>$fontFace html,body{margin:0;min-height:100%;background:#FFFFFF}body{font-family:'$fontName',${font.substringAfter(", ")};font-size:18px;line-height:1.75;color:#18222d}.page{box-sizing:border-box;width:100%;min-height:100vh;margin:0;padding:8px;background:$background;outline:none;overflow-wrap:anywhere}#office-page:focus{outline:none}img{max-width:100%;height:auto;vertical-align:middle}table{border-collapse:collapse;width:100%;table-layout:auto;margin:12px 0}td,th{border:1px solid #7b8794;padding:6px;min-width:34px;vertical-align:top}.office-selected{outline:2px solid #1687e8!important;outline-offset:2px}.office-selected img{touch-action:none}#office-object-ui{position:fixed;z-index:99999;display:none;box-sizing:border-box;border:2px dashed #1687e8;pointer-events:none}#office-object-ui button{position:absolute;pointer-events:auto;min-width:40px;min-height:36px;border:1px solid #176ba9;border-radius:8px;background:#fff;color:#16486d;font-size:20px;font-weight:bold;box-shadow:0 1px 4px #666}#office-object-ui .move{top:-38px;right:0;width:68px;touch-action:none}#office-object-ui .remove{top:-38px;left:0}#office-object-ui .resize{right:-2px;bottom:-2px;width:42px;height:42px;background:#d8efff;touch-action:none}ul,ol{padding-inline-start:2em}blockquote{border-inline-start:3px solid #96a5b4;margin-inline:12px;padding-inline:10px}</style></head>
+<style>$fontFace html,body{margin:0;min-height:100%;background:#eef1f5}body{font-family:'$fontName',${font.substringAfter(", ")};font-size:18px;line-height:1.75;color:#18222d;padding:12px 0}.page{box-sizing:border-box;width:calc(100% - 24px);max-width:760px;min-height:100vh;margin:0 auto;padding:28px 24px;background:$background;outline:none;overflow-wrap:anywhere;box-shadow:0 1px 8px rgba(15,23,42,.16);border:1px solid #e5e7eb}#office-page:focus{outline:none}img{max-width:100%;height:auto;vertical-align:middle}table{border-collapse:collapse;width:100%;table-layout:auto;margin:12px 0}td,th{border:1px solid #7b8794;padding:6px;min-width:34px;vertical-align:top}.office-selected{outline:2px solid #1687e8!important;outline-offset:2px}.office-selected img{touch-action:none}#office-object-ui{position:fixed;z-index:99999;display:none;box-sizing:border-box;border:2px dashed #1687e8;pointer-events:none}#office-object-ui button{position:absolute;pointer-events:auto;min-width:40px;min-height:36px;border:1px solid #176ba9;border-radius:8px;background:#fff;color:#16486d;font-size:20px;font-weight:bold;box-shadow:0 1px 4px #666}#office-object-ui .move{top:-38px;right:0;width:68px;touch-action:none}#office-object-ui .remove{top:-38px;left:0}#office-object-ui .resize{right:-2px;bottom:-2px;width:42px;height:42px;background:#d8efff;touch-action:none}.office-cell-selected{background-color:#d9ecff!important;outline:2px solid #1687e8;outline-offset:-2px}.office-table-selected{outline:2px solid #1687e8!important;outline-offset:3px}ul,ol{padding-inline-start:2em}blockquote{border-inline-start:3px solid #96a5b4;margin-inline:12px;padding-inline:10px}</style></head>
 <body><main id="office-page" class="page" contenteditable="true" dir="rtl" spellcheck="true">$content</main>
-<script>(function(){var e=document.getElementById('office-page'),selected=null,drag=null;var ui=document.createElement('div');ui.id='office-object-ui';ui.contentEditable='false';ui.innerHTML='<button class="move" data-op="move" aria-label="تحريك">↕ اسحب</button><button class="remove" data-op="remove" aria-label="حذف">×</button><button class="resize" data-op="resize" aria-label="تغيير الحجم">◢</button>';document.body.appendChild(ui);function report(){if(window.OfficeBridge){var active=selected;if(active)active.classList.remove('office-selected');window.OfficeBridge.onContentChanged(e.innerHTML);if(active&&active.isConnected)active.classList.add('office-selected')}}function bounds(){if(!selected||!selected.isConnected){ui.style.display='none';selected=null;return}var r=selected.getBoundingClientRect();ui.style.display='block';ui.style.left=r.left+'px';ui.style.top=r.top+'px';ui.style.width=Math.max(r.width,42)+'px';ui.style.height=Math.max(r.height,42)+'px'}function choose(o){if(selected)selected.classList.remove('office-selected');selected=o;if(selected){selected.classList.add('office-selected');bounds()}else ui.style.display='none'}function start(op,ev){if(!selected)return;ev.preventDefault();ev.stopPropagation();var r=selected.getBoundingClientRect();drag={op:op,x:ev.clientX,y:ev.clientY,left:parseFloat(selected.style.left)||0,top:parseFloat(selected.style.top)||0,width:r.width,height:r.height};try{ev.target.setPointerCapture(ev.pointerId)}catch(ignore){}}ui.addEventListener('pointerdown',function(ev){var op=ev.target.getAttribute('data-op');if(op==='move'||op==='resize')start(op,ev)});ui.addEventListener('pointermove',function(ev){if(!drag||!selected)return;ev.preventDefault();var dx=ev.clientX-drag.x,dy=ev.clientY-drag.y;if(drag.op==='move'){selected.style.position='relative';selected.style.left=(drag.left+dx)+'px';selected.style.top=(drag.top+dy)+'px'}else{selected.style.maxWidth='none';selected.style.width=Math.max(60,drag.width+dx)+'px';selected.style.height=Math.max(36,drag.height+dy)+'px'}bounds()});ui.addEventListener('pointerup',function(){if(drag){drag=null;report();bounds()}});ui.addEventListener('pointercancel',function(){if(drag){drag=null;report();bounds()}});ui.addEventListener('click',function(ev){if(ev.target.getAttribute('data-op')==='remove'&&selected){selected.remove();selected=null;ui.style.display='none';report()}});Array.prototype.forEach.call(e.querySelectorAll('div,span,hr'),function(o){if(o.tagName==='HR'||/border|inline-block/.test(o.getAttribute('style')||''))o.setAttribute('data-office-object','true')});function findObject(n){return n&&n.closest?n.closest('[data-office-object="true"],img,table'):null}document.addEventListener('click',function(ev){var a=ev.target.closest('a');if(a){ev.preventDefault();var m=(a.getAttribute('href')||'').match(/^office-doc:([a-fA-F0-9-]{36})$/);if(m&&window.OfficeBridge)window.OfficeBridge.openLinkedDocument(m[1]);return}var o=findObject(ev.target);if(o&&e.contains(o))choose(o)});document.addEventListener('scroll',bounds,true);window.addEventListener('resize',bounds);function objectAction(action){if(!selected||!selected.isConnected)return;var step=20;if(action==='delete'){selected.remove();selected=null;ui.style.display='none';report();return}var r=selected.getBoundingClientRect();if(action==='larger'||action==='smaller'){selected.style.maxWidth='none';selected.style.width=Math.max(60,r.width+(action==='larger'?step:-step))+'px';selected.style.height=Math.max(36,r.height+(action==='larger'?step:-step))+'px'}else{selected.style.position='relative';selected.style.left=((parseFloat(selected.style.left)||0)+(action==='left'?-step:action==='right'?step:0))+'px';selected.style.top=((parseFloat(selected.style.top)||0)+(action==='up'?-step:action==='down'?step:0))+'px'}bounds();report()}window.OfficeEditor={command:function(c,v){e.focus();document.execCommand(c,false,v==null?null:v);report()},insertHtml:function(h){e.focus();document.execCommand('insertHTML',false,h);report()},insertText:function(t){e.focus();document.execCommand('insertText',false,t);report()},selectedText:function(){return window.getSelection()?window.getSelection().toString():''},clear:function(){e.innerHTML='';choose(null);report()},objectAction:objectAction,tableAction:function(action){var s=window.getSelection(),n=s&&s.anchorNode?s.anchorNode.parentElement:null,c=n&&n.closest('td,th');if(!c)return;var r=c.closest('tr'),t=c.closest('table');if(action==='add-row'){var nr=r.cloneNode(false);for(var i=0;i<r.cells.length;i++){var nc=r.cells[i].cloneNode(false);nc.innerHTML='<br>';nr.appendChild(nc)}r.parentNode.insertBefore(nr,r.nextSibling)}else if(action==='add-column'){var idx=c.cellIndex;Array.from(t.rows).forEach(function(row){var nc=row.insertCell(Math.min(idx+1,row.cells.length));nc.innerHTML='<br>'})}else if(action==='delete-row'){if(t.rows.length>1)r.remove()}else if(action==='delete-column'){var idx=c.cellIndex;Array.from(t.rows).forEach(function(row){if(row.cells.length>1&&row.cells[idx])row.deleteCell(idx)})}report()},updatePage:function(bg,orientation,size,font){e.style.background=/^#[0-9a-fA-F]{6}$/.test(bg)?bg:'#FFFFFF';e.style.fontFamily=font+',sans-serif';e.dataset.orientation=orientation;e.dataset.size=size;var h={A4:1122,A5:794,A3:1588}[size]||1122;e.style.minHeight=(orientation==='LANDSCAPE'?Math.round(h*0.707):h)+'px'}};window.OfficeEditor.updatePage('$background','$orientation','$size',${JSONObject.quote(officeWebFontName(document.fontFamily))});})();</script></body></html>"""
+<script>(function(){var e=document.getElementById('office-page'),selected=null,drag=null;var ui=document.createElement('div');ui.id='office-object-ui';ui.contentEditable='false';ui.innerHTML='<button class="move" data-op="move" aria-label="تحريك">↕ اسحب</button><button class="remove" data-op="remove" aria-label="حذف">×</button><button class="resize" data-op="resize" aria-label="تغيير الحجم">◢</button>';document.body.appendChild(ui);var handlePositions=['left:-12px;top:-12px','left:50%;top:-12px;margin-left:-12px','right:-12px;top:-12px','left:-12px;top:50%;margin-top:-12px','right:-12px;top:50%;margin-top:-12px','left:-12px;bottom:-12px','left:50%;bottom:-12px;margin-left:-12px','right:-12px;bottom:-12px'];for(var hi=0;hi<8;hi++){var hb=document.createElement('button');hb.className='handle';hb.dataset.op='resize'+hi;hb.style.cssText='position:absolute;width:24px;height:24px;padding:0;border-radius:50%;background:#5b5b5b;border:0;pointer-events:auto;touch-action:none;'+handlePositions[hi];ui.appendChild(hb)}var rb=document.createElement('button');rb.className='rotate';rb.dataset.op='rotate';rb.textContent='↻';rb.style.cssText='position:absolute;left:50%;top:-58px;margin-left:-15px;width:30px;height:30px;padding:0;border-radius:50%;background:#5b5b5b;color:#fff;border:0;font-size:18px;pointer-events:auto;touch-action:none';ui.appendChild(rb);var selectedCells=[];function clearCellSelection(){selectedCells.forEach(function(x){x.classList.remove('office-cell-selected')});selectedCells=[]}function markCells(cells){clearCellSelection();selectedCells=cells;selectedCells.forEach(function(x){x.classList.add('office-cell-selected')})}function report(){if(window.OfficeBridge){var active=selected;if(active)active.classList.remove('office-selected');window.OfficeBridge.onContentChanged(e.innerHTML);if(active&&active.isConnected)active.classList.add('office-selected')}}function bounds(){if(!selected||!selected.isConnected){ui.style.display='none';selected=null;return}var r=selected.getBoundingClientRect();ui.style.display='block';ui.style.left=r.left+'px';ui.style.top=r.top+'px';ui.style.width=Math.max(r.width,42)+'px';ui.style.height=Math.max(r.height,42)+'px'}function choose(o){if(selected)selected.classList.remove('office-selected');selected=o;if(selected){selected.classList.add('office-selected');bounds()}else ui.style.display='none'}function start(op,ev){if(!selected)return;ev.preventDefault();ev.stopPropagation();var r=selected.getBoundingClientRect();drag={op:op,x:ev.clientX,y:ev.clientY,left:parseFloat(selected.style.left)||0,top:parseFloat(selected.style.top)||0,width:r.width,height:r.height};try{ev.target.setPointerCapture(ev.pointerId)}catch(ignore){}}ui.addEventListener('pointerdown',function(ev){var op=ev.target.getAttribute('data-op');if(op==='move'||op==='rotate'||op.indexOf('resize')===0)start(op,ev)});ui.addEventListener('pointermove',function(ev){if(!drag||!selected)return;ev.preventDefault();var dx=ev.clientX-drag.x,dy=ev.clientY-drag.y;if(drag.op==='move'){selected.style.position='relative';selected.style.left=(drag.left+dx)+'px';selected.style.top=(drag.top+dy)+'px'}else if(drag.op==='rotate'){var rr=selected.getBoundingClientRect(),cx=rr.left+rr.width/2,cy=rr.top+rr.height/2;var angle=Math.atan2(ev.clientY-cy,ev.clientX-cx)*180/Math.PI+90;selected.style.transform='rotate('+angle+'deg)'}else{var index=parseInt(drag.op.replace('resize',''),10),w=Math.max(60,drag.width+((index===2||index===4||index===7)?dx:(index===0||index===3||index===5)?-dx:0)),h=Math.max(36,drag.height+((index>=5)?dy:(index<=2)?-dy:0));selected.style.maxWidth='none';selected.style.width=w+'px';selected.style.height=h+'px'}bounds()});ui.addEventListener('pointerup',function(){if(drag){drag=null;report();bounds()}});ui.addEventListener('pointercancel',function(){if(drag){drag=null;report();bounds()}});ui.addEventListener('click',function(ev){if(ev.target.getAttribute('data-op')==='remove'&&selected){selected.remove();selected=null;ui.style.display='none';report()}});Array.prototype.forEach.call(e.querySelectorAll('div,span,hr'),function(o){if(o.tagName==='HR'||/border|inline-block/.test(o.getAttribute('style')||''))o.setAttribute('data-office-object','true')});function findObject(n){return n&&n.closest?n.closest('[data-office-object="true"],img,table'):null}document.addEventListener('click',function(ev){var a=ev.target.closest('a');if(a){ev.preventDefault();var m=(a.getAttribute('href')||'').match(/^office-doc:([a-fA-F0-9-]{36})$/);if(m&&window.OfficeBridge)window.OfficeBridge.openLinkedDocument(m[1]);return}var o=findObject(ev.target);if(o&&e.contains(o))choose(o)});document.addEventListener('scroll',bounds,true);window.addEventListener('resize',bounds);function objectAction(action){if(!selected||!selected.isConnected)return;var step=20;if(action==='delete'){selected.remove();selected=null;ui.style.display='none';report();return}var r=selected.getBoundingClientRect();if(action==='larger'||action==='smaller'){selected.style.maxWidth='none';selected.style.width=Math.max(60,r.width+(action==='larger'?step:-step))+'px';selected.style.height=Math.max(36,r.height+(action==='larger'?step:-step))+'px'}else{selected.style.position='relative';selected.style.left=((parseFloat(selected.style.left)||0)+(action==='left'?-step:action==='right'?step:0))+'px';selected.style.top=((parseFloat(selected.style.top)||0)+(action==='up'?-step:action==='down'?step:0))+'px'}bounds();report()}window.OfficeEditor={command:function(c,v){e.focus();document.execCommand(c,false,v==null?null:v);report()},insertHtml:function(h){e.focus();document.execCommand('insertHTML',false,h);report()},insertText:function(t){e.focus();document.execCommand('insertText',false,t);report()},selectedText:function(){return window.getSelection()?window.getSelection().toString():''},clear:function(){e.innerHTML='';choose(null);report()},objectAction:objectAction,tableAction:function(action,value){var s=window.getSelection(),n=s&&s.anchorNode?s.anchorNode.parentElement:null,c=n&&n.closest('td,th'),t=c&&c.closest('table');if(!t&&selected&&selected.tagName==='TABLE')t=selected;if(!t)return;if(action==='select-table'){t.classList.add('office-table-selected');markCells(Array.from(t.querySelectorAll('td,th')));report();return}if(!c){c=t.querySelector('td,th')}if(action==='select-row'){markCells(Array.from(c.parentElement.cells));return}if(action==='select-column'){markCells(Array.from(t.rows).map(function(row){return row.cells[c.cellIndex]}).filter(Boolean));return}if(action==='sum-column'){var col=c.cellIndex,number=0,found=false;Array.from(t.rows).forEach(function(row){var cell=row.cells[col];if(!cell||row.classList.contains('office-total-row'))return;var raw=(cell.innerText||cell.textContent||'').replace(/[٬،]/g,',').replace(/,/g,'').replace(/٫/g,'.').replace(/[^0-9.\-]/g,'');var parts=raw.split('.');if(parts.length>2)raw=parts.shift()+'.'+parts.join('');var value=parseFloat(raw);if(!isNaN(value)){number+=value;found=true}});if(!found){return}var totalRow=t.querySelector('tr.office-total-row')||t.insertRow(-1);totalRow.className='office-total-row';while(totalRow.cells.length<t.rows[0].cells.length)totalRow.insertCell(-1);Array.from(totalRow.cells).forEach(function(cell){cell.style.backgroundColor='#fff7cc';cell.style.fontWeight='700';cell.style.border='1px solid #455a64'});var labelCell=totalRow.cells[0];labelCell.textContent='الإجمالي';var totalCell=totalRow.cells[col];totalCell.textContent=number.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:6});totalCell.dataset.formula='SUM';totalCell.dataset.sourceColumn=String(col);report();return}if(action==='fill-selection'){var cells=selectedCells.length?selectedCells:Array.from(t.querySelectorAll('td,th'));cells.forEach(function(x){x.style.backgroundColor=value||'#d9ecff'});report();return}if(action==='border-color'){Array.from(t.querySelectorAll('td,th')).forEach(function(x){x.style.borderColor=value||'#455a64'});report();return}if(action==='border-style'){Array.from(t.querySelectorAll('td,th')).forEach(function(x){x.style.borderStyle=value||'solid'});report();return}var r=c.closest('tr');if(action==='add-row'){var nr=r.cloneNode(false);for(var i=0;i<r.cells.length;i++){var nc=r.cells[i].cloneNode(false);nc.innerHTML='<br>';nr.appendChild(nc)}r.parentNode.insertBefore(nr,r.nextSibling)}else if(action==='add-column'){var idx=c.cellIndex;Array.from(t.rows).forEach(function(row){var nc=row.insertCell(Math.min(idx+1,row.cells.length));nc.innerHTML='<br>'})}else if(action==='delete-row'){if(t.rows.length>1)r.remove()}else if(action==='delete-column'){var idx=c.cellIndex;Array.from(t.rows).forEach(function(row){if(row.cells.length>1&&row.cells[idx])row.deleteCell(idx)})}report()},updatePage:function(bg,orientation,size,font){e.style.background=/^#[0-9a-fA-F]{6}$/.test(bg)?bg:'#FFFFFF';e.style.fontFamily=font+',sans-serif';e.dataset.orientation=orientation;e.dataset.size=size;var h={A4:1122,A5:794,A3:1588}[size]||1122;e.style.minHeight=(orientation==='LANDSCAPE'?Math.round(h*0.707):h)+'px'}};window.OfficeEditor.updatePage('$background','$orientation','$size',${JSONObject.quote(officeWebFontName(document.fontFamily))});})();</script></body></html>"""
 }
 
 private fun sanitizeOfficeHtml(html: String): String {
@@ -699,6 +699,42 @@ private fun PageSettingsToolbar(document: LocalOfficeDocument, onChange: (String
     }
 }
 
+private data class OfficeShapeChoice(val kind: String, val label: String, val icon: String)
+
+private val shapeGalleryPages = listOf(
+    listOf("roundRect" to "مستطيل مستدير" to "▢", "round" to "دائرة" to "○", "diamond" to "معين" to "◇", "triangle" to "مثلث" to "△", "hexagon" to "سداسي" to "⬡", "line" to "خط" to "╱", "arrow" to "سهم" to "➜", "doubleArrow" to "سهم مزدوج" to "↔", "speech" to "فقاعة" to "▱", "star" to "نجمة" to "☆").map { OfficeShapeChoice(it.first.first, it.first.second, it.second) },
+    listOf("parallelogram" to "متوازي" to "▱", "trapezoid" to "شبه منحرف" to "⏢", "pentagon" to "خماسي" to "⬠", "cube" to "مكعب" to "▣", "cylinder" to "أسطوانة" to "▤", "cloud" to "سحابة" to "☁", "leftRight" to "يمين ويسار" to "↔", "upDown" to "أعلى وأسفل" to "↕", "callout" to "وسيلة شرح" to "▰", "burst" to "انفجار" to "✺").map { OfficeShapeChoice(it.first.first, it.first.second, it.second) }
+)
+
+private fun officeShapeHtml(kind: String): String {
+    val style = when (kind) {
+        "round" -> "width:82px;height:82px;border-radius:50%;"
+        "roundRect" -> "width:180px;height:72px;border-radius:14px;"
+        "diamond" -> "width:76px;height:76px;transform:rotate(45deg);"
+        "triangle" -> "width:0;height:0;border-left:44px solid transparent;border-right:44px solid transparent;border-bottom:82px solid #ffffff;filter:drop-shadow(0 0 0 #455a64);"
+        "hexagon" -> "width:100px;height:70px;clip-path:polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%);"
+        "parallelogram" -> "width:130px;height:72px;transform:skew(-18deg);"
+        "trapezoid" -> "width:125px;height:72px;clip-path:polygon(20% 0,80% 0,100% 100%,0 100%);"
+        "pentagon" -> "width:90px;height:84px;clip-path:polygon(50% 0,100% 38%,82% 100%,18% 100%,0 38%);"
+        "cube" -> "width:92px;height:78px;box-shadow:16px -12px 0 -1px #fff,16px -12px 0 1px #455a64;"
+        "cylinder" -> "width:82px;height:92px;border-radius:50% / 14%;"
+        "speech" -> "width:170px;height:72px;border-radius:16px;"
+        "cloud" -> "width:150px;height:80px;border-radius:50%;"
+        "star", "burst" -> "width:86px;height:86px;clip-path:polygon(50% 0,61% 35%,98% 35%,68% 56%,79% 92%,50% 70%,21% 92%,32% 56%,2% 35%,39% 35%);"
+        "line" -> "width:150px;height:0;border-top:3px solid #455a64;"
+        "arrow", "doubleArrow", "leftRight", "upDown" -> "font-size:42px;border:0;width:150px;height:58px;"
+        else -> "width:150px;height:72px;border-radius:8px;"
+    }
+    val content = when (kind) {
+        "arrow" -> "➜"
+        "doubleArrow", "leftRight" -> "↔"
+        "upDown" -> "↕"
+        else -> ""
+    }
+    val border = if (kind in setOf("line", "arrow", "doubleArrow", "leftRight", "upDown")) "" else "border:2px solid #455a64;background:#ffffff;"
+    return "<div class=\"office-object office-shape\" data-office-object=\"true\" contenteditable=\"true\" style=\"display:inline-flex;align-items:center;justify-content:center;margin:10px;${border}${style}\">$content</div><p><br></p>"
+}
+
 @Composable
 private fun WordToolbar(document: LocalOfficeDocument, officeDocuments: List<LocalOfficeDocument>, editor: WebView?, fontKey: String, onFontChange: (String) -> Unit, onPickImage: (Int) -> Unit, onTakePhoto: () -> Unit, onInsertTable: (Int, Int, String) -> Unit, onSave: () -> Unit, onSaveAs: (String) -> Unit, onRename: (String) -> Unit, onExportDocx: () -> Unit, onOpenLinkedDocument: (String) -> Unit, onPageSettingsChange: (String, String, String) -> Unit, onClose: () -> Unit) {
     val context = LocalContext.current
@@ -713,6 +749,7 @@ private fun WordToolbar(document: LocalOfficeDocument, officeDocuments: List<Loc
     var showSaveAsDialog by remember { mutableStateOf(false) }
     var showRenameDialog by remember { mutableStateOf(false) }
     var showLinkedDocumentsMenu by remember { mutableStateOf(false) }
+    var shapePage by remember { mutableStateOf(0) }
     var commentText by remember { mutableStateOf("") }
     var signerName by remember { mutableStateOf("") }
     var saveAsTitle by remember(document.id) { mutableStateOf(document.title) }
@@ -728,8 +765,8 @@ private fun WordToolbar(document: LocalOfficeDocument, officeDocuments: List<Loc
     val imageExportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("image/png")) { uri ->
         if (uri != null) exportWebViewSnapshot(context, editor, uri)
     }
-    Column(Modifier.fillMaxWidth().background(Color(0xffe2e2e2), RoundedCornerShape(6.dp))) {
-        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(Modifier.fillMaxWidth().background(Color(0xffdfe5eb), RoundedCornerShape(8.dp)).border(1.dp, Color(0xffc7d0da), RoundedCornerShape(8.dp))) {
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp, vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf("رئيسية", "ملف", "إدراج", "عرض", "مراجعة", "قلم").forEach { item ->
                 TextButton(onClick = { tab = item }) { Text(item, color = if (tab == item) Color(0xff1675b8) else Color.DarkGray, fontSize = 16.sp) }
             }
@@ -793,22 +830,16 @@ private fun WordToolbar(document: LocalOfficeDocument, officeDocuments: List<Loc
                     }
                 })
                 InsertToolRow(icon = "☷", title = "استخراج النص", onClick = { copySelection(context, editor, false) })
+                InsertToolRow(icon = "—", title = "فاصل أفقي", onClick = { executeOfficeCommand(editor, "insertHorizontalRule") })
+                InsertToolRow(icon = "↵", title = "فاصل صفحة", onClick = { insertAtCursor(editor, "<div style=\"break-before:page;height:1px\"></div><p><br></p>") })
+                InsertToolRow(icon = "▤", title = "التاريخ والوقت", onClick = {
+                    insertAtCursor(editor, "<span>${DateFormat.getDateInstance(DateFormat.SHORT).format(Date()).escapeOfficeHtml()}</span>")
+                })
                 InsertToolRow(icon = "▣", title = "مربع نص", onClick = {
                     insertAtCursor(editor, "<div class=\"office-object\" data-office-object=\"true\" contenteditable=\"true\" style=\"display:block;border:1.5px solid #536170;padding:14px;margin:10px 0;min-height:70px;width:260px;background:#fff\"><p>اكتب النص هنا</p></div><p><br></p>")
                 })
-                InsertToolRow(icon = "◇", title = "الشكل", onClick = { shapeMenu = true }, trailing = {
-                    TextButton(onClick = { insertAtCursor(editor, "<span class=\"office-object\" data-office-object=\"true\" style=\"display:inline-block;width:70px;height:70px;border:2px solid #444;border-radius:50%;margin:4px\"></span>") }) { Text("○") }
-                    TextButton(onClick = { insertAtCursor(editor, "<span class=\"office-object\" data-office-object=\"true\" style=\"display:inline-block;width:72px;height:4px;background:#444;margin:15px 5px\">➜</span>") }) { Text("↘") }
-                    TextButton(onClick = { insertAtCursor(editor, "<span class=\"office-object\" data-office-object=\"true\" style=\"display:inline-block;width:70px;height:70px;border:2px solid #444;margin:4px\"></span>") }) { Text("□") }
-                    Box {
-                        TextButton(onClick = { shapeMenu = true }) { Text("•••") }
-                        DropdownMenu(expanded = shapeMenu, onDismissRequest = { shapeMenu = false }) {
-                            DropdownMenuItem(text = { Text("مستطيل") }, onClick = { insertAtCursor(editor, "<div class=\"office-object\" data-office-object=\"true\" style=\"display:block;border:2px solid #455a64;width:180px;height:70px;margin:6px\"><br></div>"); shapeMenu = false })
-                            DropdownMenuItem(text = { Text("دائرة") }, onClick = { insertAtCursor(editor, "<span class=\"office-object\" data-office-object=\"true\" style=\"display:inline-block;width:72px;height:72px;border:2px solid #455a64;border-radius:50%;margin:6px\"></span>"); shapeMenu = false })
-                            DropdownMenuItem(text = { Text("سهم") }, onClick = { insertAtCursor(editor, "<span class=\"office-object\" data-office-object=\"true\" style=\"display:inline-block;font-size:32px;margin:6px\">➜</span>"); shapeMenu = false })
-                            DropdownMenuItem(text = { Text("خط") }, onClick = { insertAtCursor(editor, "<hr class=\"office-object\" data-office-object=\"true\" style=\"border:0;border-top:2px solid #455a64\">"); shapeMenu = false })
-                        }
-                    }
+                InsertToolRow(icon = "◇", title = "الأشكال", onClick = { shapePage = 0; shapeMenu = true }, trailing = {
+                    TextButton(onClick = { shapePage = 0; shapeMenu = true }) { Text("فتح المعرض") }
                 })
                 InsertToolRow(icon = "✍", title = "التوقيع", onClick = { showSignatureDialog = true })
                 InsertToolRow(icon = "▱", title = "التعليق", onClick = { showCommentDialog = true })
@@ -826,6 +857,25 @@ private fun WordToolbar(document: LocalOfficeDocument, officeDocuments: List<Loc
                         }
                     }
                 })
+                InsertToolRow(icon = "▤", title = "تحديد وتنسيق الجدول", onClick = { runOfficeTableAction(editor, "select-table") }, trailing = {
+                    TextButton(onClick = { runOfficeTableAction(editor, "select-row") }) { Text("صف") }
+                    TextButton(onClick = { runOfficeTableAction(editor, "select-column") }) { Text("عمود") }
+                    TextButton(onClick = { runOfficeTableAction(editor, "add-row") }) { Text("+ صف") }
+                    TextButton(onClick = { runOfficeTableAction(editor, "add-column") }) { Text("+ عمود") }
+                    TextButton(onClick = { runOfficeTableAction(editor, "sum-column") }) { Text("Σ جمع العمود") }
+                    TextButton(onClick = { runOfficeTableAction(editor, "delete-row") }) { Text("− صف") }
+                    TextButton(onClick = { runOfficeTableAction(editor, "delete-column") }) { Text("− عمود") }
+                })
+                InsertToolRow(icon = "🎨", title = "لون خلايا الجدول", onClick = { runOfficeTableAction(editor, "fill-selection", "#d9ecff") }, trailing = {
+                    listOf("#ffffff" to "أبيض", "#d9ecff" to "أزرق", "#ffe0e0" to "وردي", "#e3f2d2" to "أخضر", "#eadffc" to "بنفسجي", "#ffe2bd" to "برتقالي").forEach { (hex, label) ->
+                        TextButton(onClick = { runOfficeTableAction(editor, "fill-selection", hex) }) { Text("●", color = Color(android.graphics.Color.parseColor(hex)), fontSize = 22.sp) }
+                    }
+                })
+                InsertToolRow(icon = "═", title = "لون حدود الجدول", onClick = { runOfficeTableAction(editor, "border-color", "#455a64") }, trailing = {
+                    listOf("#455a64", "#1687e8", "#d64b50", "#65a30d", "#9333ea", "#f59e0b").forEach { hex ->
+                        TextButton(onClick = { runOfficeTableAction(editor, "border-color", hex) }) { Text("━", color = Color(android.graphics.Color.parseColor(hex)), fontSize = 20.sp) }
+                    }
+                })
             }
         } else Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).background(Color.White).padding(5.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
             when (tab) {
@@ -833,8 +883,51 @@ private fun WordToolbar(document: LocalOfficeDocument, officeDocuments: List<Loc
                     TextButton(onClick = { executeOfficeCommand(editor, "bold") }) { Text("B", fontSize = 18.sp) }
                     TextButton(onClick = { executeOfficeCommand(editor, "italic") }) { Text("I", fontSize = 18.sp) }
                     TextButton(onClick = { executeOfficeCommand(editor, "underline") }) { Text("U", fontSize = 18.sp) }
-                    TextButton(onClick = { executeOfficeCommand(editor, "justifyRight") }) { Text("محاذاة") }
-                    TextButton(onClick = { executeOfficeCommand(editor, "insertUnorderedList") }) { Text("قائمة") }
+                    TextButton(onClick = { executeOfficeCommand(editor, "strikeThrough") }) { Text("يتوسطه خط") }
+                    TextButton(onClick = { executeOfficeCommand(editor, "removeFormat") }) { Text("مسح التنسيق") }
+                    Box {
+                        TextButton(onClick = { fontMenu = true }) { Text("الخط: ${ArabicFonts.firstOrNull { it.key == fontKey }?.label ?: "عربي"}") }
+                        DropdownMenu(fontMenu, { fontMenu = false }) {
+                            ArabicFonts.forEach { font ->
+                                DropdownMenuItem(text = { Text(font.label) }, onClick = {
+                                    installLocalOfficeFont(context, editor, font)
+                                    onFontChange(font.key)
+                                    executeOfficeCommand(editor, "fontName", officeWebFontName(font.key))
+                                    fontMenu = false
+                                })
+                            }
+                        }
+                    }
+                    Box {
+                        TextButton(onClick = { sizeMenu = true }) { Text("حجم الخط") }
+                        DropdownMenu(sizeMenu, { sizeMenu = false }) {
+                            listOf(10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48).forEach { size ->
+                                DropdownMenuItem(text = { Text("$size") }, onClick = { executeOfficeCommand(editor, "fontSize", htmlFontSize(size)); sizeMenu = false })
+                            }
+                        }
+                    }
+                    Text("لون النص", modifier = Modifier.align(Alignment.CenterVertically), fontSize = 12.sp)
+                    listOf("#111827" to Color(0xff111827), "#1675b8" to Color(0xff1675b8), "#b91c1c" to Color(0xffb91c1c), "#15803d" to Color(0xff15803d), "#7e22ce" to Color(0xff7e22ce)).forEach { (hex, color) ->
+                        TextButton(onClick = { executeOfficeCommand(editor, "foreColor", hex) }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 5.dp)) { Text("●", color = color, fontSize = 22.sp) }
+                    }
+                    Text("خلفية النص", modifier = Modifier.align(Alignment.CenterVertically), fontSize = 12.sp)
+                    listOf("#ffffff" to Color.White, "#fff09b" to Color(0xfffff09b), "#d9ecff" to Color(0xffd9ecff), "#dcfce7" to Color(0xffdcfce7), "#ffe0e0" to Color(0xffffe0e0)).forEach { (hex, color) ->
+                        TextButton(onClick = { executeOfficeCommand(editor, "hiliteColor", hex) }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 5.dp)) {
+                            Text("■", color = color, fontSize = 22.sp, modifier = Modifier.border(1.dp, Color.LightGray))
+                        }
+                    }
+                    TextButton(onClick = { executeOfficeCommand(editor, "justifyRight") }) { Text("يمين") }
+                    TextButton(onClick = { executeOfficeCommand(editor, "justifyCenter") }) { Text("وسط") }
+                    TextButton(onClick = { executeOfficeCommand(editor, "justifyLeft") }) { Text("يسار") }
+                    TextButton(onClick = { executeOfficeCommand(editor, "justifyFull") }) { Text("ضبط") }
+                    TextButton(onClick = { executeOfficeCommand(editor, "indent") }) { Text("زيادة المسافة") }
+                    TextButton(onClick = { executeOfficeCommand(editor, "outdent") }) { Text("تقليل المسافة") }
+                    TextButton(onClick = { executeOfficeCommand(editor, "insertUnorderedList") }) { Text("• قائمة") }
+                    TextButton(onClick = { executeOfficeCommand(editor, "insertOrderedList") }) { Text("١. قائمة") }
+                    TextButton(onClick = { executeOfficeCommand(editor, "formatBlock", "p") }) { Text("فقرة") }
+                    TextButton(onClick = { executeOfficeCommand(editor, "formatBlock", "h1") }) { Text("عنوان 1") }
+                    TextButton(onClick = { executeOfficeCommand(editor, "formatBlock", "h2") }) { Text("عنوان 2") }
+                    TextButton(onClick = { executeOfficeCommand(editor, "formatBlock", "blockquote") }) { Text("اقتباس") }
                 }
                 "قلم" -> {
                     TextButton(onClick = { executeOfficeCommand(editor, "bold") }) { Text("B") }
@@ -846,6 +939,9 @@ private fun WordToolbar(document: LocalOfficeDocument, officeDocuments: List<Loc
                     Box { TextButton(onClick = { sizeMenu = true }) { Text("الحجم") }; DropdownMenu(sizeMenu, { sizeMenu = false }) { listOf(11, 14, 16, 20, 24, 32).forEach { size -> DropdownMenuItem(text = { Text("$size") }, onClick = { executeOfficeCommand(editor, "fontSize", htmlFontSize(size)); sizeMenu = false }) } } }
                 }
                 "عرض" -> {
+                    TextButton(onClick = { editor?.settings?.textZoom = ((editor?.settings?.textZoom ?: 100) - 10).coerceAtLeast(60) }) { Text("− تكبير") }
+                    TextButton(onClick = { editor?.settings?.textZoom = 100 }) { Text("100%") }
+                    TextButton(onClick = { editor?.settings?.textZoom = ((editor?.settings?.textZoom ?: 100) + 10).coerceAtMost(180) }) { Text("+ تكبير") }
                     TextButton(onClick = { executeOfficeCommand(editor, "justifyRight") }) { Text("يمين") }
                     TextButton(onClick = { executeOfficeCommand(editor, "justifyCenter") }) { Text("وسط") }
                     TextButton(onClick = { executeOfficeCommand(editor, "justifyLeft") }) { Text("يسار") }
@@ -917,6 +1013,32 @@ private fun WordToolbar(document: LocalOfficeDocument, officeDocuments: List<Loc
             showTableSizeDialog = false
         }) { Text("إنشاء") } },
         dismissButton = { TextButton(onClick = { showTableSizeDialog = false }) { Text("إلغاء") } }
+    )
+    if (shapeMenu) AlertDialog(
+        onDismissRequest = { shapeMenu = false },
+        title = { Text("الأشكال") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                shapeGalleryPages[shapePage].chunked(5).forEach { row ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                        row.forEach { (kind, label, icon) ->
+                            TextButton(onClick = { insertAtCursor(editor, officeShapeHtml(kind)); shapeMenu = false }) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(icon, fontSize = 28.sp)
+                                    Text(label, fontSize = 10.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                    TextButton(enabled = shapePage > 0, onClick = { shapePage-- }) { Text("‹") }
+                    Text("${shapePage + 1} / ${shapeGalleryPages.size}", modifier = Modifier.padding(horizontal = 12.dp))
+                    TextButton(enabled = shapePage < shapeGalleryPages.lastIndex, onClick = { shapePage++ }) { Text("›") }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { shapeMenu = false }) { Text("إغلاق") } }
     )
 }
 
@@ -1051,8 +1173,9 @@ private fun insertOfficeTable(editor: WebView?, rows: Int, columns: Int, style: 
     insertAtCursor(editor, table)
 }
 
-private fun runOfficeTableAction(editor: WebView?, action: String) {
-    executeOfficeJavascript(editor, "window.OfficeEditor && window.OfficeEditor.tableAction(${JSONObject.quote(action)})")
+private fun runOfficeTableAction(editor: WebView?, action: String, value: String? = null) {
+    val valueArg = value?.let { ",${JSONObject.quote(it)}" }.orEmpty()
+    executeOfficeJavascript(editor, "window.OfficeEditor && window.OfficeEditor.tableAction(${JSONObject.quote(action)}$valueArg)")
 }
 
 private fun officeWebFontName(key: String): String = when (key) {

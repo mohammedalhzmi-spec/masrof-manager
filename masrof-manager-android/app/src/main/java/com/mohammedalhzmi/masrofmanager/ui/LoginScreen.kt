@@ -87,7 +87,7 @@ fun LoginScreen(onLogin: (String, String, Boolean) -> Unit, onRegister: () -> Un
                     textAlign = TextAlign.Center
                 )
                 Text(
-                    "الدخول اللاحق يتم باسم المستخدم وكلمة المرور",
+                    "الدخول محليًا باسم المستخدم أو البريد المسجل وكلمة المرور",
                     modifier = Modifier.fillMaxWidth(),
                     fontSize = 13.sp,
                     color = Color(0xff607080),
@@ -97,7 +97,7 @@ fun LoginScreen(onLogin: (String, String, Boolean) -> Unit, onRegister: () -> Un
                 OutlinedTextField(
                     value = username,
                     onValueChange = { username = it },
-                    label = { Text("البريد الإلكتروني لأول دخول / اسم المستخدم لاحقًا") },
+                    label = { Text("اسم المستخدم أو البريد الإلكتروني المسجل محليًا") },
                     leadingIcon = { Icon(Icons.Default.Person, contentDescription = "اسم المستخدم") },
                     colors = fieldColors,
                     modifier = Modifier.fillMaxWidth(),
@@ -142,11 +142,11 @@ fun LoginScreen(onLogin: (String, String, Boolean) -> Unit, onRegister: () -> Un
                 ) {
                     Text("دخول آمن", fontWeight = FontWeight.Bold)
                 }
-                TextButton(onClick = { /* ستربط باستعادة Firebase في المسار التالي */ }) {
-                    Text("نسيت كلمة المرور؟ إرسال رابط استعادة", color = GovNavy, fontSize = 14.sp)
+                TextButton(onClick = { /* تتم استعادة كلمة المرور محليًا بواسطة مدير النظام */ }) {
+                    Text("نسيت كلمة المرور؟ راجع مدير النظام", color = GovNavy, fontSize = 14.sp)
                 }
                 Text(
-                    "الدخول لأول مرة بالبريد الإلكتروني",
+                    "يمكن إنشاء الحسابات وتخزينها داخل قاعدة البيانات المحلية",
                     color = GovNavy,
                     fontSize = 15.sp,
                     modifier = Modifier.padding(vertical = 2.dp)
