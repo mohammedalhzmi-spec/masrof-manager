@@ -93,6 +93,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -417,7 +420,12 @@ fun OfficeEditorScreen(viewModel: MasrofViewModel, initialDocumentId: Long? = nu
                     onCellChange = { address, value ->
                         current?.let { latest -> current = latest.copy(cells = latest.cells + (address to value), updatedAt = System.currentTimeMillis()) }
                     },
-                    onFontChange = { font -> current?.let { latest -> current = latest.copy(fontFamily = font, updatedAt = System.currentTimeMillis()) } }
+                    onFontChange = { font -> current?.let { latest -> current = latest.copy(fontFamily = font, updatedAt = System.currentTimeMillis()) } },
+                    onCellStyleChange = { address, style ->
+                        current?.let { latest ->
+                            current = latest.copy(cellStyles = latest.cellStyles + (address to style), updatedAt = System.currentTimeMillis())
+                        }
+                    }
                 )
             }
         }
@@ -701,6 +709,13 @@ private fun PageSettingsToolbar(document: LocalOfficeDocument, onChange: (String
 
 private data class OfficeShapeChoice(val kind: String, val label: String, val icon: String)
 
+private val specialOfficeSymbols = listOf(
+    "©", "®", "™", "§", "¶", "•", "…", "–", "—", "±", "×", "÷",
+    "≤", "≥", "≠", "≈", "∞", "√", "π", "Σ", "Ω", "µ", "°", "‰",
+    "←", "↑", "→", "↓", "↔", "↕", "★", "☆", "✓", "✗", "♥", "◆",
+    "♠", "♣", "♦", "♪", "♫", "⌘", "⌁", "※", "⚠", "☑", "☐"
+)
+
 private val shapeGalleryPages = listOf(
     listOf("roundRect" to "مستطيل مستدير" to "▢", "round" to "دائرة" to "○", "diamond" to "معين" to "◇", "triangle" to "مثلث" to "△", "hexagon" to "سداسي" to "⬡", "line" to "خط" to "╱", "arrow" to "سهم" to "➜", "doubleArrow" to "سهم مزدوج" to "↔", "speech" to "فقاعة" to "▱", "star" to "نجمة" to "☆").map { OfficeShapeChoice(it.first.first, it.first.second, it.second) },
     listOf("parallelogram" to "متوازي" to "▱", "trapezoid" to "شبه منحرف" to "⏢", "pentagon" to "خماسي" to "⬠", "cube" to "مكعب" to "▣", "cylinder" to "أسطوانة" to "▤", "cloud" to "سحابة" to "☁", "leftRight" to "يمين ويسار" to "↔", "upDown" to "أعلى وأسفل" to "↕", "callout" to "وسيلة شرح" to "▰", "burst" to "انفجار" to "✺").map { OfficeShapeChoice(it.first.first, it.first.second, it.second) }
@@ -735,6 +750,17 @@ private fun officeShapeHtml(kind: String): String {
     return "<div class=\"office-object office-shape\" data-office-object=\"true\" contenteditable=\"true\" style=\"display:inline-flex;align-items:center;justify-content:center;margin:10px;${border}${style}\">$content</div><p><br></p>"
 }
 
+private fun normalizeOfficeUrl(value: String): String {
+    val trimmed = value.trim().take(2000)
+    if (trimmed.isBlank()) return ""
+    if (trimmed.startsWith("javascript:", ignoreCase = true) || trimmed.startsWith("data:", ignoreCase = true)) return ""
+    return when {
+        trimmed.startsWith("http://", ignoreCase = true) || trimmed.startsWith("https://", ignoreCase = true) -> trimmed
+        trimmed.startsWith("mailto:", ignoreCase = true) || trimmed.startsWith("tel:", ignoreCase = true) -> trimmed
+        else -> "https://$trimmed"
+    }
+}
+
 @Composable
 private fun WordToolbar(document: LocalOfficeDocument, officeDocuments: List<LocalOfficeDocument>, editor: WebView?, fontKey: String, onFontChange: (String) -> Unit, onPickImage: (Int) -> Unit, onTakePhoto: () -> Unit, onInsertTable: (Int, Int, String) -> Unit, onSave: () -> Unit, onSaveAs: (String) -> Unit, onRename: (String) -> Unit, onExportDocx: () -> Unit, onOpenLinkedDocument: (String) -> Unit, onPageSettingsChange: (String, String, String) -> Unit, onClose: () -> Unit) {
     val context = LocalContext.current
@@ -744,6 +770,8 @@ private fun WordToolbar(document: LocalOfficeDocument, officeDocuments: List<Loc
     var imageSizeMenu by remember { mutableStateOf(false) }
     var tableMenu by remember { mutableStateOf(false) }
     var showCommentDialog by remember { mutableStateOf(false) }
+    var showLinkDialog by remember { mutableStateOf(false) }
+    var showSymbolsDialog by remember { mutableStateOf(false) }
     var showSignatureDialog by remember { mutableStateOf(false) }
     var showTableSizeDialog by remember { mutableStateOf(false) }
     var showSaveAsDialog by remember { mutableStateOf(false) }
@@ -751,6 +779,8 @@ private fun WordToolbar(document: LocalOfficeDocument, officeDocuments: List<Loc
     var showLinkedDocumentsMenu by remember { mutableStateOf(false) }
     var shapePage by remember { mutableStateOf(0) }
     var commentText by remember { mutableStateOf("") }
+    var linkText by remember { mutableStateOf("") }
+    var linkUrl by remember { mutableStateOf("") }
     var signerName by remember { mutableStateOf("") }
     var saveAsTitle by remember(document.id) { mutableStateOf(document.title) }
     var renameTitle by remember(document.id) { mutableStateOf(document.title) }
@@ -835,6 +865,8 @@ private fun WordToolbar(document: LocalOfficeDocument, officeDocuments: List<Loc
                 InsertToolRow(icon = "▤", title = "التاريخ والوقت", onClick = {
                     insertAtCursor(editor, "<span>${DateFormat.getDateInstance(DateFormat.SHORT).format(Date()).escapeOfficeHtml()}</span>")
                 })
+                InsertToolRow(icon = "🔗", title = "رابط", onClick = { linkText = ""; linkUrl = ""; showLinkDialog = true })
+                InsertToolRow(icon = "Ω", title = "رموز خاصة", onClick = { showSymbolsDialog = true })
                 InsertToolRow(icon = "▣", title = "مربع نص", onClick = {
                     insertAtCursor(editor, "<div class=\"office-object\" data-office-object=\"true\" contenteditable=\"true\" style=\"display:block;border:1.5px solid #536170;padding:14px;margin:10px 0;min-height:70px;width:260px;background:#fff\"><p>اكتب النص هنا</p></div><p><br></p>")
                 })
@@ -988,6 +1020,39 @@ private fun WordToolbar(document: LocalOfficeDocument, officeDocuments: List<Loc
             commentText = ""; showCommentDialog = false
         }) { Text("إدراج") } },
         dismissButton = { TextButton(onClick = { showCommentDialog = false }) { Text("إلغاء") } }
+    )
+    if (showLinkDialog) AlertDialog(
+        onDismissRequest = { showLinkDialog = false },
+        title = { Text("إدراج رابط") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(value = linkText, onValueChange = { linkText = it }, label = { Text("النص الظاهر") }, singleLine = true)
+                OutlinedTextField(value = linkUrl, onValueChange = { linkUrl = it }, label = { Text("الرابط أو البريد الإلكتروني") }, singleLine = true)
+            }
+        },
+        confirmButton = { TextButton(onClick = {
+            val url = normalizeOfficeUrl(linkUrl)
+            val label = linkText.trim().ifBlank { url }.take(300).escapeOfficeHtml()
+            if (url.isNotBlank()) insertAtCursor(editor, "<a href=\"${url.escapeOfficeHtml()}\" target=\"_blank\" style=\"color:#1675b8;text-decoration:underline\">$label</a>")
+            linkText = ""; linkUrl = ""; showLinkDialog = false
+        }) { Text("إدراج") } },
+        dismissButton = { TextButton(onClick = { showLinkDialog = false }) { Text("إلغاء") } }
+    )
+    if (showSymbolsDialog) AlertDialog(
+        onDismissRequest = { showSymbolsDialog = false },
+        title = { Text("رموز خاصة") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                specialOfficeSymbols.chunked(6).forEach { row ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                        row.forEach { symbol ->
+                            TextButton(onClick = { insertAtCursor(editor, symbol.escapeOfficeHtml()); showSymbolsDialog = false }) { Text(symbol, fontSize = 24.sp) }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { showSymbolsDialog = false }) { Text("إغلاق") } }
     )
     if (showSignatureDialog) AlertDialog(
         onDismissRequest = { showSignatureDialog = false },
@@ -1212,11 +1277,13 @@ private fun fontTypeface(context: android.content.Context, key: String): Typefac
 private fun SpreadsheetPageEditor(
     document: LocalOfficeDocument,
     onCellChange: (String, String) -> Unit,
-    onFontChange: (String) -> Unit
+    onFontChange: (String) -> Unit,
+    onCellStyleChange: (String, String) -> Unit
 ) {
     var selectedCell by remember(document.id) { mutableStateOf("A6") }
     var fontMenu by remember { mutableStateOf(false) }
     val cellValue = document.cells[selectedCell].orEmpty()
+    val cellStyle = document.cellStyles[selectedCell].orEmpty()
     val outOfViewCells = document.cells.keys.count { address ->
         spreadsheetColumnIndex(address) > 40 || (address.takeLastWhile(Char::isDigit).toIntOrNull() ?: 0) > 1000
     }
@@ -1256,6 +1323,18 @@ private fun SpreadsheetPageEditor(
                     }
                 }
             }
+            OutlinedButton(onClick = { onCellStyleChange(selectedCell, toggleSpreadsheetStyle(cellStyle, "bold")) }) { Text("B") }
+            OutlinedButton(onClick = { onCellStyleChange(selectedCell, toggleSpreadsheetStyle(cellStyle, "italic")) }) { Text("I") }
+            OutlinedButton(onClick = { onCellStyleChange(selectedCell, toggleSpreadsheetStyle(cellStyle, "underline")) }) { Text("U") }
+            listOf("#111827", "#1675b8", "#b91c1c", "#15803d", "#7e22ce").forEach { color ->
+                TextButton(onClick = { onCellStyleChange(selectedCell, setSpreadsheetStyle(cellStyle, "text", color)) }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 3.dp)) { Text("●", color = Color(android.graphics.Color.parseColor(color)), fontSize = 20.sp) }
+            }
+            listOf("#ffffff", "#fff09b", "#d9ecff", "#dcfce7", "#ffe0e0").forEach { color ->
+                TextButton(onClick = { onCellStyleChange(selectedCell, setSpreadsheetStyle(cellStyle, "fill", color)) }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 3.dp)) { Text("■", color = Color(android.graphics.Color.parseColor(color)), fontSize = 20.sp) }
+            }
+            OutlinedButton(onClick = { onCellStyleChange(selectedCell, setSpreadsheetStyle(cellStyle, "align", "right")) }) { Text("يمين") }
+            OutlinedButton(onClick = { onCellStyleChange(selectedCell, setSpreadsheetStyle(cellStyle, "align", "center")) }) { Text("وسط") }
+            OutlinedButton(onClick = { onCellStyleChange(selectedCell, setSpreadsheetStyle(cellStyle, "align", "left")) }) { Text("يسار") }
             Text("المتاح: العمليات الحسابية و SUM / AVERAGE / MIN / MAX / PRODUCT / ROUND / ABS", modifier = Modifier.align(Alignment.CenterVertically), style = MaterialTheme.typography.labelSmall)
         }
         if (outOfViewCells > 0) Text("$outOfViewCells خلية محفوظة خارج مساحة العرض (40 عمودًا × 1000 صف)؛ ستبقى ضمن التصدير.", style = MaterialTheme.typography.labelSmall, color = Color(0xff875c12))
@@ -1292,24 +1371,58 @@ private fun SpreadsheetGrid(
                 columns.forEachIndexed { index, column ->
                     val address = "$column$row"
                     val raw = document.cells[address].orEmpty()
+                    val cellStyle = document.cellStyles[address].orEmpty()
+                    val fillColor = spreadsheetStyleValue(cellStyle, "fill")?.let(::officeColor) ?: Color.White
+                    val textColor = spreadsheetStyleValue(cellStyle, "text")?.let(::officeColor) ?: Color(0xff1f2933)
+                    val textAlign = when (spreadsheetStyleValue(cellStyle, "align")) {
+                        "right" -> TextAlign.End
+                        "center" -> TextAlign.Center
+                        else -> TextAlign.Start
+                    }
                     val evaluated = if (raw.startsWith("=") && selectedCell != address) SpreadsheetFormulaEvaluator.evaluate(raw, document.cells) else raw
                     val shown = if (evaluated.startsWith("#") && raw.startsWith("=")) raw else evaluated
                     BasicTextField(
                         value = shown,
                         onValueChange = { onSelect(address); onCellChange(address, it) },
                         modifier = Modifier.width(106.dp).height(46.dp)
-                            .background(if (selectedCell == address) Color(0xfff4faff) else Color.White)
+                            .background(if (selectedCell == address) Color(0xfff4faff) else fillColor)
                             .border(if (selectedCell == address) 1.dp else 0.5.dp, if (selectedCell == address) Color(0xff2878b9) else Color.LightGray)
                             .padding(horizontal = 5.dp, vertical = 12.dp)
                             .onFocusChanged { if (it.isFocused) onSelect(address) },
                         singleLine = true,
-                        textStyle = TextStyle(fontSize = 14.sp, color = Color(0xff1f2933), textAlign = TextAlign.Start, fontFamily = composeFontFamily(fontKey))
+                        textStyle = TextStyle(
+                            fontSize = 14.sp,
+                            color = textColor,
+                            textAlign = textAlign,
+                            fontFamily = composeFontFamily(fontKey),
+                            fontWeight = if (spreadsheetStyleValue(cellStyle, "bold") == "1") FontWeight.Bold else FontWeight.Normal,
+                            fontStyle = if (spreadsheetStyleValue(cellStyle, "italic") == "1") FontStyle.Italic else FontStyle.Normal,
+                            textDecoration = if (spreadsheetStyleValue(cellStyle, "underline") == "1") TextDecoration.Underline else TextDecoration.None
+                        )
                     )
                 }
             }
         }
     }
 }
+
+private fun spreadsheetStyleValue(style: String, key: String): String? = style.split(';')
+    .firstOrNull { it.startsWith("$key=") }
+    ?.substringAfter('=')
+    ?.takeIf(String::isNotBlank)
+
+private fun toggleSpreadsheetStyle(style: String, key: String): String {
+    val current = spreadsheetStyleValue(style, key)
+    return setSpreadsheetStyle(style, key, if (current == "1") "0" else "1")
+}
+
+private fun setSpreadsheetStyle(style: String, key: String, value: String): String {
+    val entries = style.split(';').filter { it.isNotBlank() }.filterNot { it.startsWith("$key=") }.toMutableList()
+    entries += "$key=$value"
+    return entries.joinToString(";")
+}
+
+private fun officeColor(value: String): Color = runCatching { Color(android.graphics.Color.parseColor(value)) }.getOrDefault(Color.White)
 
 private fun columnLabel(index: Int): String {
     var value = index

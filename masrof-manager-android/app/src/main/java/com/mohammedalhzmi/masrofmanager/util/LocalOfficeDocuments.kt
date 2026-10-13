@@ -19,6 +19,7 @@ data class LocalOfficeDocument(
     val kind: OfficeDocumentKind,
     val wordHtml: String = "",
     val cells: Map<String, String> = emptyMap(),
+    val cellStyles: Map<String, String> = emptyMap(),
     val fontFamily: String = "cairo_regular",
     val updatedAt: Long = System.currentTimeMillis(),
     val roomDocumentId: Long? = null,
@@ -107,6 +108,7 @@ object LocalOfficeDocumentStore {
             put("orientation", document.orientation)
             put("pageBackground", document.pageBackground)
             put("cells", JSONObject().apply { document.cells.toSortedMap().forEach { (key, value) -> put(key, value) } })
+            put("cellStyles", JSONObject().apply { document.cellStyles.toSortedMap().forEach { (key, value) -> put(key, value) } })
         }.toString()
 
     fun delete(context: Context, id: String): Boolean {
@@ -127,12 +129,21 @@ object LocalOfficeDocumentStore {
                 put(key, cellsObject.optString(key, ""))
             }
         }
+        val stylesObject = json.optJSONObject("cellStyles") ?: JSONObject()
+        val cellStyles = buildMap {
+            val keys = stylesObject.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                put(key, stylesObject.optString(key, ""))
+            }
+        }
         return LocalOfficeDocument(
             id = json.getString("id"),
             title = json.optString("title", "مستند محلي"),
             kind = OfficeDocumentKind.valueOf(json.getString("kind")),
             wordHtml = json.optString("wordHtml", ""),
             cells = cells,
+            cellStyles = cellStyles,
             fontFamily = json.optString("fontFamily", "cairo_regular"),
             updatedAt = json.optLong("updatedAt", 0L),
             roomDocumentId = json.optLong("roomDocumentId").takeIf { it > 0L },
