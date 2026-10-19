@@ -27,6 +27,7 @@ import com.mohammedalhzmi.masrofmanager.ui.RegisterScreen
 import com.mohammedalhzmi.masrofmanager.util.AppLockPreferences
 import com.mohammedalhzmi.masrofmanager.util.UserSession
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 class MainActivity : FragmentActivity() {
     private var locked by mutableStateOf(false)
     private var showWelcome by mutableStateOf(true)

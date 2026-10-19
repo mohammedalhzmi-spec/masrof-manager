@@ -58,22 +58,63 @@ object OoxmlOfficeExchange {
         return when {
             "word/document.xml" in packageParts -> importDocx(ByteArrayInputStream(bytes), title)
             "xl/workbook.xml" in packageParts -> importXlsx(ByteArrayInputStream(bytes), title)
+            isLegacyWord(title, mimeType, bytes) -> importLegacyOffice(bytes, title, OfficeDocumentKind.WORD)
+            isLegacyExcel(title, mimeType, bytes) -> importLegacyOffice(bytes, title, OfficeDocumentKind.EXCEL)
             else -> {
                 val typeHint = mimeType.orEmpty().lowercase()
                 val suffix = title.substringAfterLast('.', "").lowercase()
                 when {
-                    typeHint == DOCX_MIME || suffix == "docx" -> error("الملف لا يحتوي على حزمة Word DOCX صالحة. إذا كان بصيغة DOC القديمة فلن يفتحها هذا المحرر بعد.")
-                    typeHint == XLSX_MIME || suffix == "xlsx" -> error("الملف لا يحتوي على حزمة Excel XLSX صالحة. إذا كان بصيغة XLS القديمة فلن يفتحها هذا المحرر بعد.")
-                    else -> error("تعذر تحديد الصيغة. يدعم الاستيراد ملفات DOCX وXLSX فقط، وليس DOC أو XLS القديمين.")
+                    typeHint.contains("word") || suffix in setOf("docx", "docm", "dotx", "dotm") -> error("تعذر قراءة حزمة Word. الملف قد يكون تالفًا أو محميًا بكلمة مرور.")
+                    typeHint.contains("sheet") || typeHint.contains("excel") || suffix in setOf("xlsx", "xlsm", "xltx", "xltm") -> error("تعذر قراءة حزمة Excel. الملف قد يكون تالفًا أو محميًا بكلمة مرور.")
+                    else -> error("تعذر تحديد نوع ملف Office أو أن الملف غير صالح.")
                 }
             }
         }
     }
 
-    private fun inspectOfficePackage(bytes: ByteArray): Set<String> {
-        require(bytes.size >= 4 && bytes[0] == 0x50.toByte() && bytes[1] == 0x4b.toByte()) {
-            "الملف المحدد ليس ملف Office حديثًا بصيغة DOCX أو XLSX."
+    private fun isLegacyWord(title: String, mimeType: String?, bytes: ByteArray): Boolean {
+        val suffix = title.substringAfterLast('.', "").lowercase()
+        return suffix in setOf("doc", "dot") || mimeType.orEmpty().lowercase().contains("msword") || isOleCompound(bytes)
+    }
+
+    private fun isLegacyExcel(title: String, mimeType: String?, bytes: ByteArray): Boolean {
+        val suffix = title.substringAfterLast('.', "").lowercase()
+        return suffix in setOf("xls", "xlt") || mimeType.orEmpty().lowercase().contains("ms-excel") || (isOleCompound(bytes) && suffix !in setOf("doc", "dot"))
+    }
+
+    private fun isOleCompound(bytes: ByteArray): Boolean = bytes.size >= 8 && bytes.copyOfRange(0, 8).contentEquals(byteArrayOf(
+        0xD0.toByte(), 0xCF.toByte(), 0x11, 0xE0.toByte(), 0xA1.toByte(), 0xB1.toByte(), 0x1A, 0xE1.toByte()
+    ))
+
+    /** Best-effort reader for legacy binary DOC/XLS files when no third-party Office engine is available. */
+    private fun importLegacyOffice(bytes: ByteArray, title: String, kind: OfficeDocumentKind): ImportResult {
+        val text = extractLegacyText(bytes).trim().ifBlank { "تعذر استخراج نص قابل للتحرير من هذا الملف القديم. افتحه أولًا في Word أو Excel ثم احفظه بصيغة حديثة." }
+        val document = if (kind == OfficeDocumentKind.WORD) {
+            LocalOfficeDocument(UUID.randomUUID().toString(), title.cleanOfficeTitle(), kind, wordHtml = text.lineSequence().joinToString("") { "<p>${escapeHtml(it)}</p>" })
+        } else {
+            LocalOfficeDocument(UUID.randomUUID().toString(), title.cleanOfficeTitle(), kind, cells = text.lineSequence().filter(String::isNotBlank).take(MAX_CELLS).mapIndexed { index, line -> "A${index + 1}" to line }.toMap())
         }
+        return ImportResult(document, listOf("تم فتح صيغة Office القديمة بوضع التوافق؛ قد لا تنتقل الجداول والتنسيقات والرسومات المعقدة بالكامل. احفظ الملف بصيغة DOCX أو XLSX للحصول على أفضل نتيجة."))
+    }
+
+    private fun extractLegacyText(bytes: ByteArray): String {
+        val unicode = buildString {
+            var index = 0
+            while (index + 1 < bytes.size) {
+                val code = (bytes[index].toInt() and 0xff) or ((bytes[index + 1].toInt() and 0xff) shl 8)
+                if (code in 32..0xD7FF || code == 10 || code == 13 || code == 9) append(code.toChar()) else if (isNotEmpty() && last() != '\n') append('\n')
+                index += 2
+            }
+        }
+        val ascii = bytes.map { it.toInt() and 0xff }.fold(StringBuilder()) { out, value ->
+            if (value in 32..126 || value == 10 || value == 13 || value == 9) out.append(value.toChar()) else if (out.isNotEmpty() && out.last() != '\n') out.append('\n')
+            out
+        }.toString()
+        return (unicode + "\n" + ascii).lineSequence().map(String::trim).filter { it.length >= 2 }.distinct().take(2000).joinToString("\n")
+    }
+
+    private fun inspectOfficePackage(bytes: ByteArray): Set<String> {
+        if (bytes.size < 4 || bytes[0] != 0x50.toByte() || bytes[1] != 0x4b.toByte()) return emptySet()
         val relevant = mutableSetOf<String>()
         var total = 0L
         var count = 0
@@ -711,7 +752,10 @@ object OoxmlOfficeExchange {
             runCatching { setAttribute("http://javax.xml.XMLConstants/property/accessExternalSchema", "") }
         }
         val builder = factory.newDocumentBuilder().apply { setEntityResolver { _, _ -> InputSource(StringReader("")) } }
-        return builder.parse(ByteArrayInputStream(bytes))
+        val normalized = bytes.toString(StandardCharsets.UTF_8)
+            .replace(Regex("^\\uFEFF"), "")
+            .replaceFirst(Regex("<\\?xml[^>]*\\?>"), "<?xml version=\"1.0\" encoding=\"UTF-8\"?>")
+        return builder.parse(ByteArrayInputStream(normalized.toByteArray(StandardCharsets.UTF_8)))
     }
 
     private fun ZipOutputStream.addText(path: String, value: String) {

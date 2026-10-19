@@ -12,6 +12,7 @@ import com.mohammedalhzmi.masrofmanager.ui.forms.*
 import com.mohammedalhzmi.masrofmanager.util.AppPermission
 import com.mohammedalhzmi.masrofmanager.util.RolePreferences
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun AppNavigation(viewModel: MasrofViewModel) {
     val navController = rememberNavController()

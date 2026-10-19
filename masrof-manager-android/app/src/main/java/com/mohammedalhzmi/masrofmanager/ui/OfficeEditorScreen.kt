@@ -110,6 +110,7 @@ import com.mohammedalhzmi.masrofmanager.util.LocalOfficeDocumentStore
 import com.mohammedalhzmi.masrofmanager.util.OfficeDocumentRecord
 import com.mohammedalhzmi.masrofmanager.util.OfficeDocumentKind
 import com.mohammedalhzmi.masrofmanager.util.OoxmlOfficeExchange
+import com.mohammedalhzmi.masrofmanager.util.PdfOfficeExchange
 import com.mohammedalhzmi.masrofmanager.util.SpreadsheetFormulaEvaluator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -132,6 +133,7 @@ private val ArabicFonts = listOf(
     ArabicFontChoice("el_messiri_regular", "المسيري", R.font.el_messiri_regular)
 )
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun OfficeEditorScreen(viewModel: MasrofViewModel, initialDocumentId: Long? = null, onBack: () -> Unit) {
     val context = LocalContext.current
@@ -206,7 +208,37 @@ fun OfficeEditorScreen(viewModel: MasrofViewModel, initialDocumentId: Long? = nu
         }
     }
 
+    fun importPdfToWord(uri: Uri) {
+        scope.launch {
+            runCatching {
+                val imported = withContext(Dispatchers.IO) {
+                    val displayName = runCatching {
+                        context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                            if (cursor.moveToFirst()) cursor.getString(0) else null
+                        }
+                    }.getOrNull()?.takeIf(String::isNotBlank) ?: "مستند PDF محول"
+                    val input = context.contentResolver.openInputStream(uri) ?: error("تعذر قراءة ملف PDF المحدد.")
+                    PdfOfficeExchange.importToWord(context, input, displayName.substringBeforeLast('.'))
+                        .also { result -> LocalOfficeDocumentStore.save(context, result.document) }
+                }
+                savedFiles = withContext(Dispatchers.IO) { LocalOfficeDocumentStore.list(context) }
+                current = imported.document
+                saveMessage = imported.notices.joinToString(" ")
+                viewModel.saveOfficeDocument(context, imported.document) { linked, message ->
+                    saveMessage = "${imported.notices.joinToString(" ")} $message".trim()
+                    if (linked != null) current = current?.takeIf { it.id == linked.id }?.copy(roomDocumentId = linked.roomDocumentId, updatedAt = linked.updatedAt)
+                    scope.launch { savedFiles = withContext(Dispatchers.IO) { LocalOfficeDocumentStore.list(context) } }
+                }
+            }.onFailure { saveMessage = "تعذر تحويل PDF إلى Word: ${it.message.orEmpty()}" }
+        }
+    }
+
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let(::importOffice) }
+    val pdfLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        context.startActivity(Intent(context, com.example.PdfViewerActivity::class.java).setDataAndType(uri, "application/pdf").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+    }
+    val pdfToWordLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let(::importPdfToWord) }
     val imageLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri ?: return@rememberLauncherForActivityResult
         scope.launch {
@@ -297,6 +329,8 @@ fun OfficeEditorScreen(viewModel: MasrofViewModel, initialDocumentId: Long? = nu
             bookTags = bookTags,
             saveMessage = saveMessage,
             onImport = { importLauncher.launch(arrayOf("*/*")) },
+            onOpenPdf = { pdfLauncher.launch(arrayOf("application/pdf")) },
+            onConvertPdf = { pdfToWordLauncher.launch(arrayOf("application/pdf")) },
             onBack = onBack,
             onCreate = { kind, title, bookTag ->
                 scope.launch {
@@ -438,6 +472,8 @@ private fun OfficeEditorHome(
     bookTags: List<String>,
     saveMessage: String,
     onImport: () -> Unit,
+    onOpenPdf: () -> Unit,
+    onConvertPdf: () -> Unit,
     onBack: () -> Unit,
     onCreate: (OfficeDocumentKind, String, String) -> Unit,
     onOpen: (LocalOfficeDocument) -> Unit
@@ -454,9 +490,11 @@ private fun OfficeEditorHome(
             TextButton(onClick = onBack) { Text("رجوع") }
             Text("محرر Office", style = MaterialTheme.typography.headlineSmall, color = Color(0xff16486d))
         }
-        Text("تُحفظ الصفحات محليًا وفي سجل المستندات؛ وتُزامن سحابيًا عند توفر حساب وجهاز معتمدين. استيراد/تصدير DOCX وXLSX يدعم النصوص والتنسيق الأساسي والورقة الأولى والصيغ المحلية المدعومة، وليس جميع خصائص Office.", style = MaterialTheme.typography.bodyMedium)
+        Text("تُحفظ الصفحات محليًا وفي سجل المستندات؛ يدعم الاستيراد حزم Word وExcel الحديثة، والصيغ القديمة بوضع التوافق، مع فتح ملفات PDF للقراءة.", style = MaterialTheme.typography.bodyMedium)
         if (saveMessage.isNotBlank()) Text(saveMessage, style = MaterialTheme.typography.bodySmall, color = Color(0xff25704b))
         OutlinedButton(onClick = onImport, modifier = Modifier.fillMaxWidth()) { Text("استيراد DOCX أو XLSX") }
+        OutlinedButton(onClick = onOpenPdf, modifier = Modifier.fillMaxWidth()) { Text("فتح ملف PDF للقراءة") }
+        OutlinedButton(onClick = onConvertPdf, modifier = Modifier.fillMaxWidth()) { Text("تحويل PDF إلى Word قابل للتحرير") }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OfficeDocumentKind.values().forEach { kind ->
                 if (selectedKind == kind) Button(onClick = { selectedKind = kind; title = if (kind == OfficeDocumentKind.WORD) "مستند جديد" else "جدول بيانات جديد" }, modifier = Modifier.weight(1f)) { Text(kind.extensionLabel) }
