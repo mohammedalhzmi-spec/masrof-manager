@@ -1,0 +1,7 @@
+global:
+  scrape_interval: 15s
+scrape_configs:
+  - job_name: masrof-office-api
+    static_configs:
+      - targets: ['api:8088']
+    metrics_path: /metrics

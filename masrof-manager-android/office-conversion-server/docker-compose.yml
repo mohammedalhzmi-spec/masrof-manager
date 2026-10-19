@@ -1,0 +1,68 @@
+services:
+  api:
+    build: .
+    command: node src/server.js
+    ports: ["8088:8088"]
+    environment:
+      PORT: 8088
+      REDIS_URL: redis://redis:6379
+      S3_ENDPOINT: http://minio:9000
+      S3_REGION: us-east-1
+      S3_BUCKET: masrof-office
+      S3_ACCESS_KEY: masrof-local
+      S3_SECRET_KEY: masrof-local-secret
+      STORAGE_MODE: s3
+      MAX_UPLOAD_MB: 100
+      JOB_TTL_HOURS: 24
+      API_TOKEN: ${API_TOKEN:-change-me}
+    depends_on: [redis, minio, minio-init]
+    volumes: ["conversion-tmp:/tmp/masrof-conversions"]
+  worker:
+    build: .
+    command: node src/worker.js
+    environment:
+      REDIS_URL: redis://redis:6379
+      S3_ENDPOINT: http://minio:9000
+      S3_REGION: us-east-1
+      S3_BUCKET: masrof-office
+      S3_ACCESS_KEY: masrof-local
+      S3_SECRET_KEY: masrof-local-secret
+      STORAGE_MODE: s3
+      MAX_CONVERSION_SECONDS: 180
+      JOB_TTL_HOURS: 24
+    depends_on: [redis, minio, minio-init]
+    volumes: ["conversion-tmp:/tmp/masrof-conversions"]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 2g
+    cpus: 2
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes: ["redis-data:/data"]
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address :9001
+    environment:
+      MINIO_ROOT_USER: masrof-local
+      MINIO_ROOT_PASSWORD: masrof-local-secret
+    volumes: ["minio-data:/data"]
+  minio-init:
+    image: minio/mc:latest
+    depends_on: [minio]
+    entrypoint: /bin/sh
+    command: -c 'until mc alias set local http://minio:9000 masrof-local masrof-local-secret; do sleep 1; done; mc mb --ignore-existing local/masrof-office; exit 0'
+  prometheus:
+    image: prom/prometheus:v3.6.0
+    profiles: [monitoring]
+    ports: ["9090:9090"]
+    volumes: ["./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro"]
+  grafana:
+    image: grafana/grafana:12.2.0
+    profiles: [monitoring]
+    ports: ["3000:3000"]
+    volumes: ["grafana-data:/var/lib/grafana"]
+volumes:
+  redis-data:
+  minio-data:
+  grafana-data:
+  conversion-tmp:
