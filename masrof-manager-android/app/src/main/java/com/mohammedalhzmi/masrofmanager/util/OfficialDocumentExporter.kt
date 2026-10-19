@@ -72,7 +72,7 @@ object OfficialDocumentExporter {
             fun entry(name: String, value: String) {
                 zip.putNextEntry(ZipEntry(name)); zip.write(value.toByteArray(Charsets.UTF_8)); zip.closeEntry()
             }
-        val fallbackLogo = if (document.type.isExpenseStatement()) R.drawable.expense_report_logo else R.drawable.official_emblem
+        val fallbackLogo = R.drawable.official_emblem
             val logo = ((AppPreferences.loadLogo(context, document.type) ?: BitmapFactory.decodeResource(context.resources, fallbackLogo))).let { bitmap -> ByteArrayOutputStream().also { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray() }
             fun bytesEntry(name: String, value: ByteArray) { zip.putNextEntry(ZipEntry(name)); zip.write(value); zip.closeEntry() }
             entry("[Content_Types].xml", """<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>""")

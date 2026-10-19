@@ -104,12 +104,19 @@ internal data class ExpenseBookData(
             val raw = value.orEmpty().lineSequence().firstOrNull { it.startsWith(prefix) }?.removePrefix(prefix).orEmpty()
             return raw.split(";").asSequence().filter { it.isNotBlank() }.mapNotNull { encoded ->
                 val p = encoded.split("~")
-                if (p.size < 5) null else { val text = p.map(::decodeText); text[0] to ExpenseLine(text[0], text[1], text[2], text[3], text[4]) }
+                if (p.size < 5) null else {
+                    val text = p.map(::decodeText)
+                    if (p.size >= 6) text[0] to ExpenseLine(text[1], text[2], text[3], text[4], text[5])
+                    else text[0] to ExpenseLine(text[0], text[1], text[2], text[3], text[4])
+                }
             }.toMap()
         }
 
         fun encodeRows(rows: Map<String, ExpenseLine>, page: Int): String {
-            val body = rows.values.joinToString(";") { line -> listOf(line.label, line.quantity, line.paid, line.unpaid, line.details).joinToString("~") { URLEncoder.encode(it, StandardCharsets.UTF_8.name()) } }
+            val body = rows.entries.joinToString(";") { (stableKey, line) ->
+                listOf(stableKey, line.label, line.quantity, line.paid, line.unpaid, line.details)
+                    .joinToString("~") { URLEncoder.encode(it, StandardCharsets.UTF_8.name()) }
+            }
             return "ROWV1|$page|$body"
         }
 

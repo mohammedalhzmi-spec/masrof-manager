@@ -221,8 +221,7 @@ internal object ExpenseReportTemplateRenderer {
         drawLeft(c, "NO: ${d.documentNumber.ifBlank { "...." }}", 204f, 79f, body)
 
         val logo = header.logos[DocumentType.EXPENSE_STATEMENT] ?: header.logos[DocumentType.EXPENSE_REPORT]
-            ?: context?.let { BitmapFactory.decodeResource(it.resources, R.drawable.expense_report_logo) }
-            ?: context?.let { BitmapFactory.decodeResource(it.resources, R.drawable.cleaning_fund_watermark) }
+            ?: context?.let { BitmapFactory.decodeResource(it.resources, R.drawable.official_emblem) }
         logo?.let { bitmap ->
             val logoPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply { alpha = 235 }
             c.drawBitmap(bitmap, null, RectF(245f, 8f, 345f, 65f), logoPaint)

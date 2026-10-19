@@ -172,17 +172,17 @@ private fun DetailedRowsEditor(title: String, values: Map<String, ExpenseBookDat
     Text(title, style = MaterialTheme.typography.titleMedium)
     Text("تعبئة مستقلة لكل صف: البيان، العدد، قيمة المستهلك/المدفوع، المتبقي غير المدفوع، والتفاصيل.", style = MaterialTheme.typography.bodySmall)
     Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
-        values.values.forEach { line ->
+        values.forEach { (stableKey, line) ->
             androidx.compose.material3.Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(0.dp), verticalArrangement = Arrangement.spacedBy(0.dp)) {
-                    OfficialField(line.label, "البيان", { text -> onChange(values - line.label + (text to line.copy(label = text))) })
+                    OfficialField(line.label, "البيان", { text -> onChange(values + (stableKey to line.copy(label = text))) })
                     Row(horizontalArrangement = Arrangement.spacedBy(0.dp), modifier = Modifier.fillMaxWidth()) {
-                        OfficialField(line.quantity, "العدد", { text -> onChange(values + (line.label to line.copy(quantity = ExpenseBookData.normalizeAmountInput(text)))) }, minLines = 1, keyboardType = KeyboardType.Number, modifier = Modifier.weight(1f))
-                        OfficialField(line.paid, "قيمة المستهلك / مدفوع", { text -> onChange(values + (line.label to line.copy(paid = ExpenseBookData.normalizeAmountInput(text)))) }, minLines = 1, keyboardType = KeyboardType.Number, modifier = Modifier.weight(1f))
+                        OfficialField(line.quantity, "العدد", { text -> onChange(values + (stableKey to line.copy(quantity = ExpenseBookData.normalizeAmountInput(text)))) }, minLines = 1, keyboardType = KeyboardType.Number, modifier = Modifier.weight(1f))
+                        OfficialField(line.paid, "قيمة المستهلك / مدفوع", { text -> onChange(values + (stableKey to line.copy(paid = ExpenseBookData.normalizeAmountInput(text)))) }, minLines = 1, keyboardType = KeyboardType.Number, modifier = Modifier.weight(1f))
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(0.dp), modifier = Modifier.fillMaxWidth()) {
-                        OfficialField(line.unpaid, "متبقي غير مدفوع", { text -> onChange(values + (line.label to line.copy(unpaid = ExpenseBookData.normalizeAmountInput(text)))) }, minLines = 1, keyboardType = KeyboardType.Number, modifier = Modifier.weight(1f))
-                        OfficialField(line.details, "التفاصيل", { text -> onChange(values + (line.label to line.copy(details = text))) }, minLines = 2, modifier = Modifier.weight(1f))
+                        OfficialField(line.unpaid, "متبقي غير مدفوع", { text -> onChange(values + (stableKey to line.copy(unpaid = ExpenseBookData.normalizeAmountInput(text)))) }, minLines = 1, keyboardType = KeyboardType.Number, modifier = Modifier.weight(1f))
+                        OfficialField(line.details, "التفاصيل", { text -> onChange(values + (stableKey to line.copy(details = text))) }, minLines = 2, modifier = Modifier.weight(1f))
                     }
                 }
             }
