@@ -111,6 +111,7 @@ import com.mohammedalhzmi.masrofmanager.util.OfficeDocumentRecord
 import com.mohammedalhzmi.masrofmanager.util.OfficeDocumentKind
 import com.mohammedalhzmi.masrofmanager.util.OoxmlOfficeExchange
 import com.mohammedalhzmi.masrofmanager.util.PdfOfficeExchange
+import com.mohammedalhzmi.masrofmanager.util.PoiOfficeDocxExporter
 import com.mohammedalhzmi.masrofmanager.util.SpreadsheetFormulaEvaluator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -194,7 +195,7 @@ fun OfficeEditorScreen(viewModel: MasrofViewModel, initialDocumentId: Long? = nu
                     val output = context.contentResolver.openOutputStream(uri) ?: error("تعذر إنشاء ملف التصدير.")
                     output.use { stream ->
                         when (kind) {
-                            OfficeDocumentKind.WORD -> OoxmlOfficeExchange.exportDocx(documentToExport, stream)
+                            OfficeDocumentKind.WORD -> PoiOfficeDocxExporter.export(documentToExport, stream)
                             OfficeDocumentKind.EXCEL -> OoxmlOfficeExchange.exportXlsx(documentToExport, stream)
                         }
                     }
@@ -389,7 +390,7 @@ fun OfficeEditorScreen(viewModel: MasrofViewModel, initialDocumentId: Long? = nu
                     document = document,
                     officeDocuments = editorDocuments,
                     onExit = openHome,
-                    onContentChange = { html -> current = current?.copy(wordHtml = html, updatedAt = System.currentTimeMillis()) },
+                    onContentChange = { html, header, footer -> current = current?.copy(wordHtml = html, headerHtml = header, footerHtml = footer, updatedAt = System.currentTimeMillis()) },
                     onFontChange = { font -> current = current?.copy(fontFamily = font, updatedAt = System.currentTimeMillis()) },
                     imageToInsert = imageToInsert,
                     imageWidthToInsert = imageWidthToInsert,
@@ -543,7 +544,7 @@ private fun WordPageEditor(
     document: LocalOfficeDocument,
     officeDocuments: List<LocalOfficeDocument>,
     onExit: () -> Unit,
-    onContentChange: (String) -> Unit,
+    onContentChange: (String, String, String) -> Unit,
     onFontChange: (String) -> Unit,
     imageToInsert: String?,
     imageWidthToInsert: Int,
@@ -598,12 +599,16 @@ private fun WordPageEditor(
                     settings.setSupportMultipleWindows(false)
                     webViewClient = object : WebViewClient() {
                         override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean = true
+                        override fun onPageFinished(view: WebView?, url: String?) {
+                            super.onPageFinished(view, url)
+                            configureRemoOfficeEditor(view, document)
+                        }
                     }
                     setBackgroundColor(runCatching { android.graphics.Color.parseColor(document.pageBackground) }.getOrDefault(android.graphics.Color.WHITE))
-                    addJavascriptInterface(OfficeEditorBridge(this, context, { html -> onContentChangeState(html) }, onOpenLinkedDocument, { state -> selectionState = state }), "OfficeBridge")
+                    addJavascriptInterface(RemoOfficeBridge(this, context, { body, header, footer -> onContentChangeState(body, header, footer) }, { state -> selectionState = state }, onOpenLinkedDocument), "AndroidBridge")
                     tag = document.wordHtml
                     editorState.value = this
-                    loadDataWithBaseURL(null, officeEditorHtml(document, context), "text/html", "UTF-8", null)
+                    loadUrl("file:///android_asset/remoffice_editor.html")
                 }
             },
             update = { view ->
@@ -612,9 +617,9 @@ private fun WordPageEditor(
                 val stored = view.tag as? String
                 if (stored != document.wordHtml && !view.hasFocus()) {
                     view.tag = document.wordHtml
-                    view.loadDataWithBaseURL(null, officeEditorHtml(document, context), "text/html", "UTF-8", null)
-                } else {
-                    view.evaluateJavascript("window.OfficeEditor && window.OfficeEditor.updatePage(${JSONObject.quote(document.pageBackground)},${JSONObject.quote(document.orientation)},${JSONObject.quote(document.pageSize)},${JSONObject.quote(officeWebFontName(document.fontFamily))});", null)
+                    view.loadUrl("file:///android_asset/remoffice_editor.html")
+                } else if (!view.hasFocus()) {
+                    configureRemoOfficeEditor(view, document)
                 }
             }
         )
@@ -644,6 +649,92 @@ private fun WordPageEditor(
           contentColor = Color(0xff334155)
       ) { Text("▦", fontSize = 23.sp) }
     }
+}
+
+private class RemoOfficeBridge(
+    private val webView: WebView,
+    private val context: Context,
+    private val onContent: (String, String, String) -> Unit,
+    private val onSelection: (String) -> Unit,
+    private val onOpenLinkedDocument: (String) -> Unit
+) {
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    @JavascriptInterface
+    fun onSelectionChanged(json: String) { mainHandler.post { onSelection(json) } }
+
+    @JavascriptInterface
+    fun onContentChanged(json: String) {
+        mainHandler.post {
+            runCatching {
+                val obj = JSONObject(json)
+                val body = obj.optString("bodyHtml", "<p><br></p>")
+                webView.tag = body
+                onContent(body, obj.optString("headerHtml", ""), obj.optString("footerHtml", ""))
+            }.onFailure { onContent(json, "", "") }
+        }
+    }
+
+    @JavascriptInterface
+    fun onTrackedChange(json: String) { /* tracked changes remain inside the HTML payload */ }
+
+    @JavascriptInterface
+    fun onCommentAnchorCreated(json: String) { /* comments remain inside the HTML payload */ }
+
+    @JavascriptInterface
+    fun openLinkedDocument(id: String) {
+        if (id.matches(Regex("[A-Fa-f0-9-]{36}"))) mainHandler.post { onOpenLinkedDocument(id) }
+    }
+}
+
+private fun configureRemoOfficeEditor(view: WebView?, document: LocalOfficeDocument) {
+    view ?: return
+    val body = JSONObject.quote(document.wordHtml.ifBlank { "<p><br></p>" })
+    val header = JSONObject.quote(document.headerHtml)
+    val footer = JSONObject.quote(document.footerHtml)
+    val size = JSONObject.quote(document.pageSize)
+    val orientation = JSONObject.quote(if (document.orientation == "LANDSCAPE") "Landscape" else "Portrait")
+    val margin = JSONObject.quote("Normal")
+    val bg = JSONObject.quote(document.pageBackground)
+    val script = """
+        (function(){
+          if(!window.editorApi)return;
+          window.OfficeEditor=window.OfficeEditor||{};
+          var e=document.getElementById('editor');
+          var api=window.editorApi;
+          OfficeEditor.command=function(c,v){
+            var m={bold:'toggleBold',italic:'toggleItalic',underline:'toggleUnderline',strikeThrough:'toggleStrikethrough',superscript:'toggleSuperscript',subscript:'toggleSubscript',removeFormat:'clearFormatting',justifyRight:'setAlignment',justifyCenter:'setAlignment',justifyLeft:'setAlignment',justifyFull:'setAlignment',indent:'indent',outdent:'outdent',insertUnorderedList:'toggleBulletList',insertOrderedList:'toggleNumberList'};
+            if(c==='fontName')return api.setFontFamily(v||'Arial');
+            if(c==='fontSize'){var sizes={1:8,2:10,3:12,4:14,5:18,6:24,7:36};return api.setFontSize(sizes[v]||parseInt(v)||14)}
+            if(c==='foreColor')return api.setForeColor(v||'#1E293B');
+            if(c==='hiliteColor'||c==='backColor')return api.setBackColor(v||'#FFFFFF');
+            if(c.indexOf('justify')===0)return api.setAlignment(c==='justifyRight'?'right':c==='justifyCenter'?'center':c==='justifyFull'?'justify':'left');
+            if(c==='formatBlock')return api.setHeading((v||'p').replace(/[<>]/g,''));
+            if(m[c])return api[m[c]]();
+          };
+          OfficeEditor.insertHtml=function(h){api.insertHtml(h)};
+          OfficeEditor.insertText=function(t){api.insertHtml(String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'))};
+          OfficeEditor.selectedText=function(){return String(window.getSelection?window.getSelection().toString():'')};
+          OfficeEditor.clear=function(){api.setDocumentPayload('<p><br></p>','','')};
+          OfficeEditor.adjustFontSize=function(d){return d>0?api.increaseFontSize():api.decreaseFontSize()};
+          OfficeEditor.setLineSpacing=function(v){return api.setLineHeight(v)};
+          OfficeEditor.setColumns=function(n){return api.setPageConfig('$size','$orientation','$margin',20,n)};
+          OfficeEditor.setMargins=function(kind){return api.setPageConfig('$size','$orientation',kind,20,1)};
+          OfficeEditor.setReadMode=function(v){return api.setReadMode(!!v)};
+          OfficeEditor.replaceText=function(f,r){return api.findAndReplace(f,r,true)};
+          OfficeEditor.reportWordCount=function(){return api.reportSelection&&api.reportSelection()};
+          OfficeEditor.setTrackChangesEnabled=function(v){return api.setTrackChangesEnabled(!!v)};
+          OfficeEditor.acceptAllTrackedChanges=function(){return api.acceptAllTrackedChanges()};
+          OfficeEditor.rejectAllTrackedChanges=function(){return api.rejectAllTrackedChanges()};
+          OfficeEditor.insertPageNumber=function(){return api.insertPageNumber()};
+          OfficeEditor.tableAction=function(a,v){var map={'add-row':'addTableRow','add-column':'addTableCol','delete-row':'deleteTableRow','delete-column':'deleteTableCol','merge-cells':'mergeTableCells'};if(a==='fill-selection')return api.setCellBackground(v||'#d9ecff');if(map[a])return api[map[a]]()};
+          OfficeEditor.objectAction=function(a){if(a==='delete')return api.deleteSelectedImage();if(a==='larger')return api.resizeImage(100);if(a==='smaller')return api.resizeImage(60)};
+          api.setDocumentPayload($body,$header,$footer);
+          api.setPageConfig($size,$orientation,$margin,20,1);
+          api.setPageBackground($bg,'#1E293B');
+        })();
+    """
+    view.evaluateJavascript(script, null)
 }
 
 private class OfficeEditorBridge(
@@ -834,6 +925,7 @@ private fun WordToolbar(document: LocalOfficeDocument, officeDocuments: List<Loc
     var replaceText by remember { mutableStateOf("") }
     var wordCountText by remember { mutableStateOf("") }
     var readMode by remember { mutableStateOf(false) }
+    var trackChangesEnabled by remember { mutableStateOf(false) }
     var shapePage by remember { mutableStateOf(0) }
     var commentText by remember { mutableStateOf("") }
     var linkText by remember { mutableStateOf("") }
@@ -962,9 +1054,9 @@ private fun WordToolbar(document: LocalOfficeDocument, officeDocuments: List<Loc
         } else Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).background(Color.White).padding(5.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
             when (tab) {
                 "الصفحة الرئيسية" -> {
-                    TextButton(onClick = { executeOfficeCommand(editor, "bold") }) { Text("B", color = if (selectionState.contains("\"bold\":true")) Color(0xff1675b8) else Color.Unspecified, fontSize = 18.sp) }
-                    TextButton(onClick = { executeOfficeCommand(editor, "italic") }) { Text("I", color = if (selectionState.contains("\"italic\":true")) Color(0xff1675b8) else Color.Unspecified, fontSize = 18.sp) }
-                    TextButton(onClick = { executeOfficeCommand(editor, "underline") }) { Text("U", color = if (selectionState.contains("\"underline\":true")) Color(0xff1675b8) else Color.Unspecified, fontSize = 18.sp) }
+                    TextButton(onClick = { executeOfficeCommand(editor, "bold") }) { Text("B", color = if ((selectionState.contains("\"bold\":true") || selectionState.contains("\"isBold\":true"))) Color(0xff1675b8) else Color.Unspecified, fontSize = 18.sp) }
+                    TextButton(onClick = { executeOfficeCommand(editor, "italic") }) { Text("I", color = if ((selectionState.contains("\"italic\":true") || selectionState.contains("\"isItalic\":true"))) Color(0xff1675b8) else Color.Unspecified, fontSize = 18.sp) }
+                    TextButton(onClick = { executeOfficeCommand(editor, "underline") }) { Text("U", color = if ((selectionState.contains("\"underline\":true") || selectionState.contains("\"isUnderline\":true"))) Color(0xff1675b8) else Color.Unspecified, fontSize = 18.sp) }
                     TextButton(onClick = { executeOfficeCommand(editor, "strikeThrough") }) { Text("يتوسطه خط") }
                     TextButton(onClick = { executeOfficeCommand(editor, "removeFormat") }) { Text("مسح التنسيق") }
                     Box {
@@ -1052,6 +1144,9 @@ private fun WordToolbar(document: LocalOfficeDocument, officeDocuments: List<Loc
                     TextButton(onClick = { executeOfficeJavascript(editor, "window.OfficeEditor && window.OfficeEditor.reportWordCount()") }) { Text("عداد الكلمات") }
                     TextButton(onClick = { readMode = !readMode; executeOfficeJavascript(editor, "window.OfficeEditor && window.OfficeEditor.setReadMode(" + readMode + ")") }) { Text(if (readMode) "تحرير" else "وضع القراءة") }
                     TextButton(onClick = { executeOfficeJavascript(editor, "window.OfficeEditor && window.OfficeEditor.insertPageNumber()") }) { Text("رقم الصفحة") }
+                    TextButton(onClick = { trackChangesEnabled = !trackChangesEnabled; executeOfficeJavascript(editor, "window.OfficeEditor && window.OfficeEditor.setTrackChangesEnabled(" + trackChangesEnabled + ")") }) { Text(if (trackChangesEnabled) "إيقاف تعقب التغييرات" else "تعقب التغييرات") }
+                    TextButton(onClick = { executeOfficeJavascript(editor, "window.OfficeEditor && window.OfficeEditor.acceptAllTrackedChanges()") }) { Text("قبول الكل") }
+                    TextButton(onClick = { executeOfficeJavascript(editor, "window.OfficeEditor && window.OfficeEditor.rejectAllTrackedChanges()") }) { Text("رفض الكل") }
                 }
                 else -> Unit
             }

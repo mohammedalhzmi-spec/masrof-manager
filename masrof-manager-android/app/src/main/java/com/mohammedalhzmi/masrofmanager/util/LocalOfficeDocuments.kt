@@ -18,6 +18,8 @@ data class LocalOfficeDocument(
     val title: String,
     val kind: OfficeDocumentKind,
     val wordHtml: String = "",
+    val headerHtml: String = "",
+    val footerHtml: String = "",
     val cells: Map<String, String> = emptyMap(),
     val cellStyles: Map<String, String> = emptyMap(),
     val fontFamily: String = "cairo_regular",
@@ -100,6 +102,8 @@ object LocalOfficeDocumentStore {
             put("title", document.title)
             put("kind", document.kind.name)
             put("wordHtml", document.wordHtml)
+            put("headerHtml", document.headerHtml)
+            put("footerHtml", document.footerHtml)
             put("fontFamily", document.fontFamily)
             put("updatedAt", document.updatedAt)
             put("roomDocumentId", document.roomDocumentId)
@@ -142,6 +146,8 @@ object LocalOfficeDocumentStore {
             title = json.optString("title", "مستند محلي"),
             kind = OfficeDocumentKind.valueOf(json.getString("kind")),
             wordHtml = json.optString("wordHtml", ""),
+            headerHtml = json.optString("headerHtml", ""),
+            footerHtml = json.optString("footerHtml", ""),
             cells = cells,
             cellStyles = cellStyles,
             fontFamily = json.optString("fontFamily", "cairo_regular"),
