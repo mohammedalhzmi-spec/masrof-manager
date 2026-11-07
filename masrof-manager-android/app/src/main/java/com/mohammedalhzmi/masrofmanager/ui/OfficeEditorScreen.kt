@@ -1159,10 +1159,17 @@ private fun WordToolbar(document: LocalOfficeDocument, officeDocuments: List<Loc
                     TextButton(onClick = { executeOfficeCommand(editor, "bold") }) { Text("B") }
                     TextButton(onClick = { executeOfficeCommand(editor, "italic") }) { Text("I") }
                     TextButton(onClick = { executeOfficeCommand(editor, "underline") }) { Text("U") }
+                    TextButton(onClick = { executeOfficeCommand(editor, "superscript") }) { Text("X²") }
+                    TextButton(onClick = { executeOfficeCommand(editor, "subscript") }) { Text("X₂") }
+                    TextButton(onClick = { executeOfficeJavascript(editor, "window.OfficeEditor && window.OfficeEditor.toggleFormatPainter()") }) { Text("نسخ التنسيق") }
                     TextButton(onClick = { executeOfficeCommand(editor, "foreColor", "#1675b8") }) { Text("لون النص") }
                     TextButton(onClick = { executeOfficeCommand(editor, "hiliteColor", "#fff09b") }) { Text("تمييز") }
+                    TextButton(onClick = { executeOfficeJavascript(editor, "window.OfficeEditor && window.OfficeEditor.insertHorizontalRule()") }) { Text("خط") }
+                    TextButton(onClick = { shapePage = 0; shapeMenu = true }) { Text("شكل") }
+                    TextButton(onClick = { showSignatureDialog = true }) { Text("توقيع") }
+                    TextButton(onClick = { showCommentDialog = true }) { Text("تعليق") }
                     Box { TextButton(onClick = { fontMenu = true }) { Text("الخط: ${ArabicFonts.firstOrNull { it.key == fontKey }?.label ?: "عربي"}") }; DropdownMenu(fontMenu, { fontMenu = false }) { ArabicFonts.forEach { font -> DropdownMenuItem(text = { Text(font.label) }, onClick = { installLocalOfficeFont(context, editor, font); onFontChange(font.key); executeOfficeCommand(editor, "fontName", officeWebFontName(font.key)); fontMenu = false }) } } }
-                    Box { TextButton(onClick = { sizeMenu = true }) { Text("الحجم") }; DropdownMenu(sizeMenu, { sizeMenu = false }) { listOf(11, 14, 16, 20, 24, 32).forEach { size -> DropdownMenuItem(text = { Text("$size") }, onClick = { executeOfficeCommand(editor, "fontSize", htmlFontSize(size)); sizeMenu = false }) } } }
+                    Box { TextButton(onClick = { sizeMenu = true }) { Text("الحجم") }; DropdownMenu(sizeMenu, { sizeMenu = false }) { listOf(8, 10, 12, 14, 16, 18, 24, 32, 48, 72).forEach { size -> DropdownMenuItem(text = { Text("$size") }, onClick = { executeOfficeCommand(editor, "fontSize", htmlFontSize(size)); sizeMenu = false }) } } }
                 }
                 "تخطيط الصفحة" -> {
                     TextButton(onClick = { editor?.settings?.textZoom = ((editor?.settings?.textZoom ?: 100) - 10).coerceAtLeast(60) }) { Text("− تكبير") }
@@ -1203,7 +1210,7 @@ private fun WordToolbar(document: LocalOfficeDocument, officeDocuments: List<Loc
         }
         if (tab == "تخطيط الصفحة") PageSettingsToolbar(document, onPageSettingsChange)
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).background(Color(0xfff4f6f8)).padding(horizontal = 4.dp, vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            listOf("الصفحة الرئيسية", "ملف", "إدراج", "تخطيط الصفحة", "مراجعة وعرض").forEach { item ->
+            listOf("الصفحة الرئيسية", "ملف", "إدراج", "تخطيط الصفحة", "مراجعة وعرض", "قلم").forEach { item ->
                 TextButton(onClick = { tab = item }) { Text(item, color = if (tab == item) Color(0xff1675b8) else Color.DarkGray, fontSize = 14.sp) }
             }
             TextButton(onClick = onClose) { Text("إغلاق", fontSize = 14.sp) }
