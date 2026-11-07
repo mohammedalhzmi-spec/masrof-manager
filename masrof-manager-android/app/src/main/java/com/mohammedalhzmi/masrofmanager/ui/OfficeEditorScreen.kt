@@ -539,6 +539,39 @@ private fun OfficeEditorHome(
     }
 }
 
+private data class RemoSelectionSnapshot(
+    val isBold: Boolean = false,
+    val isItalic: Boolean = false,
+    val isUnderline: Boolean = false,
+    val isStrike: Boolean = false,
+    val fontName: String = "",
+    val fontSize: Int = 14,
+    val alignment: String = "left",
+    val lineHeight: String = "1.5",
+    val wordCount: Int = 0,
+    val charCount: Int = 0,
+    val paragraphCount: Int = 0,
+    val selectedText: String = ""
+)
+
+private fun parseRemoSelectionState(raw: String): RemoSelectionSnapshot = runCatching {
+    val json = JSONObject(raw)
+    RemoSelectionSnapshot(
+        isBold = json.optBoolean("isBold", json.optBoolean("bold", false)),
+        isItalic = json.optBoolean("isItalic", json.optBoolean("italic", false)),
+        isUnderline = json.optBoolean("isUnderline", json.optBoolean("underline", false)),
+        isStrike = json.optBoolean("isStrikethrough", json.optBoolean("strike", false)),
+        fontName = json.optString("fontName", ""),
+        fontSize = json.optInt("fontSize", 14),
+        alignment = json.optString("alignment", "left"),
+        lineHeight = json.optString("lineHeight", "1.5"),
+        wordCount = json.optInt("wordCount", 0),
+        charCount = json.optInt("charCount", 0),
+        paragraphCount = json.optInt("paragraphCount", 0),
+        selectedText = json.optString("selectedText", "")
+    )
+}.getOrDefault(RemoSelectionSnapshot())
+
 @Composable
 private fun WordPageEditor(
     document: LocalOfficeDocument,
@@ -562,7 +595,7 @@ private fun WordPageEditor(
     val onContentChangeState by rememberUpdatedState(onContentChange)
     val editorState = remember(document.id) { mutableStateOf<WebView?>(null) }
     var showTools by remember(document.id) { mutableStateOf(true) }
-    var selectionState by remember(document.id) { mutableStateOf("{}") }
+    var selectionState by remember(document.id) { mutableStateOf(RemoSelectionSnapshot()) }
         LaunchedEffect(imageToInsert, editorState.value) {
         val data = imageToInsert ?: return@LaunchedEffect
         val editor = editorState.value ?: return@LaunchedEffect
@@ -605,7 +638,7 @@ private fun WordPageEditor(
                         }
                     }
                     setBackgroundColor(runCatching { android.graphics.Color.parseColor(document.pageBackground) }.getOrDefault(android.graphics.Color.WHITE))
-                    addJavascriptInterface(RemoOfficeBridge(this, context, { body, header, footer -> onContentChangeState(body, header, footer) }, { state -> selectionState = state }, onOpenLinkedDocument), "AndroidBridge")
+                    addJavascriptInterface(RemoOfficeBridge(this, context, { body, header, footer -> onContentChangeState(body, header, footer) }, { state -> selectionState = parseRemoSelectionState(state) }, onOpenLinkedDocument), "AndroidBridge")
                     tag = document.wordHtml
                     editorState.value = this
                     loadUrl("file:///android_asset/remoffice_editor.html")
@@ -676,6 +709,12 @@ private class RemoOfficeBridge(
     }
 
     @JavascriptInterface
+    fun copySelection(text: String) {
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+        if (!text.isNullOrEmpty()) clipboard?.setPrimaryClip(android.content.ClipData.newPlainText("office_selection", text))
+    }
+
+    @JavascriptInterface
     fun onTrackedChange(json: String) { /* tracked changes remain inside the HTML payload */ }
 
     @JavascriptInterface
@@ -710,6 +749,11 @@ private fun configureRemoOfficeEditor(view: WebView?, document: LocalOfficeDocum
             if(c==='hiliteColor'||c==='backColor')return api.setBackColor(v||'#FFFFFF');
             if(c.indexOf('justify')===0)return api.setAlignment(c==='justifyRight'?'right':c==='justifyCenter'?'center':c==='justifyFull'?'justify':'left');
             if(c==='formatBlock')return api.setHeading((v||'p').replace(/[<>]/g,''));
+            if(c==='insertDateTime')return api.insertDateTime();
+            if(c==='insertHorizontalRule')return api.insertHorizontalRule();
+            if(c==='insertPageBreak')return api.insertPageBreak();
+            if(c==='insertPageNumber')return api.insertPageNumber();
+            if(c==='delete'){document.execCommand('delete');return;}
             if(m[c])return api[m[c]]();
           };
           OfficeEditor.insertHtml=function(h){api.insertHtml(h)};
@@ -722,13 +766,19 @@ private fun configureRemoOfficeEditor(view: WebView?, document: LocalOfficeDocum
           OfficeEditor.setMargins=function(kind){return api.setPageConfig('$size','$orientation',kind,20,1)};
           OfficeEditor.setReadMode=function(v){return api.setReadMode(!!v)};
           OfficeEditor.replaceText=function(f,r){return api.findAndReplace(f,r,true)};
-          OfficeEditor.reportWordCount=function(){return api.reportSelection&&api.reportSelection()};
+          OfficeEditor.setZoom=function(v){return api.setZoom(v)};
+          OfficeEditor.setDirection=function(v){return api.setDirection(v)};
+          OfficeEditor.toggleFormatPainter=function(){return api.toggleFormatPainter()};
+          OfficeEditor.insertDateTime=function(){return api.insertDateTime()};
+          OfficeEditor.insertHorizontalRule=function(){return api.insertHorizontalRule()};
+          OfficeEditor.reportWordCount=function(){notifySelectionState()};
           OfficeEditor.setTrackChangesEnabled=function(v){return api.setTrackChangesEnabled(!!v)};
           OfficeEditor.acceptAllTrackedChanges=function(){return api.acceptAllTrackedChanges()};
           OfficeEditor.rejectAllTrackedChanges=function(){return api.rejectAllTrackedChanges()};
           OfficeEditor.insertPageNumber=function(){return api.insertPageNumber()};
           OfficeEditor.tableAction=function(a,v){var map={'add-row':'addTableRow','add-column':'addTableCol','delete-row':'deleteTableRow','delete-column':'deleteTableCol','merge-cells':'mergeTableCells'};if(a==='fill-selection')return api.setCellBackground(v||'#d9ecff');if(map[a])return api[map[a]]()};
           OfficeEditor.objectAction=function(a){if(a==='delete')return api.deleteSelectedImage();if(a==='larger')return api.resizeImage(100);if(a==='smaller')return api.resizeImage(60)};
+          OfficeEditor.updatePage=function(bg,orientation,size,font){api.setPageConfig(size,orientation,'Normal',20,1);api.setPageBackground(bg,'#1E293B');if(font)api.setFontFamily(font)};
           api.setDocumentPayload($body,$header,$footer);
           api.setPageConfig($size,$orientation,$margin,20,1);
           api.setPageBackground($bg,'#1E293B');
@@ -905,7 +955,7 @@ private fun normalizeOfficeUrl(value: String): String {
 }
 
 @Composable
-private fun WordToolbar(document: LocalOfficeDocument, officeDocuments: List<LocalOfficeDocument>, editor: WebView?, fontKey: String, selectionState: String, onFontChange: (String) -> Unit, onPickImage: (Int) -> Unit, onTakePhoto: () -> Unit, onInsertTable: (Int, Int, String) -> Unit, onSave: () -> Unit, onSaveAs: (String) -> Unit, onRename: (String) -> Unit, onExportDocx: () -> Unit, onOpenLinkedDocument: (String) -> Unit, onPageSettingsChange: (String, String, String) -> Unit, onClose: () -> Unit) {
+private fun WordToolbar(document: LocalOfficeDocument, officeDocuments: List<LocalOfficeDocument>, editor: WebView?, fontKey: String, selectionState: RemoSelectionSnapshot, onFontChange: (String) -> Unit, onPickImage: (Int) -> Unit, onTakePhoto: () -> Unit, onInsertTable: (Int, Int, String) -> Unit, onSave: () -> Unit, onSaveAs: (String) -> Unit, onRename: (String) -> Unit, onExportDocx: () -> Unit, onOpenLinkedDocument: (String) -> Unit, onPageSettingsChange: (String, String, String) -> Unit, onClose: () -> Unit) {
     val context = LocalContext.current
     var fontMenu by remember { mutableStateOf(false) }
     var sizeMenu by remember { mutableStateOf(false) }
@@ -1054,9 +1104,9 @@ private fun WordToolbar(document: LocalOfficeDocument, officeDocuments: List<Loc
         } else Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).background(Color.White).padding(5.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
             when (tab) {
                 "الصفحة الرئيسية" -> {
-                    TextButton(onClick = { executeOfficeCommand(editor, "bold") }) { Text("B", color = if ((selectionState.contains("\"bold\":true") || selectionState.contains("\"isBold\":true"))) Color(0xff1675b8) else Color.Unspecified, fontSize = 18.sp) }
-                    TextButton(onClick = { executeOfficeCommand(editor, "italic") }) { Text("I", color = if ((selectionState.contains("\"italic\":true") || selectionState.contains("\"isItalic\":true"))) Color(0xff1675b8) else Color.Unspecified, fontSize = 18.sp) }
-                    TextButton(onClick = { executeOfficeCommand(editor, "underline") }) { Text("U", color = if ((selectionState.contains("\"underline\":true") || selectionState.contains("\"isUnderline\":true"))) Color(0xff1675b8) else Color.Unspecified, fontSize = 18.sp) }
+                    TextButton(onClick = { executeOfficeCommand(editor, "bold") }) { Text("B", color = if (selectionState.isBold) Color(0xff1675b8) else Color.Unspecified, fontSize = 18.sp) }
+                    TextButton(onClick = { executeOfficeCommand(editor, "italic") }) { Text("I", color = if (selectionState.isItalic) Color(0xff1675b8) else Color.Unspecified, fontSize = 18.sp) }
+                    TextButton(onClick = { executeOfficeCommand(editor, "underline") }) { Text("U", color = if (selectionState.isUnderline) Color(0xff1675b8) else Color.Unspecified, fontSize = 18.sp) }
                     TextButton(onClick = { executeOfficeCommand(editor, "strikeThrough") }) { Text("يتوسطه خط") }
                     TextButton(onClick = { executeOfficeCommand(editor, "removeFormat") }) { Text("مسح التنسيق") }
                     Box {
@@ -1385,7 +1435,7 @@ private fun executeOfficeJavascript(editor: WebView?, script: String) {
 
 private fun copySelection(context: Context, editor: WebView?, removeAfterCopy: Boolean) {
     editor ?: return
-    executeOfficeJavascript(editor, "window.OfficeBridge && window.OfficeBridge.copySelection(window.OfficeEditor.selectedText())")
+    executeOfficeJavascript(editor, "window.AndroidBridge && window.AndroidBridge.copySelection(window.OfficeEditor.selectedText())")
     if (removeAfterCopy) executeOfficeCommand(editor, "delete")
 }
 
