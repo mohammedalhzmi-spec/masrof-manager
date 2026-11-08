@@ -14,6 +14,7 @@ import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 import org.jsoup.nodes.Node
 import org.jsoup.nodes.TextNode
+import org.jsoup.safety.Safelist
 import java.io.ByteArrayInputStream
 import java.io.OutputStream
 import java.math.BigInteger
@@ -21,6 +22,14 @@ import java.math.BigInteger
 /** Apache POI DOCX export path used by the embedded REMOOFFICE editor. */
 object PoiOfficeDocxExporter {
     private const val WORD_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+
+    private fun sanitizeHtml(html: String): String {
+        val safelist = Safelist.relaxed()
+            .addTags("table", "thead", "tbody", "tfoot", "tr", "td", "th", "hr", "div", "span")
+            .addAttributes(":all", "style", "align", "width", "height", "colspan", "rowspan")
+            .addAttributes("img", "src", "width", "height", "style")
+        return Jsoup.clean(html, safelist)
+    }
 
     fun export(document: LocalOfficeDocument, output: OutputStream) {
         require(document.kind == OfficeDocumentKind.WORD) { "اختر مستند Word للتصدير بصيغة DOCX." }
@@ -37,7 +46,7 @@ object PoiOfficeDocxExporter {
                 appendText(footer.createParagraph(), document.footerHtml)
             }
         }
-        val body = Jsoup.parseBodyFragment(HtmlSanitizer.sanitizeHtml(document.wordHtml)).body()
+        val body = Jsoup.parseBodyFragment(sanitizeHtml(document.wordHtml)).body()
         for (element in body.children()) appendBlock(doc, element)
         if (doc.paragraphs.isEmpty() && doc.tables.isEmpty()) doc.createParagraph()
         doc.write(output)
@@ -96,7 +105,7 @@ object PoiOfficeDocxExporter {
     }
 
     private fun appendText(paragraph: XWPFParagraph, html: String) {
-        val body = Jsoup.parseBodyFragment(HtmlSanitizer.sanitizeHtml(html)).body()
+        val body = Jsoup.parseBodyFragment(sanitizeHtml(html)).body()
         appendInline(paragraph, body.childNodes(), Style())
     }
 
