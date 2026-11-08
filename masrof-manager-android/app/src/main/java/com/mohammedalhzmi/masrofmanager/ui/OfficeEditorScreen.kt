@@ -111,7 +111,6 @@ import com.mohammedalhzmi.masrofmanager.util.OfficeDocumentRecord
 import com.mohammedalhzmi.masrofmanager.util.OfficeDocumentKind
 import com.mohammedalhzmi.masrofmanager.util.OoxmlOfficeExchange
 import com.mohammedalhzmi.masrofmanager.util.PdfOfficeExchange
-import com.mohammedalhzmi.masrofmanager.util.PoiOfficeDocxExporter
 import com.mohammedalhzmi.masrofmanager.util.SpreadsheetFormulaEvaluator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -195,7 +194,7 @@ fun OfficeEditorScreen(viewModel: MasrofViewModel, initialDocumentId: Long? = nu
                     val output = context.contentResolver.openOutputStream(uri) ?: error("تعذر إنشاء ملف التصدير.")
                     output.use { stream ->
                         when (kind) {
-                            OfficeDocumentKind.WORD -> PoiOfficeDocxExporter.export(documentToExport, stream)
+                            OfficeDocumentKind.WORD -> OoxmlOfficeExchange.exportDocx(documentToExport, stream)
                             OfficeDocumentKind.EXCEL -> OoxmlOfficeExchange.exportXlsx(documentToExport, stream)
                         }
                     }
