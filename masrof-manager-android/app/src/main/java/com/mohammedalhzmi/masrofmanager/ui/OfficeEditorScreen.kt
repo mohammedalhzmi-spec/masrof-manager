@@ -127,6 +127,7 @@ private data class ArabicFontChoice(val key: String, val label: String, val reso
 private val ArabicFonts = listOf(
     ArabicFontChoice("cairo_regular", "القاهرة", R.font.cairo_regular),
     ArabicFontChoice("noto_naskh_regular", "نسخ عربي", R.font.noto_naskh_regular),
+    ArabicFontChoice("noto_kufi_regular", "كوفي عربي", R.font.noto_kufi_regular),
     ArabicFontChoice("amiri_regular", "أميري", R.font.amiri_regular),
     ArabicFontChoice("tajawal_regular", "تجوال", R.font.tajawal_regular),
     ArabicFontChoice("scheherazade_regular", "شهرزاد", R.font.scheherazade_regular),
@@ -1483,6 +1484,7 @@ private fun officeWebFontName(key: String): String = when (key) {
     "amiri_regular" -> "Amiri"
     "tajawal_regular" -> "Tajawal"
     "noto_naskh_regular" -> "Noto Naskh Arabic"
+    "noto_kufi_regular" -> "Noto Kufi Arabic"
     "scheherazade_regular" -> "Scheherazade New"
     "el_messiri_regular" -> "El Messiri"
     else -> "Cairo"
@@ -1493,7 +1495,7 @@ private fun installLocalOfficeFont(context: Context, editor: WebView?, choice: A
     val bytes = runCatching { context.resources.openRawResource(choice.resourceId).use { it.readBytes() } }.getOrNull() ?: return
     if (bytes.size > 2 * 1024 * 1024) return
     val css = "@font-face{font-family:'${officeWebFontName(choice.key)}';src:url(data:font/ttf;base64,${Base64.encodeToString(bytes, Base64.NO_WRAP)}) format('truetype');font-weight:normal;font-style:normal;}"
-    val script = "(function(){var s=document.getElementById('office-local-font');if(!s){s=document.createElement('style');s.id='office-local-font';document.head.appendChild(s)}s.textContent=${JSONObject.quote(css)};document.getElementById('office-page').style.fontFamily=${JSONObject.quote(officeWebFontName(choice.key))}})()"
+    val script = "(function(){var s=document.getElementById('office-local-font');if(!s){s=document.createElement('style');s.id='office-local-font';document.head.appendChild(s)}s.textContent=${JSONObject.quote(css)};document.querySelectorAll('#editor,#pageHeader,#pageFooter').forEach(function(el){el.style.fontFamily=${JSONObject.quote(officeWebFontName(choice.key))}});if(window.editorApi&&window.editorApi.setFontFamily)window.editorApi.setFontFamily(${JSONObject.quote(officeWebFontName(choice.key))});})()"
     executeOfficeJavascript(editor, script)
 }
 
