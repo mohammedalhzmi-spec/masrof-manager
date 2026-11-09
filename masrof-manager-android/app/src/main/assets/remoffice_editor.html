@@ -458,6 +458,41 @@
     }
   }
 
+  // Keep long imported or newly typed documents paginated in the editing canvas.
+  // A page break is inserted only when the content exceeds another A4-height block;
+  // explicit/manual page breaks are never removed or rewritten.
+  let paginationScheduled = false;
+  function ensureAutomaticPageBreaks() {
+    if (paginationScheduled) return;
+    paginationScheduled = true;
+    requestAnimationFrame(function() {
+      paginationScheduled = false;
+      if (!editor || editor.getAttribute('contenteditable') !== 'true') return;
+      const pageHeight = 1050;
+      const desiredBreaks = Math.max(0, Math.ceil(editor.scrollHeight / pageHeight) - 1);
+      const automaticBreaks = editor.querySelectorAll('.page-break[data-auto-page-break="true"]').length;
+      let missing = desiredBreaks - automaticBreaks;
+      while (missing > 0) {
+        const last = editor.lastElementChild;
+        if (!last || last.classList.contains('page-break')) break;
+        const breakElement = document.createElement('div');
+        breakElement.className = 'page-break';
+        breakElement.setAttribute('data-auto-page-break', 'true');
+        breakElement.setAttribute('contenteditable', 'false');
+        const nextPage = document.createElement('p');
+        nextPage.innerHTML = '<br>';
+        editor.insertBefore(breakElement, last);
+        editor.insertBefore(nextPage, last);
+        missing -= 1;
+      }
+      if (desiredBreaks > automaticBreaks) {
+        ensureElementIds();
+        notifyContentChanged();
+        notifySelectionState();
+      }
+    });
+  }
+
   document.addEventListener('selectionchange', notifySelectionState);
   editor.addEventListener('click', function(e) {
     if (lastSelectedImage && lastSelectedImage !== e.target) {
@@ -478,6 +513,7 @@
     notifySelectionState();
   });
   editor.addEventListener('input', function() {
+    ensureAutomaticPageBreaks();
     notifySelectionState();
     notifyContentChanged();
   });
@@ -1056,6 +1092,7 @@
       document.getElementById('pageFooter').innerHTML = footerHtml || '';
       ensureElementIds();
       suppressTracking = false;
+      ensureAutomaticPageBreaks();
       notifySelectionState();
     }
   };

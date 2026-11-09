@@ -173,16 +173,40 @@ object OoxmlOfficeExchange {
                 "tbl" -> appendWordTable(html, element, imageData, usedImages, fontTracker)
             }
         }
+        val headerParts = parts.keys.filter { it.startsWith("word/header") && it.endsWith(".xml") }.sorted()
+        val footerParts = parts.keys.filter { it.startsWith("word/footer") && it.endsWith(".xml") }.sorted()
+        val headerHtml = appendWordHeaderFooterParts(parts, headerParts, fontTracker)
+        val footerHtml = appendWordHeaderFooterParts(parts, footerParts, fontTracker)
         val notices = mutableListOf("تم استيراد النص والفقرات والتنسيق الأساسي. راجع المستند؛ قد تختلف بعض تفاصيل التخطيط بين التطبيقات.")
         if (root.getElementsByTagNameNS(WORD_NS, "tbl").length > 0) notices += "استُوردت الجداول ببنية الصفوف والخلايا ودمج الأعمدة الأساسي؛ قد تختلف بعض حدود Word والتنسيقات المركبة."
         val drawingCount = root.getElementsByTagNameNS(WORD_NS, "drawing").length + root.getElementsByTagNameNS(WORD_NS, "pict").length
         if (usedImages.isNotEmpty()) notices += "تم تضمين ${usedImages.size} صورة مرتبطة داخل المستند؛ قد يختلف حجم العرض عن Word."
         if (drawingCount > usedImages.size) notices += "بعض الرسومات أو الأشكال المتجهة لم تُحوّل إلى صور نقطية قابلة للتحرير."
-        if (parts.keys.any { it.startsWith("word/header") || it.startsWith("word/footer") }) notices += "الترويسات والتذييلات ليست ضمن نطاق الاستيراد الحالي."
+        if (headerHtml.isNotBlank()) notices += "تم استيراد نص الترويسات إلى منطقة رأس الصفحة القابلة للتحرير."
+        if (footerHtml.isNotBlank()) notices += "تم استيراد نص التذييلات إلى منطقة تذييل الصفحة القابلة للتحرير."
         return ImportResult(
-            LocalOfficeDocument(UUID.randomUUID().toString(), title.cleanOfficeTitle(), OfficeDocumentKind.WORD, wordHtml = html.toString(), fontFamily = fontTracker.key),
+            LocalOfficeDocument(UUID.randomUUID().toString(), title.cleanOfficeTitle(), OfficeDocumentKind.WORD, wordHtml = html.toString(), headerHtml = headerHtml, footerHtml = footerHtml, fontFamily = fontTracker.key),
             notices
         )
+    }
+
+    private fun appendWordHeaderFooterParts(
+        parts: Map<String, ByteArray>,
+        names: List<String>,
+        fontTracker: FontTracker
+    ): String {
+        if (names.isEmpty()) return ""
+        val output = StringBuilder()
+        names.forEach { name ->
+            val xml = parts[name] ?: return@forEach
+            val root = runCatching { parseXml(xml) }.getOrNull() ?: return@forEach
+            val paragraphs = root.getElementsByTagNameNS(WORD_NS, "p")
+            for (index in 0 until paragraphs.length) {
+                val paragraph = paragraphs.item(index) as? Element ?: continue
+                appendWordParagraph(output, paragraph, emptyMap(), mutableSetOf(), fontTracker)
+            }
+        }
+        return output.toString()
     }
 
     private class FontTracker(var key: String = "cairo_regular", var found: Boolean = false)
@@ -318,7 +342,15 @@ object OoxmlOfficeExchange {
                 Node.ELEMENT_NODE -> when (node.localName ?: node.nodeName.substringAfter(':')) {
                     "t" -> append(escapeHtml(node.textContent.orEmpty()))
                     "tab" -> append("&#9;")
-                    "br", "cr" -> append("<br>")
+                    "br", "cr" -> {
+                        val breakType = attributeByLocalName(node as? Element, "type")
+                        if (breakType.equals("page", ignoreCase = true)) {
+                            append("<div class=\"page-break\" contenteditable=\"false\"></div><p><br></p>")
+                        } else {
+                            append("<br>")
+                        }
+                    }
+                    "lastRenderedPageBreak" -> append("<div class=\"page-break\" contenteditable=\"false\"></div><p><br></p>")
                     "blip", "imagedata" -> {
                         val id = attributeByLocalName(node as? Element, "embed") ?: attributeByLocalName(node as? Element, "id")
                         val source = id?.let(imageData::get)
